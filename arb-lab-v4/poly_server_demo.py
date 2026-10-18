@@ -1,5 +1,6 @@
 from __future__ import annotations
-import asyncio, json, math, time
+import asyncio, json, math, time, uuid
+from poly_diagnostics import DiagnosticLog
 from collections import deque, defaultdict
 from pathlib import Path
 import httpx
@@ -35,7 +36,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="14.0-all-asset-board"
+ENGINE_REVISION="14.1-quote-lifecycle-audit"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -95,6 +96,10 @@ class PolyServerDemo:
         self.first_price_cap=float(profile.get('firstPriceCap',INVENTORY_MAX_FIRST_PRICE))
         self.inventory_stop=float(profile.get('stopLoss',INVENTORY_STOP_LOSS_USD))
         self.session_loss_limit=float(profile.get('sessionLossLimit',self.session_loss_limit))
+        self.diagnostics=DiagnosticLog(str(self.state_file)+".diagnostics.sqlite3",asset)
+        self.last_diagnostic_state=0.0
+        self.print_keys=deque(maxlen=2000)
+        self.entry_checks=[]
         self.entry_audit='warming'
         self.lag_trading_enabled=False
         self.portfolio_guard=portfolio_guard
@@ -125,12 +130,14 @@ class PolyServerDemo:
         self.paper=None
         self.pending=False
         self.market_version=0
+        self._diagnostic('ENGINE_START',profile={'allocation':self.balance,'pairTarget':self.pair_target,'residualCap':self.residual_cap,'sessionLossLimit':self.session_loss_limit})
         self.tasks=[]
         self.started=False
 
     async def _get(self,url,params=None,headers=None):
         async with httpx.AsyncClient(timeout=12,follow_redirects=False) as c:
             r=await c.get(url,params=params,headers=headers)
+        self._diagnostic('REST_RESPONSE',url=url,params=params,status=r.status_code,body=r.text)
         r.raise_for_status()
         return r.json()
 
@@ -140,12 +147,21 @@ class PolyServerDemo:
         await self._seed_sigma()
         if not self._restore_saved():
             self._new_session()
+        self._diagnostic('ENGINE_START',profile={'allocation':self.balance,'pairTarget':self.pair_target,'residualCap':self.residual_cap,'sessionLossLimit':self.session_loss_limit})
         self.tasks=[
             asyncio.create_task(self.market_worker(),name='poly-market'),
             asyncio.create_task(self.clob_worker(),name='poly-clob'),
             asyncio.create_task(self.rtds_worker(),name='poly-rtds'),
             asyncio.create_task(self.engine_worker(),name='poly-paper'),
         ]
+
+        for task in self.tasks:task.add_done_callback(self._worker_done)
+
+    def _worker_done(self,task):
+        if not task.cancelled() and task.exception() is not None:
+            import traceback
+            exc=task.exception()
+            self._diagnostic('WORKER_CRASH',worker=task.get_name(),error=''.join(traceback.format_exception(exc)))
 
     def _restore_saved(self):
         try:
@@ -282,6 +298,7 @@ class PolyServerDemo:
                     print('POLY_DEMO_MARKET',m['slug'],flush=True)
                 self.market=m;self._apply_rest_book(m);self.feed['market']='live'
             except Exception as e:
+                self._diagnostic('FEED_ERROR',feed='market',error=repr(e))
                 self.feed['market']='error:'+type(e).__name__
             await asyncio.sleep(1.2)
 
@@ -312,6 +329,7 @@ class PolyServerDemo:
                     finally:
                         pt.cancel()
             except Exception as e:
+                self._diagnostic('FEED_ERROR',feed='clob',error=repr(e))
                 self.feed['clob']='error:'+type(e).__name__
                 await asyncio.sleep(1)
 
@@ -321,12 +339,15 @@ class PolyServerDemo:
             if str(t)==str(self.market.get('upToken')): return 'up'
             if str(t)==str(self.market.get('downToken')): return 'down'
             return None
+        self._diagnostic('CLOB_MESSAGE',message=m)
         et=m.get('event_type')
         if et=='book':
             side=side_for(m.get('asset_id'))
             if not side:return
             bids=[(float(x['price']),float(x.get('size') or 0)) for x in (m.get('bids') or []) if 'price'in x]
             asks=[(float(x['price']),float(x.get('size') or 0)) for x in (m.get('asks') or []) if 'price'in x]
+            if not bids:self.bbo[side].update(bid=None,bidSize=0.)
+            if not asks:self.bbo[side].update(ask=None,askSize=0.)
             if bids:
                 p=max(x[0] for x in bids);self.bbo[side]['bid']=p;self.bbo[side]['bidSize']=sum(x[1] for x in bids if x[0]==p)
             if asks:
@@ -349,10 +370,27 @@ class PolyServerDemo:
                     price=float(m.get('price'));size=float(m.get('size') or 0)
                     ts=float(m.get('timestamp') or time.time()*1000)
                     tsec=(ts/1000 if ts>1e12 else ts)
+                    if not all(math.isfinite(v) for v in (price,size,tsec)) or not (0<price<1 and size>0):
+                        self._diagnostic('TRADE_INVALID',message=m);return
+                    inv=(self.paper or {}).get('inventory')
+                    if inv and inv.get('quote'):self._inventory_process_quote(inv,self.latest_model or {})
+                    # Exact retransmissions cannot consume simulated queue twice.
+                    key=(str(m.get('asset_id')),m.get('timestamp'),price,size,m.get('side'),m.get('transaction_hash'))
+                    if m.get('timestamp') is not None and key in self.print_keys:
+                        self._diagnostic('TRADE_DUPLICATE',message=m);return
+                    self.print_keys.append(key)
                     self.trade_seq+=1
-                    self.trade_prints.append({'seq':self.trade_seq,'t':tsec,'side':side,'price':price,'size':size,'aggressor':m.get('side')})
-                except Exception:
-                    pass
+                    self.trade_prints.append({'seq':self.trade_seq,'t':tsec if m.get('timestamp') is not None else None,'receivedAt':time.time(),'side':side,'price':price,'size':size,'aggressor':m.get('side'),'marketSlug':self.market.get('slug'),'feedReady':bool(self._inventory_feed_ready())})
+                    # Apply this print before a subsequently received book/risk update.
+                    inv=(self.paper or {}).get('inventory')
+                    if inv and inv.get('marketSlug')==self.market.get('slug'):
+                        self._inventory_apply_prints(inv)
+                except Exception as exc:
+                    self._diagnostic('TRADE_PARSE_ERROR',error=repr(exc),message=m)
+
+        if et in {'book','price_change','best_bid_ask'}:
+            inv=(self.paper or {}).get('inventory')
+            if inv and inv.get('quote'):self._inventory_process_quote(inv,self.latest_model or {})
 
     async def rtds_worker(self):
         while True:
@@ -378,6 +416,7 @@ class PolyServerDemo:
                             for msg in (data if isinstance(data,list) else [data]):self._handle_rtds(msg)
                     finally:pt.cancel()
             except Exception as e:
+                self._diagnostic('FEED_ERROR',feed='rtds',error=repr(e))
                 self.feed['rtds']='error:'+type(e).__name__
                 print('POLY_DEMO_RTDS_ERROR',type(e).__name__,str(e)[:180],flush=True)
                 await asyncio.sleep(1)
@@ -394,6 +433,7 @@ class PolyServerDemo:
         except Exception:ts=time.time()*1000
         tms=ts*1000 if ts<1e12 else ts
         if value<=0:return
+        self._diagnostic('RTDS_MESSAGE',message=m)
         if topic in {'crypto_prices','crypto_prices_chainlink'}:
             self.spot=value;self.spot_ts=tms/1000
             sec=int(tms/1000);self.spot_sec[sec]=value
@@ -673,6 +713,7 @@ class PolyServerDemo:
         if not q:return
         self.paper['inventoryCancels']=int(self.paper.get('inventoryCancels') or 0)+1
         self._record('INV_QUOTE_CANCEL',side=str(q.get('side') or '').upper(),price=q.get('price'),detail=reason)
+        self._diagnostic('QUOTE_CANCEL',quote=dict(q),reason=reason,context=self._diagnostic_context())
         inv['quote']=None;inv['status']='IDLE';inv['lastAction']=reason
 
     def _inventory_add_lot(self,inv,side,shares,price,fee,role_name):
@@ -734,42 +775,49 @@ class PolyServerDemo:
             p['status']='risk_locked';p['riskLockReason']='two consecutive losses'
 
     def _inventory_first_leg_candidate(self,inv,m):
-        if not INVENTORY_V12_ENABLED or not self.open_trusted or not self.market:return None
-        if self.paper.get('status')!='running' or self.paper.get('position') or self.pending:return None
-        if self._inventory_has_residual():return None
+        self.entry_checks=[]
+        def block(reason):
+            self.entry_audit=reason;self.entry_checks.append({'scope':'entry','reason':reason});return None
+        if not INVENTORY_V12_ENABLED or not self.open_trusted or not self.market:return block('strategy, opening reference or market unavailable')
+        if self.paper.get('status')!='running' or self.paper.get('position') or self.pending:return block('entry status, exposure or pending execution gate')
+        if self._inventory_has_residual():return block('existing residual exposure')
         self._update_risk()
-        if self.paper.get('status')!='running' or not self._inventory_feed_ready():return None
-        if time.time()<float(self.paper.get('cooldownUntil') or 0) or time.time()>=self.paper['endsAt']:return None
-        if int(inv.get('cycles') or 0)>=INVENTORY_MAX_CYCLES_PER_MARKET:return None
+        if self.paper.get('status')!='running' or not self._inventory_feed_ready():return block('risk locked or feed stale')
+        if time.time()<float(self.paper.get('cooldownUntil') or 0) or time.time()>=self.paper['endsAt']:return block('cooldown or paper session ended')
+        if int(inv.get('cycles') or 0)>=INVENTORY_MAX_CYCLES_PER_MARKET:return block('market cycle limit')
         now=time.time();elapsed=now-float(self.market.get('startTs') or now);remaining=float(self.market.get('endTs') or 0)-now
-        if elapsed<INVENTORY_OPEN_AFTER_SEC or remaining<=INVENTORY_STOP_NEW_REMAINING_SEC:return None
+        if elapsed<INVENTORY_OPEN_AFTER_SEC or remaining<=INVENTORY_STOP_NEW_REMAINING_SEC:return block('outside entry time window')
         tick=max(.001,float(self.market.get('minTickSize') or .01));shares=max(5.0,float(self.market.get('minOrderSize') or 0))
         choices=[];self.entry_audit='no funded fee-aware quote within residual cap'
         for side in ('up','down'):
+            row={'side':side,'eligible':False};self.entry_checks.append(row)
             opp='down' if side=='up' else 'up'
             bid=self.bbo[side].get('bid');ask=self.bbo[side].get('ask');oppask=self.bbo[opp].get('ask')
-            if None in (bid,ask,oppask):continue
+            if None in (bid,ask,oppask):row['reason']='missing book';continue
             bid=float(bid);ask=float(ask);oppask=float(oppask)
             if self.wallet_quotes:
                 # Work a passive price that already funds the opposite taker leg and fees.
                 ceiling=min(self.first_price_cap,self.residual_cap/shares,self.pair_target-oppask-_fee_per_share(oppask))
                 maker_px=_floor_tick(min(bid,ask-tick,ceiling),tick)
-                if bid-maker_px>6*tick+1e-9:continue
+                if bid-maker_px>6*tick+1e-9:row.update(reason='quote exceeds six-tick distance',price=maker_px,ceiling=ceiling);continue
             else:
-                if bid>self.first_price_cap+1e-9:continue
+                if bid>self.first_price_cap+1e-9:row['reason']='first price cap';continue
                 maker_px=min(self.first_price_cap,_floor_tick(max(bid,min(ask-tick,self.first_price_cap)),tick))
-            if maker_px<.03 or maker_px>=ask-1e-9:continue
-            if shares*maker_px>min(self.residual_cap,float(self.paper.get('cash') or 0))+1e-9:continue
+            row.update(price=maker_px,shares=shares,projected=maker_px+oppask+_fee_per_share(oppask))
+            if maker_px<.03 or maker_px>=ask-1e-9:row['reason']='price outside passive safety band';continue
+            if shares*maker_px>min(self.residual_cap,float(self.paper.get('cash') or 0))+1e-9:row['reason']='first cost cap or cash';continue
             hedge_cost=shares*(oppask+_fee_per_share(oppask))
-            if float(self.bbo[opp].get('askSize') or 0)<shares:continue
-            if shares*maker_px+hedge_cost>float(self.paper['cash']):continue
+            if float(self.bbo[opp].get('askSize') or 0)<shares:row['reason']='hedge depth insufficient';continue
+            if shares*maker_px+hedge_cost>float(self.paper['cash']):row['reason']='both legs not funded';continue
             loss_budget=self.session_loss_limit+min(float(self.paper['realizedPnl']),self._equity()-float(self.paper['startingBalance']))
-            if shares*maker_px>loss_budget:continue
+            row['lossBudget']=loss_budget
+            if shares*maker_px>loss_budget:row['reason']='remaining lane loss budget';continue
             projected=maker_px+oppask+_fee_per_share(oppask)
-            if projected>self.pair_target+INVENTORY_MAX_INITIAL_GAP:continue
+            if projected>self.pair_target+INVENTORY_MAX_INITIAL_GAP:row['reason']='fee-adjusted set exceeds target';continue
             direction=1 if side=='up' else -1
             lead=float(m.get('leadBps') or 0)*direction;imp=float(m.get('impulse5Bps') or 0)*direction
-            if not self.wallet_quotes and (lead<INVENTORY_MIN_REVERSAL_LEAD_BPS or imp<INVENTORY_MIN_REVERSAL_IMPULSE_BPS):continue
+            if not self.wallet_quotes and (lead<INVENTORY_MIN_REVERSAL_LEAD_BPS or imp<INVENTORY_MIN_REVERSAL_IMPULSE_BPS):row['reason']='legacy directional gate';continue
+            row.update(eligible=True,reason='funded passive candidate')
             choices.append((maker_px,projected,lead,imp,side,shares,bid,ask))
         if not choices:return None
         maker_px,projected,lead,imp,side,shares,bid,ask=min(choices,key=lambda x:(x[1],x[0]))
@@ -784,71 +832,117 @@ class PolyServerDemo:
         at_best=abs(price-bid)<=tick/2
         improved=price>bid+tick/2
         queue_need=float(shares)+(float(self.bbo[side].get('bidSize') or 0) if at_best else (0.0 if improved else 1e12))
-        inv['quote']={'side':side,'price':price,'shares':float(shares),'kind':kind,'createdAt':time.time(),
+        inv['quote']={'id':uuid.uuid4().hex,'marketSlug':self.market.get('slug'),'side':side,'price':price,'shares':float(shares),'kind':kind,'createdAt':time.time(),
                       'queueNeed':queue_need,'seen':0.0,'lastTradeSeq':self.trade_seq}
         inv['status']='QUOTING';inv['lastAction']=f'{kind} {side.upper()} @ {price:.3f}'
         self.paper['inventoryQuotes']=int(self.paper.get('inventoryQuotes') or 0)+1
-        self._record('INV_QUOTE',side=side.upper(),price=price,detail=f'{kind}; {shares:.2f}sh; queue need {queue_need if queue_need<1e11 else -1:.2f}')
+        self._record('INV_QUOTE',side=side.upper(),price=price,detail=f'{kind}; {shares:.2f}sh; '+(f'queue requirement {queue_need:.2f}sh' if queue_need<1e11 else 'depth ahead unknown; trade-through evidence required'))
+        self._diagnostic('QUOTE_PLACE',quote=dict(inv['quote']),context=self._diagnostic_context())
         return True
+
+    def _inventory_resting_reason(self,inv,m,q):
+        """Validate the existing order at its own price, never rank fresh candidates."""
+        now=time.time();side=q['side'];opp='down' if side=='up' else 'up'
+        self._update_risk()
+        if q.get('marketSlug',inv.get('marketSlug'))!=self.market.get('slug'):return 'quote market changed'
+        if self.paper.get('status')!='running':return 'entry risk locked'
+        if not self._inventory_feed_ready():return 'entry feed stale'
+        if now<float(self.paper.get('cooldownUntil') or 0):return 'entry cooldown'
+        if self.paper.get('position') or self.pending or self._inventory_has_residual():return 'entry exposure or execution pending'
+        if not self.open_trusted:return 'opening reference untrusted'
+        if now>=self.paper['endsAt']:return 'paper session ended'
+        if now>=float(q['createdAt'])+INVENTORY_QUOTE_TTL_SEC:return 'first-leg quote TTL expired'
+        if now>=float(self.market['endTs'])-INVENTORY_STOP_NEW_REMAINING_SEC:return 'new entry window closed'
+        if int(inv.get('cycles') or 0)>=INVENTORY_MAX_CYCLES_PER_MARKET:return 'market cycle limit'
+        ask=self.bbo[opp].get('ask');ownask=self.bbo[side].get('ask')
+        if ask is None or ownask is None:return 'hedge book unavailable'
+        if float(q['price'])>=float(ownask):return 'resting bid now crosses ask; no assumed maker fill'
+        shares=float(q['shares']);cost=shares*float(q['price'])
+        if cost>self.residual_cap+1e-9:return 'residual cost cap'
+        if float(q['price'])>self.first_price_cap+1e-9:return 'first price cap'
+        if float(q['price'])+float(ask)+_fee_per_share(float(ask))>self.pair_target+1e-9:return 'hedge all-in cost exceeds target'
+        if float(self.bbo[opp].get('askSize') or 0)<shares:return 'hedge depth insufficient'
+        if cost+shares*(float(ask)+_fee_per_share(float(ask)))>float(self.paper['cash'])+1e-9:return 'hedge cash insufficient'
+        loss_budget=self.session_loss_limit+min(float(self.paper['realizedPnl']),self._equity()-float(self.paper['startingBalance']))
+        if cost>loss_budget+1e-9:return 'remaining lane loss budget insufficient'
+        if not self.wallet_quotes and float(m.get('leadBps') or 0)*(1 if side=='up' else -1)<-.05:return 'cheap-leg reversal signal failed'
+        return None
+
+    def _inventory_apply_prints(self,inv):
+        q=inv.get('quote')
+        if not q:return False
+        if not self.market or q.get('marketSlug',inv.get('marketSlug'))!=self.market.get('slug'):return False
+        side=q['side'];tick=max(.001,float(self.market.get('minTickSize') or .01))
+        deadline=min(float(self.paper['endsAt']),float(self.market['endTs']))
+        if q.get('kind')=='FIRST':deadline=min(deadline,float(q['createdAt'])+INVENTORY_QUOTE_TTL_SEC,float(self.market['endTs'])-INVENTORY_STOP_NEW_REMAINING_SEC)
+        last=int(q.get('lastTradeSeq') or 0)
+        for z in (z for z in self.trade_prints if int(z.get('seq') or 0)>last):
+            q['lastTradeSeq']=int(z['seq']);reason=None
+            event_time=z.get('t');received=z.get('receivedAt')
+            if z.get('side')!=side:reason='opposite token'
+            elif z.get('marketSlug')!=self.market.get('slug'):reason='wrong market'
+            elif not z.get('feedReady',False):reason='feed stale at receipt'
+            elif event_time is None or received is None:reason='missing event/receipt timestamp'
+            elif not (float(q['createdAt'])<=float(event_time)<=float(received)+1 and float(received)<deadline and float(event_time)<deadline):reason='outside active quote lifetime or future timestamp'
+            elif str(z.get('aggressor') or '').upper()!='SELL':reason='not a confirmed sell aggressor'
+            elif float(z.get('size') or 0)<=0:reason='nonpositive volume'
+            if reason:
+                self._diagnostic('QUOTE_PRINT',quoteId=q.get('id'),trade=z,accepted=False,reason=reason);continue
+            zp=float(z['price']);qp=float(q['price'])
+            if zp<qp-tick/2:q['throughSeen']=float(q.get('throughSeen') or 0)+float(z['size'])
+            elif abs(zp-qp)<=tick/2:q['seen']=float(q.get('seen') or 0)+float(z['size'])
+            else:reason='print above bid'
+            self._diagnostic('QUOTE_PRINT',quoteId=q.get('id'),trade=z,accepted=reason is None,reason=reason,seen=q.get('seen',0),throughSeen=q.get('throughSeen',0),queueNeed=q['queueNeed'])
+            if float(q.get('seen') or 0)<float(q['queueNeed']) and float(q.get('throughSeen') or 0)<float(q['shares']):continue
+            # Orphan complements must never manufacture exposure.
+            if q.get('kind')=='COMPLEMENT':
+                totals=self._inventory_totals(inv);res=totals['residualSide']
+                if not res or res==side or abs(totals[res]['shares']-float(q['shares']))>1e-9:
+                    self._inventory_cancel_quote(inv,'orphan complement cancelled');return False
+            cost=float(q['shares'])*qp
+            if cost>float(self.paper['cash'])+1e-9:
+                self._inventory_cancel_quote(inv,'cash unavailable at simulated fill');return False
+            self._diagnostic('QUOTE_FILL_EVIDENCE',quote=dict(q),triggerTrade=z,context=self._diagnostic_context())
+            self._inventory_add_lot(inv,side,float(q['shares']),qp,0.,'MAKER')
+            inv['quote']=None
+            self._inventory_merge_available(inv)
+            return True
+        return False
 
     def _inventory_process_quote(self,inv,m):
         q=inv.get('quote')
         if not q:return
-        totals=self._inventory_totals(inv)
+        if self._inventory_apply_prints(inv):return
+        q=inv.get('quote')
+        if not q:return
         if q.get('kind')=='COMPLEMENT':
-            res=totals.get('residualSide')
+            totals=self._inventory_totals(inv);res=totals['residualSide']
             if not res or res==q['side'] or abs(totals[res]['shares']-float(q['shares']))>1e-9:
-                self._inventory_cancel_quote(inv,'orphan complement cancelled');return
-        elif self.paper.get('status')!='running' or not self._inventory_feed_ready() or time.time()<float(self.paper.get('cooldownUntil') or 0):
-            self._inventory_cancel_quote(inv,'entry risk/feed gate');return
-        side=q['side'];tick=max(.001,float(self.market.get('minTickSize') or .01))
-        if time.time()-float(q.get('createdAt') or 0)>INVENTORY_QUOTE_TTL_SEC and q.get('kind')=='FIRST':
-            self._inventory_cancel_quote(inv,'first-leg quote TTL expired');return
-        if q.get('kind')=='FIRST':
-            candidate=self._inventory_first_leg_candidate(inv,m)
-            opp='down' if side=='up' else 'up';ask=self.bbo[opp].get('ask')
-            if not candidate or candidate['side']!=side or ask is None or float(q['price'])+float(ask)+_fee_per_share(float(ask))>self.pair_target or float(q['shares'])*float(q['price'])>self.residual_cap:
-                self._inventory_cancel_quote(inv,'entry no longer hedgeable within risk cap');return
-            direction=1 if side=='up' else -1
-            if not self.wallet_quotes and float(m.get('leadBps') or 0)*direction<-0.05:
-                self._inventory_cancel_quote(inv,'cheap-leg reversal signal failed');return
-        last=int(q.get('lastTradeSeq') or 0)
-        newprints=[z for z in self.trade_prints if int(z.get('seq') or 0)>last]
-        if newprints:q['lastTradeSeq']=max(int(z['seq']) for z in newprints)
-        for z in newprints:
-            if z.get('side')!=side:continue
-            zp=float(z.get('price') or 99);qp=float(q['price'])
-            if zp<qp-tick/2:
-                q['throughSeen']=float(q.get('throughSeen') or 0)+max(0.0,float(z.get('size') or 0))
-            elif abs(zp-qp)<=tick/2:
-                q['seen']=float(q.get('seen') or 0)+max(0.0,float(z.get('size') or 0))
-        if (float(q.get('seen') or 0)<float(q.get('queueNeed') or 1e18)
-                and float(q.get('throughSeen') or 0)<float(q['shares'])):return
-        cost=float(q['shares'])*float(q['price'])
-        if cost>float(self.paper.get('cash') or 0)+1e-9:
-            self._inventory_cancel_quote(inv,'cash unavailable at simulated fill');return
-        self._inventory_add_lot(inv,side,float(q['shares']),float(q['price']),0.0,'MAKER')
-        inv['quote']=None
-        self._inventory_merge_available(inv)
+                self._inventory_cancel_quote(inv,'orphan complement cancelled')
+        else:
+            reason=self._inventory_resting_reason(inv,m,q)
+            if reason:self._inventory_cancel_quote(inv,reason)
 
     async def _inventory_taker_complement(self,inv,res_side,res_unit):
-        if self.pending:return False
+        def reject(reason):
+            self._diagnostic('EXECUTION_REJECT',path='inventory',reason=reason,context=self._diagnostic_context());return False
+        if self.pending:return reject('execution already pending')
         opp='down' if res_side=='up' else 'up';ask0=self.bbo[opp].get('ask');avail0=float(self.bbo[opp].get('askSize') or 0)
         totals=self._inventory_totals(inv);shares=float(totals[res_side]['shares'] or 0)
-        if ask0 is None or shares<=0 or avail0<shares:return False
+        if ask0 is None or shares<=0 or avail0<shares:return reject('initial hedge book or depth unavailable')
         ask0=float(ask0);allin=res_unit+ask0+_fee_per_share(ask0)
-        if allin>self.pair_target+1e-9:return False
+        if allin>self.pair_target+1e-9:return reject('initial hedge exceeds pair target')
         total0=shares*(ask0+_fee_per_share(ask0))
-        if total0>float(self.paper.get('cash') or 0)+1e-9:return False
+        if total0>float(self.paper.get('cash') or 0)+1e-9:return reject('initial hedge cash insufficient')
         self._inventory_cancel_quote(inv,'cancel maker complement before taker hedge')
         version=self.market_version;session=self.paper
         self.pending=True
         self._record('INV_HEDGE_ORDER',side=opp.upper(),price=ask0,detail=f'{shares:.2f}sh; projected pair {allin:.4f}')
         await asyncio.sleep(EXECUTION_LATENCY_SEC)
         try:
-            if self.paper is not session or self.market_version!=version or not self._inventory_feed_ready():return False
+            if self.paper is not session or self.market_version!=version or not self._inventory_feed_ready():return reject('session/market changed or feed stale after latency')
             ask=self.bbo[opp].get('ask');avail=float(self.bbo[opp].get('askSize') or 0)
-            if ask is None or avail<shares:return False
+            if ask is None or avail<shares:return reject('hedge depth unavailable after latency')
             ask=float(ask);fee=shares*_fee_per_share(ask);fresh=res_unit+ask+_fee_per_share(ask)
             if fresh>self.pair_target+1e-9 or shares*(ask+_fee_per_share(ask))>float(self.paper.get('cash') or 0)+1e-9:
                 self._record('INV_HEDGE_NOFILL',side=opp.upper(),price=ask,detail=f'post-latency pair {fresh:.4f}');return False
@@ -859,22 +953,24 @@ class PolyServerDemo:
         finally:self.pending=False
 
     async def _inventory_recovery_exit(self,inv,res_side,force=False):
-        if self.pending:return False
+        def reject(reason):
+            self._diagnostic('EXECUTION_REJECT',path='inventory',reason=reason,context=self._diagnostic_context());return False
+        if self.pending:return reject('execution already pending')
         totals=self._inventory_totals(inv);shares=float(totals[res_side]['shares'] or 0);cost=float(totals[res_side]['cost'] or 0)
         bid=self.bbo[res_side].get('bid');avail=float(self.bbo[res_side].get('bidSize') or 0)
-        if bid is None or shares<=0 or avail<shares:return False
+        if bid is None or shares<=0 or avail<shares:return reject('exit book or depth unavailable')
         bid=float(bid);fee=shares*_fee_per_share(bid);net=shares*bid-fee;pnl=net-cost
-        if not force and pnl<INVENTORY_RECOVERY_PROFIT_USD:return False
+        if not force and pnl<INVENTORY_RECOVERY_PROFIT_USD:return reject('non-forced exit below profit threshold')
         self._inventory_cancel_quote(inv,'cancel complement before residual exit')
         version=self.market_version;session=self.paper
         self.pending=True
         await asyncio.sleep(EXECUTION_LATENCY_SEC)
         try:
-            if self.paper is not session or self.market_version!=version or not self._inventory_feed_ready():return False
+            if self.paper is not session or self.market_version!=version or not self._inventory_feed_ready():return reject('session/market changed or feed stale after latency')
             bid2=self.bbo[res_side].get('bid');avail2=float(self.bbo[res_side].get('bidSize') or 0)
-            if bid2 is None or avail2<shares:return False
+            if bid2 is None or avail2<shares:return reject('exit depth unavailable after latency')
             bid2=float(bid2);fee2=shares*_fee_per_share(bid2);net2=shares*bid2-fee2;pnl2=net2-cost
-            if not force and pnl2<0:return False
+            if not force and pnl2<0:return reject('exit price deteriorated after latency')
             self._inventory_consume(inv[res_side+'Lots'],shares)
             self.paper['cash']+=net2;self.paper['fees']+=fee2;self.paper['realizedPnl']+=pnl2;self.paper['trades']+=1
             if pnl2>=0:
@@ -894,9 +990,9 @@ class PolyServerDemo:
         inv=self._inventory_get()
         if inv is None:return
         self._update_risk()
+        self._inventory_process_quote(inv,m)
         if not self._inventory_feed_ready():
             self._inventory_cancel_quote(inv,'feed stale; fills paused');return
-        self._inventory_process_quote(inv,m)
         self._inventory_merge_available(inv)
         totals=self._inventory_totals(inv);res=totals.get('residualSide')
         if res:
@@ -1324,9 +1420,25 @@ class PolyServerDemo:
                     else:e+=float(lot.get('cost') or 0)
         return e
 
+    def _diagnostic_context(self):
+        p=self.paper or {};inv=p.get('inventory') or {}
+        return {'bbo':self.bbo,'feed':self.feed,'spot':self.spot,'spotTs':self.spot_ts,'twap':self.twap,'twapTs':self.twap_ts,
+                'openRef':self.open_ref,'openTrusted':self.open_trusted,'market':self.market,'model':self.latest_model,
+                'decision':self.latest_reason,'entryAudit':self.entry_audit,'entryChecks':self.entry_checks,'cash':p.get('cash'),'status':p.get('status'),
+                'pending':self.pending,'inventory':inv,'realizedPnl':p.get('realizedPnl'),'riskLockReason':p.get('riskLockReason'),
+                'pairTarget':self.pair_target,'residualCap':self.residual_cap,'stopLoss':self.inventory_stop,'laneLossLimit':self.session_loss_limit,
+                'equity':self._equity() if self.paper else self.balance,'fees':p.get('fees'),'trades':p.get('trades'),
+                'sessionEndsAt':p.get('endsAt'),'tradeSeq':self.trade_seq,'executionLatencySec':EXECUTION_LATENCY_SEC,
+                'quoteTtlSec':INVENTORY_QUOTE_TTL_SEC,'stopNewRemainingSec':INVENTORY_STOP_NEW_REMAINING_SEC,
+                'residualHoldSec':INVENTORY_MAX_HOLD_SEC,'feeModel':'0.07*p*(1-p) taker; 0 simulated maker'}
+
+    def _diagnostic(self,kind,**data):
+        self.diagnostics.append(kind,revision=ENGINE_REVISION,sessionId=(self.paper or {}).get('sessionId'),marketSlug=(self.market or {}).get('slug'),**data)
+
     def _record(self,action,**kw):
         if not self.paper:return
         ev={'t':time.time(),'action':action,**kw}
+        self._diagnostic('ENGINE_EVENT',event=ev,context=self._diagnostic_context())
         self.paper['events'].insert(0,ev);self.paper['events']=self.paper['events'][:500]
         print('POLY_DEMO_EVENT',action,kw.get('side',''),str(kw.get('detail',''))[:120],flush=True)
         self._save()
@@ -1480,7 +1592,7 @@ class PolyServerDemo:
 
     def _save(self):
         try:self.state_file.write_text(json.dumps(self.snapshot(),separators=(',',':')),encoding='utf-8')
-        except Exception:pass
+        except Exception as exc:self._diagnostic('STATE_SAVE_ERROR',error=repr(exc))
 
     async def engine_worker(self):
         last_audit=0.0
@@ -1489,6 +1601,9 @@ class PolyServerDemo:
             p=self.paper
             if not p:continue
             now=time.time()
+            if now-self.last_diagnostic_state>=1:
+                self.last_diagnostic_state=now
+                self._diagnostic('STATE',context=self._diagnostic_context())
             self._update_risk()
             if now>=p['endsAt'] and not p.get('position') and not self._inventory_has_residual():
                 p['status']='complete';self._save();continue
@@ -1576,6 +1691,7 @@ class PolyServerDemo:
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
+            'diagnostics':self.diagnostics.status(),
             'history':list(self.visual_history)[-240:],
             'reasonCounts':dict(self.reason_counts),
             'paper':{**p,'revision':ENGINE_REVISION,'equity':eq,'maxDrawdownPct':100*float(p.get('maxDrawdown') or 0),

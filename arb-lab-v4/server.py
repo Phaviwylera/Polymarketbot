@@ -655,3 +655,7 @@ async def rpc(body:Rpc):
     if isinstance(data,dict) and 'error' in data:
         raise HTTPException(502,str(data['error'])[:250])
     return data.get('result')
+@app.get("/api/poly/demo/diagnostics")
+async def poly_demo_diagnostics():
+    from poly_audit_export import diagnostic_response
+    return diagnostic_response(poly_server_engine)
