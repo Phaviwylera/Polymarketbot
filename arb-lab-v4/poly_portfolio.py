@@ -13,7 +13,7 @@ class PaperPortfolio:
         self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False
         self.engines={asset:PolyServerDemo(asset=asset,balance=ALLOCATIONS[asset],
             state_file=f'/tmp/poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
-            risk_profile={'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
+            risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
                 'stopLoss':min(.40,ALLOCATIONS[asset]*.005),'sessionLossLimit':ALLOCATIONS[asset]*.05}) for asset in ASSETS}
     def entry_allowed(self):
         equity=sum(e._equity() if e.paper else e.balance for e in self.engines.values())
@@ -56,7 +56,7 @@ class PaperPortfolio:
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
             'maxDrawdownUsd':self.max_drawdown,'allocations':dict(ALLOCATIONS),
-            'assets':lanes,'scope':'crypto-updown-5m','strategy':'fee-aware staged inventory pairing and executable direct sets; directional lag entries disabled'}
+            'assets':lanes,'scope':'crypto-updown-5m','strategy':'marketable fee-aware momentum paper experiment and executable complete sets; one entry per asset per round'}
         if include_assets:return {**selected,'assets':{a:{k:v for k,v in s.items() if k!='portfolio'} for a,s in snaps.items()}}
         return selected
 
@@ -74,6 +74,9 @@ class PaperPortfolio:
                     'stopLoss': self.engines[asset].inventory_stop,
                     'sessionLossLimit': self.engines[asset].session_loss_limit,
                     'firstPriceCap': self.engines[asset].first_price_cap,
+                    'momentumEnabled':self.engines[asset].momentum_enabled,
+                    'momentumNotionalCap':min(3.25,self.engines[asset].balance*.1),
+                    'momentumLossStopUsd':.30,'momentumTakeProfitUsd':.18,'momentumMaxHoldSec':30,
                 }
                 for asset in ASSETS
             }
@@ -154,3 +157,4 @@ class PaperPortfolio:
             e.close()
 
 engine=PaperPortfolio()
+

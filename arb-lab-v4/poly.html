@@ -1,8 +1,8 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE V14.4 · All-Asset Paper Workstation</title><link rel="stylesheet" href="/poly.css?v=14.4"></head><body>
-<header class="topbar"><div class="brand"><span class="mark">PE</span><div><b>POLY / EDGE</b><small>V14.4 · ALL-ASSET PAPER WORKSTATION</small></div></div><div class="topActions"><button id="perfTearSheetBtn" title="View overall portfolio tear-sheet and metrics">📊 PERFORMANCE</button><button id="strategyTuningBtn" title="Tune risk and pair targets">⚙ RISK TUNING</button><button id="researchIntelBtn" title="Inspect wallet research and fee patterns">🔬 RESEARCH INTEL</button><span id="feedStatus">CONNECTING</span><span id="clock">— IST</span><button id="downloadLogBtn">DOWNLOAD FULL DEV LOG</button></div></header>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE V15 · All-Asset Paper Workstation</title><link rel="stylesheet" href="/poly.css?v=14.4"></head><body>
+<header class="topbar"><div class="brand"><span class="mark">PE</span><div><b>POLY / EDGE</b><small>V15 · ALL-ASSET PAPER WORKSTATION</small></div></div><div class="topActions"><button id="perfTearSheetBtn" title="View overall portfolio tear-sheet and metrics">📊 PERFORMANCE</button><button id="strategyTuningBtn" title="Tune risk and pair targets">⚙ RISK TUNING</button><button id="researchIntelBtn" title="Inspect wallet research and fee patterns">🔬 RESEARCH INTEL</button><span id="feedStatus">CONNECTING</span><span id="clock">— IST</span><button id="downloadLogBtn">DOWNLOAD FULL DEV LOG</button></div></header>
 <section class="portfolio"><div><span>TOTAL PAPER EQUITY</span><strong id="totalEquity">$200.00</strong></div><div><span>TOTAL P&L</span><strong id="totalPnl">$0.00</strong></div><div><span>REALIZED / UNREALIZED</span><b id="totalSplit">$0.00 / $0.00</b></div><div><span>TRADES / MATCHED SETS</span><b id="totalTrades">0 / 0</b></div><div><span>PORTFOLIO RISK</span><b id="portfolioRisk">WARMING</b></div><div class="paperNote">$200 SIMULATED · NO REAL ORDERS<br>ETH $80 · BTC $60 · SOL $30 · XRP $30</div></section>
 <main><section id="assetGrid" class="assetGrid" aria-label="All crypto P&L and live graphs"></section>
-<section class="networkRow"><article class="network"><div class="sectionHead"><span>ALL-ASSET SIGNAL NETWORK</span><span id="networkStatus">FOUR PARALLEL INPUTS</span></div><div class="orbWrap"><canvas id="orbCanvas" aria-label="BTC, ETH, SOL and XRP signal paths flowing into a rotating network sphere"></canvas><div class="orbControls"><button id="orbPause" aria-label="Pause network orb animation">Pause</button><button id="orbExport">4K PNG ↗</button></div></div><footer>Animated paths illustrate signal flow. Feed labels show actual data status.</footer></article><article class="ledger"><div class="sectionHead"><span>ALL-ASSET EXECUTION TAPE</span><div class="tapeFilters" id="tapeFilters"><button class="tapeBtn active" data-filter="ALL">ALL</button><button class="tapeBtn" data-filter="FILL">FILLS</button><button class="tapeBtn" data-filter="MERGE">MERGES</button><button class="tapeBtn" data-filter="QUOTE">QUOTES</button><button class="tapeBtn" data-filter="EXIT">EXITS</button></div><span>PAPER ONLY</span></div><div id="tradeTape" class="tradeTape">Waiting for paper events.</div><footer>Directional entries disabled · pair costs include estimated hedge fees · fills require queue evidence</footer></article></section></main>
+<section class="networkRow"><article class="network"><div class="sectionHead"><span>ALL-ASSET SIGNAL NETWORK</span><span id="networkStatus">FOUR PARALLEL INPUTS</span></div><div class="orbWrap"><canvas id="orbCanvas" aria-label="BTC, ETH, SOL and XRP signal paths flowing into a rotating network sphere"></canvas><div class="orbControls"><button id="orbPause" aria-label="Pause network orb animation">Pause</button><button id="orbExport">4K PNG ↗</button></div></div><footer>Animated paths illustrate signal flow. Feed labels show actual data status.</footer></article><article class="ledger"><div class="sectionHead"><span>ALL-ASSET EXECUTION TAPE</span><div class="tapeFilters" id="tapeFilters"><button class="tapeBtn active" data-filter="ALL">ALL</button><button class="tapeBtn" data-filter="FILL">FILLS</button><button class="tapeBtn" data-filter="MERGE">MERGES</button><button class="tapeBtn" data-filter="QUOTE">QUOTES</button><button class="tapeBtn" data-filter="EXIT">EXITS</button></div><span>PAPER ONLY</span></div><div id="tradeTape" class="tradeTape">Waiting for paper events.</div><footer>Marketable momentum paper entries · fees included · one entry per asset per round · bounded loss controls</footer></article></section></main>
 
 <dialog id="tuningModal" class="modal">
   <div class="modalBox">
@@ -11,7 +11,7 @@
       <button class="closeModalBtn" id="closeTuningBtn">✕</button>
     </div>
     <div class="modalBody">
-      <p class="modalDesc">Every asset trades within its own isolated capital and risk limits. Tune pair cost targets, residual caps, and loss stops in real time:</p>
+      <p class="modalDesc">Every asset trades within its own isolated capital and risk limits. Momentum uses a $0.30 loss stop, $0.18 profit target, 30-second maximum hold and one entry per round. The controls below apply to the retained pairing path:</p>
       <div id="tuningGrid" class="tuningGrid">Loading risk parameters…</div>
     </div>
     <div class="modalFoot">
@@ -61,7 +61,7 @@
           <li>Passive first-leg maker quoting is strictly required to avoid excessive taker spread drag.</li>
           <li>Fills must require observed queue consumption or print trade-through evidence.</li>
           <li>Unhedged residual exposure past 15 seconds triggers aggressive exit to protect capital.</li>
-          <li>Directional lag trading remains disabled after trial losses proved uncompensated risk.</li>
+          <li>V15 runs a separate marketable momentum paper experiment. The earlier lag strategy remains disabled; model estimates are not calibrated probabilities.</li>
         </ul>
       </div>
     </div>
@@ -104,4 +104,5 @@
   </div>
 </dialog>
 
-<script src="/poly-orb.js" defer></script><script src="/poly.js?v=14.4" defer></script></body></html>
+<script src="/poly-orb.js" defer></script><script src="/poly.js?v=15-execution" defer></script></body></html>
+

@@ -1,0 +1,140 @@
+{
+  "purpose": "production-path execution regression on retained samples; not a profitability backtest",
+  "limitations": [
+    "State samples are roughly 1\u20134 seconds apart, not tick complete.",
+    "Retained asset windows differ; earlier records were pruned.",
+    "Unknown historical book ages are treated as observed at sample receipt.",
+    "Parameters were reviewed using this sample; results are in-sample and not validation of future returns."
+  ],
+  "assets": [
+    {
+      "asset": "BTC",
+      "samples": 227,
+      "orders": 3,
+      "fills": 2,
+      "closedTrades": 2,
+      "realizedPnl": -0.3877,
+      "markedPnl": -0.3877,
+      "fees": 0.2377,
+      "openPosition": null,
+      "events": [
+        {
+          "t": 1792348361.2548418,
+          "action": "NOFILL",
+          "side": "UP",
+          "detail": "momentum post-latency rejection: token book does not confirm oracle momentum"
+        },
+        {
+          "t": 1792348373.6383772,
+          "action": "BUY",
+          "side": "UP",
+          "price": 0.14,
+          "detail": "MOMENTUM_SCALP; 5.00 shares; confirmed depth; fee 0.04215; estimated edge 0.1864"
+        },
+        {
+          "t": 1792348385.6391287,
+          "action": "SELL",
+          "side": "UP",
+          "price": 0.1,
+          "pnl": -0.27365000000000006,
+          "detail": "momentum net loss stop; fee USD 0.03150"
+        },
+        {
+          "t": 1792348578.8439655,
+          "action": "BUY",
+          "side": "DOWN",
+          "price": 0.62,
+          "detail": "MOMENTUM_SCALP; 5.00 shares; confirmed depth; fee 0.08245; estimated edge 0.0342"
+        },
+        {
+          "t": 1792348581.4449873,
+          "action": "SELL",
+          "side": "DOWN",
+          "price": 0.63,
+          "pnl": -0.1140500000000002,
+          "detail": "momentum net loss stop; fee USD 0.08160"
+        }
+      ]
+    },
+    {
+      "asset": "ETH",
+      "samples": 309,
+      "orders": 2,
+      "fills": 1,
+      "closedTrades": 1,
+      "realizedPnl": 0.70115,
+      "markedPnl": 0.70115,
+      "fees": 0.09885,
+      "openPosition": null,
+      "events": [
+        {
+          "t": 1792348346.7393255,
+          "action": "NOFILL",
+          "side": "UP",
+          "detail": "momentum post-latency rejection: token book does not confirm oracle momentum"
+        },
+        {
+          "t": 1792348349.457733,
+          "action": "BUY",
+          "side": "UP",
+          "price": 0.1,
+          "detail": "MOMENTUM_SCALP; 5.00 shares; confirmed depth; fee 0.03150; estimated edge 0.0865"
+        },
+        {
+          "t": 1792348363.138385,
+          "action": "NOFILL",
+          "side": "UP",
+          "price": 0.12,
+          "detail": "exit book moved during 350ms latency"
+        },
+        {
+          "t": 1792348371.7382128,
+          "action": "SELL",
+          "side": "UP",
+          "price": 0.26,
+          "pnl": 0.70115,
+          "detail": "momentum net profit target; fee USD 0.06735"
+        }
+      ]
+    },
+    {
+      "asset": "SOL",
+      "samples": 458,
+      "orders": 1,
+      "fills": 0,
+      "closedTrades": 0,
+      "realizedPnl": 0.0,
+      "markedPnl": 0.0,
+      "fees": 0.0,
+      "openPosition": null,
+      "events": [
+        {
+          "t": 1792348649.1603525,
+          "action": "NOFILL",
+          "side": "UP",
+          "detail": "momentum post-latency rejection: oracle lead below 0.20 bps"
+        }
+      ]
+    },
+    {
+      "asset": "XRP",
+      "samples": 481,
+      "orders": 1,
+      "fills": 0,
+      "closedTrades": 0,
+      "realizedPnl": 0.0,
+      "markedPnl": 0.0,
+      "fees": 0.0,
+      "openPosition": null,
+      "events": [
+        {
+          "t": 1792348649.2391286,
+          "action": "NOFILL",
+          "side": "UP",
+          "detail": "momentum post-latency rejection: spread exceeds 2 cents"
+        }
+      ]
+    }
+  ],
+  "totalRealizedPnl": 0.31345
+}

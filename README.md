@@ -1,4 +1,15 @@
-# POLY / EDGE V14.3 — all-asset paper workstation
+# POLY / EDGE V15 — executable multi-asset paper workstation
+
+V15 restores a funded marketable momentum execution path for BTC, ETH, SOL and XRP. It does not enable the older disabled lag trader. The previous staged-first-leg strategy could quote only 3–6 ticks below the book and recorded no fills. New passive first-leg quotes are suppressed while momentum is enabled; existing residual inventory is still managed, and genuinely executable complete sets retain priority.
+
+Entries require a trusted opening reference, fresh oracle data (under 5 seconds), a current executable book (under 3 seconds), aligned oracle lead/impulse, a rising token midpoint over at least two seconds, no more than a 2-cent spread, confirmed depth on both sides, and estimated model advantage after both fees and a buffer. Model estimates are not calibrated probabilities. Orders use the exchange minimum (at least five shares), at most one tick of price movement, a 350ms simulated execution delay and full post-delay revalidation. There is no fill merely because a signal appears.
+
+Per-entry notional including fees is capped at the smaller of $3.25 and 10% of the asset allocation. New positions use a $0.30 net loss trigger, $0.18 net profit trigger, 30-second maximum hold and one entry per asset per round. The existing $6 portfolio loss lock, per-lane session limits, 90-second loss cooldown and two-consecutive-loss locks remain. Triggers are not guaranteed execution prices or maximum realized losses. Marketable exits require confirmed current depth and price checks; unresolved exposure cannot be erased by a reset.
+
+Book quantity updates now follow price-change messages, stale book events cannot overwrite current levels, and market discovery/REST refreshes no longer overwrite a healthy streaming book every second. Disk snapshots are throttled while execution events force a save. The UI shows actual open positions and momentum fills separately from closed-trade counts.
+
+Validation: 55 execution/risk/export tests, Python compilation and JavaScript syntax checks. `arb-lab-v4/replay_momentum.py` exercises the production entry/exit code using retained STATE records. The included `research/v15_replay_summary.json` produced three closes: BTC -$0.38770, ETH +$0.70115, SOL/XRP zero fills; total +$0.31345 after modeled fees. This short, incomplete, in-sample execution regression is not a tick-level backtest or evidence of future profitability. Its sampling/latency/book-age limitations are explicit in the result.
+
 
 BTC, ETH, SOL and XRP 5-minute crypto markets run concurrently. All four P&L cards, price/TWAP graphs and paper-P&L graphs share one dashboard, with a common all-asset network orb and execution tape. There are no asset-switch tabs.
 
@@ -59,3 +70,4 @@ node --check arb-lab-v4/poly-orb.js
 ## Retained project components
 
 The root `/` retains ARB/LAB. Root Node sources remain legacy; `npm start` does not start the Python dashboard. `wallet_research_service.py` and `wallet_strategy_research.py` retain the research service; its temporary database resets on startup. `tools/wallet-downloader/` provides the resumable Windows archive downloader. `previews/Network_Orb_Preview.html` is an older standalone orb preview, not the current live dashboard. Legacy single-asset scripts remain in the repository but V14 does not load them.
+
