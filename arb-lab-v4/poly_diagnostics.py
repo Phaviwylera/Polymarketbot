@@ -37,15 +37,22 @@ class DiagnosticLog:
         return {'enabled':self.db is not None,'bootId':self.boot,'eventsWrittenThisBoot':self.written,
                 'prunedThisBoot':self.pruned,'errors':self.errors,'lastError':self.last_error,
                 'retentionRowsPerAsset':self.MAX_ROWS,'retention':'rolling tail; ephemeral server disk; download before restart/deploy'}
-    def export(self,output):
-        if self.db is None:return {**self.status(),'retained':0,'complete':False}
-        self.db.commit();self.pending=0
+    def capture(self):
+        meta=self.status()
+        meta['captureAt']=time.time()
+        meta['cutoffJournalSeq']=self.db.execute('SELECT coalesce(max(seq),0) FROM events').fetchone()[0] if self.db is not None else 0
+        return meta
+    def export(self,output,capture=None):
+        meta=capture if capture is not None else self.capture()
+        if not meta['enabled']:return {**meta,'retained':0,'complete':False}
         count=0;first=last=None;seq_first=seq_last=None
-        for seq,t,payload in self.db.execute('SELECT seq,t,payload FROM events ORDER BY seq'):
-            output.write(('{"journalSeq":'+str(seq)+','+payload[1:]+'\n').encode())
-            count+=1
-            if first is None:first=t;seq_first=seq
-            last=t;seq_last=seq
-        return {**self.status(),'retained':count,'firstEventAt':first,'lastEventAt':last,
+        # Separate reader connection supports background ZIP generation while the engine writes.
+        with sqlite3.connect(self.path,timeout=.5) as reader:
+            for seq,t,payload in reader.execute('SELECT seq,t,payload FROM events WHERE seq<=? ORDER BY seq',(meta['cutoffJournalSeq'],)):
+                output.write(('{"journalSeq":'+str(seq)+','+payload[1:]+'\n').encode())
+                count+=1
+                if first is None:first=t;seq_first=seq
+                last=t;seq_last=seq
+        return {**meta,'retained':count,'firstEventAt':first,'lastEventAt':last,
                 'firstJournalSeq':seq_first,'lastJournalSeq':seq_last,'earlierRowsPruned':bool(seq_first and seq_first>1),
-                'complete':self.errors==0 and (not seq_first or seq_first==1)}
+                'complete':meta['errors']==0 and (not seq_first or seq_first==1) and (seq_last or 0)==meta['cutoffJournalSeq']}

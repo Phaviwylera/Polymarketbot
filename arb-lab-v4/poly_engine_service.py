@@ -58,4 +58,4 @@ async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=
 @app.get("/api/poly/demo/diagnostics")
 async def diagnostics():
     from poly_audit_export import diagnostic_response
-    return diagnostic_response(engine)
+    return await diagnostic_response(engine)

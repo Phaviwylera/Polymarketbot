@@ -40,7 +40,7 @@ cd arb-lab-v4
 python -m uvicorn poly_engine_service:app --host 0.0.0.0 --port 8766
 ```
 
-`GET /api/poly/demo/server?all_assets=true` returns a coherent all-asset payload, portfolio totals and individual market, book, risk, paper and history snapshots. The default single-asset endpoint remains compatible. The **DOWNLOAD FULL DEV LOG** button fetches `GET /api/poly/demo/diagnostics`, a compressed ZIP containing the all-asset snapshot, four chronological NDJSON audit journals and a coverage manifest. Raw CLOB messages and relevant RTDS messages are recorded server-side even when the browser is closed; REST responses, quote IDs, quote/print evaluations, fill evidence, cancellations, one-second state/risk/entry-gate context, worker crashes and feed errors support later development. No signing keys, auth headers or environment secrets are logged. Journals retain a rolling tail of 100,000 events per asset (up to 999 additional events before pruning); exports report retained sequence ranges, pruning and logging errors. They live on ephemeral server disk: download before a restart or deployment. Journals are diagnostic evidence, not exchange-confirmed executions or complete historical ledgers. Feed status reflects observed freshness; the orb is illustrative.
+`GET /api/poly/demo/server?all_assets=true` returns a coherent all-asset payload, portfolio totals and individual market, book, risk, paper and history snapshots. The default single-asset endpoint remains compatible. The **DOWNLOAD FULL DEV LOG** button fetches `GET /api/poly/demo/diagnostics`, a compressed ZIP containing the all-asset snapshot, four chronological NDJSON audit journals and a coverage manifest. Raw CLOB messages and relevant RTDS messages are recorded server-side even when the browser is closed; REST responses, quote IDs, quote/print evaluations, fill evidence, cancellations, one-second state/risk/entry-gate context, worker crashes and feed errors support later development. No signing keys, auth headers or environment secrets are logged. ZIP compression runs outside the feed event loop, using captured per-asset sequence cutoffs. Journals retain a rolling tail of 100,000 events per asset (up to 999 additional events before pruning); exports report retained sequence ranges, pruning and logging errors. They live on ephemeral server disk: download before a restart or deployment. Journals are diagnostic evidence, not exchange-confirmed executions or complete historical ledgers. Feed status reflects observed freshness; the orb is illustrative.
 
 ## Verification
 
@@ -50,7 +50,7 @@ node --check arb-lab-v4/poly.js
 node --check arb-lab-v4/poly-orb.js
 ```
 
-40 risk/inventory/multi-asset/quote-lifecycle/export tests. Expired positions require an authoritative closed/resolved result; the latest tick is not treated as settlement. Separate asset state files use `/tmp/poly_v14_<asset>_paper.json`, which can disappear on hosting restart. No credentials or signing keys are needed for this paper engine; no real orders are submitted.
+41 risk/inventory/multi-asset/quote-lifecycle/export tests. Expired positions require an authoritative closed/resolved result; the latest tick is not treated as settlement. Separate asset state files use `/tmp/poly_v14_<asset>_paper.json`, which can disappear on hosting restart. No credentials or signing keys are needed for this paper engine; no real orders are submitted.
 
 ## Retained project components
 

@@ -658,4 +658,4 @@ async def rpc(body:Rpc):
 @app.get("/api/poly/demo/diagnostics")
 async def poly_demo_diagnostics():
     from poly_audit_export import diagnostic_response
-    return diagnostic_response(poly_server_engine)
+    return await diagnostic_response(poly_server_engine)

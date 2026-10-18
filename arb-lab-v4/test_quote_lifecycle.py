@@ -86,12 +86,28 @@ class QuoteLifecycleTests(unittest.TestCase):
         with patch.object(self.e.diagnostics,'db',None):
             meta=self.e.diagnostics.export(io.BytesIO());self.assertFalse(meta['enabled']);self.assertFalse(meta['complete'])
         self.assertEqual(self.e.paper['cash'],before)
+    def test_export_compression_does_not_block_feed_event_loop(self):
+        from types import SimpleNamespace
+        portfolio=SimpleNamespace(engines={'ETH':self.e},snapshot=lambda **kw:{'paperOnly':True})
+        original=self.e.diagnostics.export
+        def slow_export(*args):
+            time.sleep(.08);return original(*args)
+        async def run():
+            task=asyncio.create_task(diagnostic_response(portfolio))
+            await asyncio.sleep(.02)
+            self.assertFalse(task.done())
+            return await task
+        with patch.object(self.e.diagnostics,'export',side_effect=slow_export):
+            response=asyncio.run(run())
+        async def consume():
+            async for chunk in response.body_iterator:pass
+        asyncio.run(consume())
     def test_all_asset_bundle_contains_four_journals_and_manifest(self):
         p=PaperPortfolio()
         for a,e in p.engines.items():
             e.diagnostics.db.close();e.diagnostics=DiagnosticLog(str(Path(self.tmp.name)/(a+'.sqlite3')),a)
             self.addCleanup(e.diagnostics.db.close);e._save=lambda:None;e._new_session()
-        response=diagnostic_response(p)
+        response=asyncio.run(diagnostic_response(p))
         async def collect():
             return b''.join([chunk async for chunk in response.body_iterator])
         z=zipfile.ZipFile(io.BytesIO(asyncio.run(collect())))
