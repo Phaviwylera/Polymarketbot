@@ -655,10 +655,15 @@ async def rpc(body:Rpc):
     if isinstance(data,dict) and 'error' in data:
         raise HTTPException(502,str(data['error'])[:250])
     return data.get('result')
+@app.get("/api/poly/demo/diagnostics/status")
+async def poly_demo_diagnostic_status(prepare:bool=False,job:str|None=None):
+    from poly_audit_export import downloads
+    return JSONResponse(downloads.status(poly_server_engine,prepare,job),headers={'Cache-Control':'no-store'})
+
 @app.get("/api/poly/demo/diagnostics")
-async def poly_demo_diagnostics():
-    from poly_audit_export import diagnostic_response
-    return await diagnostic_response(poly_server_engine)
+async def poly_demo_diagnostics(job:str|None=None):
+    from poly_audit_export import downloads
+    return downloads.response(poly_server_engine,job)
 
 @app.get("/api/poly/strategy/config")
 async def get_strategy_config():
@@ -684,3 +689,4 @@ async def get_research_summary():
         ],
         "workstationMode":"PAPER_MULTI_ASSET_STAGE_PAIRING"
     }
+

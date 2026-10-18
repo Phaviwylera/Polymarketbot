@@ -49,11 +49,15 @@ class DiagnosticLog:
         # Separate reader connection supports background ZIP generation while the engine writes.
         reader=sqlite3.connect(self.path,timeout=.5)
         try:
+            buffer=bytearray()
             for seq,t,payload in reader.execute('SELECT seq,t,payload FROM events WHERE seq<=? ORDER BY seq',(meta['cutoffJournalSeq'],)):
-                output.write(('{"journalSeq":'+str(seq)+','+payload[1:]+'\n').encode())
+                buffer.extend(('{"journalSeq":'+str(seq)+','+payload[1:]+'\n').encode())
+                if len(buffer)>=256*1024:
+                    output.write(buffer);buffer.clear()
                 count+=1
                 if first is None:first=t;seq_first=seq
                 last=t;seq_last=seq
+            if buffer:output.write(buffer)
         finally:
             reader.close()
         return {**meta,'retained':count,'firstEventAt':first,'lastEventAt':last,
@@ -66,3 +70,4 @@ class DiagnosticLog:
             self.db=None
     def __del__(self):
         self.close()
+

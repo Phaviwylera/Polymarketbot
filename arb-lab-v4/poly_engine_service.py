@@ -55,10 +55,15 @@ async def health():
 async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=False):
     return engine.snapshot(asset,include_assets=all_assets)
 
+@app.get("/api/poly/demo/diagnostics/status")
+async def diagnostic_status(prepare:bool=False,job:str|None=None):
+    from poly_audit_export import downloads
+    return JSONResponse(downloads.status(engine,prepare,job),headers={'Cache-Control':'no-store'})
+
 @app.get("/api/poly/demo/diagnostics")
-async def diagnostics():
-    from poly_audit_export import diagnostic_response
-    return await diagnostic_response(engine)
+async def diagnostics(job:str|None=None):
+    from poly_audit_export import downloads
+    return downloads.response(engine,job)
 
 @app.get("/api/poly/strategy/config")
 async def get_strategy_config():
@@ -84,3 +89,4 @@ async def get_research_summary():
         ],
         "workstationMode":"PAPER_MULTI_ASSET_STAGE_PAIRING"
     }
+

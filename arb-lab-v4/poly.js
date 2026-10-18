@@ -50,7 +50,23 @@ for(const side of ['up','down'])text(asset+(side==='up'?'Up':'Down'),[a.bbo?.[si
   }
  }
  async function poll(){if(busy)return;busy=true;try{const r=await fetch(BASE+'/api/poly/demo/server?all_assets=true',{cache:'no-store',mode:'cors'});if(!r.ok)throw Error('HTTP '+r.status);const s=await r.json();if(!s.assets)throw Error('Waiting for all-asset engine update');render(s);}catch(e){text('feedStatus','RECONNECTING · '+e.message,'warn');}finally{busy=false;timer=setTimeout(poll,document.hidden?3500:1300);}}
- async function download(){const button=$('downloadLogBtn'),label=button.textContent;button.disabled=true;button.textContent='PREPARING FULL LOG…';try{const r=await fetch(BASE+'/api/poly/demo/diagnostics',{cache:'no-store',mode:'cors'});if(!r.ok)throw Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='poly-edge-development-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){text('feedStatus','LOG DOWNLOAD FAILED · '+e.message,'warn');}finally{button.disabled=false;button.textContent=label;}}
+ async function download(){
+  const button=$('downloadLogBtn'),label=button.textContent;button.disabled=true;
+  let status=$('downloadStatus');if(!status){status=document.createElement('span');status.id='downloadStatus';status.setAttribute('role','status');status.setAttribute('aria-live','polite');button.after(status);}
+  status.replaceChildren();const started=Date.now();
+  async function request(path){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);try{const r=await fetch(BASE+path,{cache:'no-store',mode:'cors',signal:controller.signal});if(!r.ok)throw Error('HTTP '+r.status);return await r.json();}finally{clearTimeout(timeout);}}
+  try{
+   button.textContent='PREPARING LOG…';let job=await request('/api/poly/demo/diagnostics/status?prepare=true');
+   while(job.state==='preparing'){
+    status.textContent='Preparing archive · '+Math.round((Date.now()-started)/1000)+'s';
+    if(Date.now()-started>300000)throw Error('Preparation is taking longer than expected. Retry to check the same job.');
+    await new Promise(resolve=>setTimeout(resolve,2000));job=await request('/api/poly/demo/diagnostics/status?job='+encodeURIComponent(job.job));
+   }
+   if(job.state!=='ready')throw Error(job.detail||'Archive is not ready. Please retry.');
+   const link=document.createElement('a');link.href=BASE+job.downloadUrl;link.textContent='ZIP READY — CLICK TO DOWNLOAD';link.download='poly-edge-development.zip';link.style.color='#65d5ff';status.replaceChildren(link);link.click();
+  }catch(e){status.textContent='LOG DOWNLOAD FAILED · '+(e.name==='AbortError'?'Server timeout. Please retry.':e.message);}
+  finally{button.disabled=false;button.textContent=label;}
+ }
  build();window.PolyNetworkOrb?.mount($('orbCanvas'));$('downloadLogBtn').addEventListener('click',download);let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(latest)render(latest);},200);});
  $('tapeFilters')?.addEventListener('click',e=>{if(!e.target.classList.contains('tapeBtn'))return;document.querySelectorAll('.tapeBtn').forEach(b=>b.classList.remove('active'));e.target.classList.add('active');currentTapeFilter=e.target.dataset.filter||'ALL';if(latest?.assets)renderTape(latest.assets);});
  $('strategyTuningBtn')?.addEventListener('click',async()=>{const modal=$('tuningModal');if(!modal)return;const grid=$('tuningGrid');grid.textContent='Loading current risk settings…';modal.showModal();try{const r=await fetch(BASE+'/api/poly/strategy/config');if(!r.ok)throw Error('HTTP '+r.status);const cfg=await r.json();grid.replaceChildren();for(const a of ASSETS){const ac=cfg.assets?.[a]||{};const card=document.createElement('div');card.className='tuningCard';card.style.setProperty('--asset-color',colors[a]);card.innerHTML=`<h4><span>${a}</span><small style="color:var(--dim)">Alloc: ${money(ac.allocation)}</small></h4><div class="tuningRow"><label>Pair Target (≤)</label><input type="number" step="0.005" min="0.80" max="1.05" id="target_${a}" value="${ac.pairTarget||0.97}"></div><div class="tuningRow"><label>Residual Cap ($)</label><input type="number" step="0.10" min="0.10" max="25" id="residual_${a}" value="${ac.residualCap||1.50}"></div><div class="tuningRow"><label>Loss Stop ($)</label><input type="number" step="0.05" min="0.05" max="10" id="stop_${a}" value="${ac.stopLoss||0.30}"></div>`;grid.append(card);}}catch(err){grid.textContent='Failed loading config: '+err.message;}});
@@ -62,3 +78,4 @@ for(const side of ['up','down'])text(asset+(side==='up'?'Up':'Down'),[a.bbo?.[si
  $('closeResearchFootBtn')?.addEventListener('click',()=>$('researchModal')?.close());
  poll();
 })();
+
