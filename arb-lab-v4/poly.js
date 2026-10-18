@@ -40,7 +40,9 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     if(asset===state.asset)return;
     state.asset=asset;state.history=[];state.tape=[];state.snap=null;state.lastMarket='';state.lastSignalKey='';
     for(const button of document.querySelectorAll('[data-asset]'))button.setAttribute('aria-pressed',String(button.dataset.asset===asset));
-    set('assetPriceLabel',asset+' / TWAP PRICE');set('mobileAssetLabel',asset);set('feedStatus','SWITCHING TO '+asset,'warn');
+    set('assetScope','Loading '+asset+' details…');set('feedStatus','SWITCHING TO '+asset,'warn');
+    set('spotPrice','$—');set('twapPrice','$—');set('openRef','—');set('question','Loading '+asset+' market…');
+    state.market=null;state.bbo={up:{},down:{}};
     window.PolyNetworkOrb?.setTelemetry({},[]);
     // In-flight responses for the old asset are discarded by render().
     if(!pollBusy){clearTimeout(pollTimer);poll();}
@@ -238,7 +240,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
   }
   function renderResolutionGrid(){
     const root=$('resolutionGrid');if(!root)return;
-    const xs=state.history.slice(-12);root.replaceChildren();
+    const xs=state.history.filter(q=>num(q.fairUp)!==null).slice(-12);root.replaceChildren();
     if(!xs.length){const e=document.createElement('div');e.className='empty';e.textContent='Building live window...';root.append(e);return}
     xs.forEach((v,i)=>{
       const p=Number(v.fairUp),cell=document.createElement('div');cell.className='resolutionCell';
