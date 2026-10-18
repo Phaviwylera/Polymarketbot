@@ -134,6 +134,13 @@ class PolyServerDemo:
         self.tasks=[]
         self.started=False
 
+    def close(self):
+        if hasattr(self,'diagnostics') and self.diagnostics:
+            self.diagnostics.close()
+
+    def __del__(self):
+        self.close()
+
     async def _get(self,url,params=None,headers=None):
         async with httpx.AsyncClient(timeout=12,follow_redirects=False) as c:
             r=await c.get(url,params=params,headers=headers)

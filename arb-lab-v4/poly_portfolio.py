@@ -60,4 +60,41 @@ class PaperPortfolio:
         if include_assets:return {**selected,'assets':{a:{k:v for k,v in s.items() if k!='portfolio'} for a,s in snaps.items()}}
         return selected
 
+    def get_config(self):
+        return {
+            'totalCapital': TOTAL_BALANCE,
+            'portfolioLossLimit': PORTFOLIO_LOSS_LIMIT,
+            'locked': self.locked,
+            'allocations': dict(ALLOCATIONS),
+            'assets': {
+                asset: {
+                    'allocation': self.engines[asset].balance,
+                    'pairTarget': self.engines[asset].pair_target,
+                    'residualCap': self.engines[asset].residual_cap,
+                    'stopLoss': self.engines[asset].inventory_stop,
+                    'sessionLossLimit': self.engines[asset].session_loss_limit,
+                    'firstPriceCap': self.engines[asset].first_price_cap,
+                }
+                for asset in ASSETS
+            }
+        }
+
+    def update_config(self, updates: dict):
+        for asset, cfg in (updates.get('assets') or {}).items():
+            if asset in self.engines and isinstance(cfg, dict):
+                eng = self.engines[asset]
+                if 'pairTarget' in cfg and 0.80 <= float(cfg['pairTarget']) <= 1.05:
+                    eng.pair_target = round(float(cfg['pairTarget']), 4)
+                if 'residualCap' in cfg and 0.1 <= float(cfg['residualCap']) <= 25.0:
+                    eng.residual_cap = round(float(cfg['residualCap']), 3)
+                if 'stopLoss' in cfg and 0.05 <= float(cfg['stopLoss']) <= 10.0:
+                    eng.inventory_stop = round(float(cfg['stopLoss']), 3)
+                if 'firstPriceCap' in cfg and 0.10 <= float(cfg['firstPriceCap']) <= 0.90:
+                    eng.first_price_cap = round(float(cfg['firstPriceCap']), 3)
+        return self.get_config()
+
+    def close(self):
+        for e in self.engines.values():
+            e.close()
+
 engine=PaperPortfolio()

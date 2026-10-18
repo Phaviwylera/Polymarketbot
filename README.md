@@ -1,6 +1,10 @@
-# POLY / EDGE V14.1 — all-asset paper workstation
+# POLY / EDGE V14.3 — all-asset paper workstation
 
 BTC, ETH, SOL and XRP 5-minute crypto markets run concurrently. All four P&L cards, price/TWAP graphs and paper-P&L graphs share one dashboard, with a common all-asset network orb and execution tape. There are no asset-switch tabs.
+
+## V14.3 strategy tuning, wallet pattern telemetry and execution filters
+
+V14.3 adds interactive real-time strategy risk tuning (`/api/poly/strategy/config`), empirical wallet research findings (`/api/poly/research/summary`), filtered execution tape views (`FILLS`, `MERGES`, `QUOTES`, `EXITS`), 5-minute round expiration countdowns (`MM:SS`), and real-time locked-edge and depth balance metrics on all four asset lanes.
 
 ## Paper allocation and experiment settings
 

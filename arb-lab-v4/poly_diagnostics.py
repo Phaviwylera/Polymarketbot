@@ -47,12 +47,22 @@ class DiagnosticLog:
         if not meta['enabled']:return {**meta,'retained':0,'complete':False}
         count=0;first=last=None;seq_first=seq_last=None
         # Separate reader connection supports background ZIP generation while the engine writes.
-        with sqlite3.connect(self.path,timeout=.5) as reader:
+        reader=sqlite3.connect(self.path,timeout=.5)
+        try:
             for seq,t,payload in reader.execute('SELECT seq,t,payload FROM events WHERE seq<=? ORDER BY seq',(meta['cutoffJournalSeq'],)):
                 output.write(('{"journalSeq":'+str(seq)+','+payload[1:]+'\n').encode())
                 count+=1
                 if first is None:first=t;seq_first=seq
                 last=t;seq_last=seq
+        finally:
+            reader.close()
         return {**meta,'retained':count,'firstEventAt':first,'lastEventAt':last,
                 'firstJournalSeq':seq_first,'lastJournalSeq':seq_last,'earlierRowsPruned':bool(seq_first and seq_first>1),
                 'complete':meta['errors']==0 and (not seq_first or seq_first==1) and (seq_last or 0)==meta['cutoffJournalSeq']}
+    def close(self):
+        if self.db is not None:
+            try:self.db.close()
+            except Exception:pass
+            self.db=None
+    def __del__(self):
+        self.close()
