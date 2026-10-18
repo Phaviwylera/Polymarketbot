@@ -1,6 +1,6 @@
 """Parallel, isolated crypto paper lanes. No signing keys or real order submission."""
 from __future__ import annotations
-import asyncio,time,json
+import asyncio,time,json,copy
 from pathlib import Path
 import httpx
 from poly_server_demo import PolyServerDemo,ENGINE_REVISION
@@ -9,6 +9,23 @@ ASSETS=('BTC','ETH','SOL','XRP')
 ALLOCATIONS={'BTC':60.0,'ETH':80.0,'SOL':30.0,'XRP':30.0}
 TOTAL_BALANCE=sum(ALLOCATIONS.values())
 PORTFOLIO_LOSS_LIMIT=6.0
+
+def merge_release_recovery(checkpoint,live):
+    """A later wall clock cannot roll a known session's ledger backwards."""
+    if not str(live.get('revision','')).startswith(('14.','15.')) or not live.get('assets'):return checkpoint
+    if float(live.get('serverTime') or 0)<float(checkpoint.get('serverTime') or 0):return checkpoint
+    merged=copy.deepcopy(live)
+    for asset,saved in (checkpoint.get('assets') or {}).items():
+        prior=saved.get('paper') or {};incoming=((live.get('assets') or {}).get(asset) or {}).get('paper') or {}
+        same_session=prior.get('sessionId') and prior.get('sessionId')==incoming.get('sessionId')
+        regressed=same_session and any(float(incoming.get(k) or 0)+1e-8<float(prior.get(k) or 0) for k in ('trades','momentumFills','inventoryFills','fees'))
+        if not incoming or regressed:
+            merged['assets'][asset]=copy.deepcopy(saved)
+            print('POLY_RECOVERY_LEDGER_REGRESSION',asset,flush=True)
+    cp=checkpoint.get('portfolio') or {};mp=merged.setdefault('portfolio',{})
+    mp['riskLocked']=bool(mp.get('riskLocked') or cp.get('riskLocked'))
+    mp['maxDrawdownUsd']=max(float(mp.get('maxDrawdownUsd') or 0),float(cp.get('maxDrawdownUsd') or 0))
+    return merged
 
 class PaperPortfolio:
     def __init__(self):
@@ -37,7 +54,7 @@ class PaperPortfolio:
             async with httpx.AsyncClient(timeout=5) as client:
                 response=await client.get('https://poly-edge-paper-engine.onrender.com/api/poly/demo/server',params={'all_assets':'true'})
                 response.raise_for_status();live=response.json()
-                if str(live.get('revision','')).startswith(('14.','15.')) and live.get('assets') and float(live.get('serverTime') or 0)>=float(recovery.get('serverTime') or 0):recovery=live
+                recovery=merge_release_recovery(recovery,live)
         except Exception:pass
         self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
@@ -95,7 +112,7 @@ class PaperPortfolio:
                     'firstPriceCap': self.engines[asset].first_price_cap,
                     'momentumEnabled':self.engines[asset].momentum_enabled,
                     'momentumNotionalCap':min(3.25,self.engines[asset].balance*.1),
-                    'momentumLossStopUsd':.30,'momentumTakeProfitUsd':.18,'momentumMaxHoldSec':30,
+                    'momentumLossStopUsd':self.engines[asset].inventory_stop,'momentumTakeProfitUsd':max(.18,self.engines[asset].inventory_stop),'momentumMaxHoldSec':30,
                 }
                 for asset in ASSETS
             }

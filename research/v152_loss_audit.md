@@ -13,7 +13,7 @@ The uploaded `poly-edge-development-2026-10-18T19-49-15Z.zip` contains a snapsho
 | SOL | 2 | -$1.03845 | Inherited from V15 |
 | XRP | 1 | -$0.46190 | Inherited from V15 |
 
-V15.1 therefore contributed **-$0.68525** across four trades. The newer live checkpoint at 19:57:50 UTC contains an additional XRP loss of **$0.57360**, bringing the full ledger to **-$2.75920** across eight closes, including **$1.00920** in fees. Three lanes are risk-locked after consecutive losses. Release recovery preserves those losses and locks, and prefers a newer live handover to the bundled checkpoint; it does not reset the account to $200.
+V15.1 therefore contributed **-$0.68525** across four trades. The newer live checkpoint at 19:57:50 UTC contains an additional XRP loss of **$0.57360**, bringing the full ledger to **-$2.75920** across eight closes, including **$1.00920** in fees. Three lanes are risk-locked after consecutive losses. Release recovery preserves those losses and locks, and prefers a newer live handover to the bundled checkpoint only when same-session trade/fill/fee counters have not regressed; it does not reset the account to $200.
 
 ## Findings and changes
 
@@ -27,7 +27,7 @@ V15.1 therefore contributed **-$0.68525** across four trades. The newer live che
 
 ## Validation and limits
 
-All 67 automated tests pass, including funded fills and fees for all four assets, configured risk admission, stale exits and retries, execution deadlines, opening-reference recovery, backlog resynchronization, raw-log flooding, pinned exports, HTTP download behavior and release loss preservation. JavaScript syntax validation also passes.
+All 68 automated tests pass, including funded fills and fees for all four assets, configured risk admission, stale exits and retries, execution deadlines, opening-reference recovery, backlog resynchronization, raw-log flooding, pinned exports, HTTP download behavior and release loss preservation. JavaScript syntax validation also passes.
 
 `v152_chronological_execution_check.json` reports the earlier 60% and later 40% of each retained state window separately, with the same production rules and historical book ages. There are **zero eligible fills in both windows**. BTC and XRP were waiting for trusted openings; ETH and SOL were already locked in the recorded state. These short pruned windows cannot demonstrate profitability or compare realized exits. The replay initializes fresh paper accounts and reconstructs market inputs, rather than claiming to reproduce the historic risk locks. Neither a zero-trade replay nor passing software tests proves a trading edge.
 
