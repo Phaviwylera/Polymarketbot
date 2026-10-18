@@ -57,6 +57,10 @@ class MultiAssetTests(unittest.IsolatedAsyncioTestCase):
         for e in p.engines.values():e._save=lambda:None;e._new_session()
         e=p.engines['XRP'];e.market={'slug':'xrp-test'};inv=e._inventory_get();e._inventory_add_lot(inv,'down',5,.1,0,'MAKER')
         self.assertEqual((await p.reset())['status'],'blocked');self.assertTrue(e._inventory_has_residual())
+    async def test_directional_lag_entry_cannot_place_order(self):
+        e=self.lane();await e._enter({'ask':.5},{},99)
+        self.assertEqual(e.paper['cash'],5);self.assertEqual(e.paper['executionAttempts'],0)
+        self.assertFalse(e.snapshot()['risk']['directionalLagEntriesEnabled'])
     async def test_resolution_requires_authoritative_closed_result(self):
         e=self.lane();e._get=AsyncMock(return_value=[{'closed':False,'outcomes':'["Up","Down"]','outcomePrices':'["1","0"]'}])
         self.assertIsNone(await e._resolved_winner('test'))

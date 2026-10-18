@@ -53,7 +53,7 @@ class PaperPortfolio:
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
             'maxDrawdownUsd':self.max_drawdown,'allocationPerAsset':TOTAL_BALANCE/len(ASSETS),
-            'assets':lanes,'scope':'crypto-updown-5m','strategy':'fee-aware staged inventory pairing plus lag/direct-set paper paths'}
+            'assets':lanes,'scope':'crypto-updown-5m','strategy':'fee-aware staged inventory pairing and executable direct sets; directional lag entries disabled'}
         return selected
 
 engine=PaperPortfolio()

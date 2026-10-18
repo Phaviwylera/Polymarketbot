@@ -27,7 +27,7 @@ The dashboard currently polls the deployed dedicated engine at `https://poly-edg
 - `arb-lab-v4/poly-orb.js`: amber/cyan spherical network with incoming telemetry signal animation, sparse orbiting particles, 40-second rotation loop, reduced-motion support, pause/play and 3840×2160 PNG export.
 - `arb-lab-v4/poly_server_demo.py`: asset-isolated V13 paper-trading engine and inventory risk controls.
 - `arb-lab-v4/poly_portfolio.py`: BTC/ETH/SOL/XRP 5-minute parallel lanes, $5 each ($20 total), aggregate $1.50 marked/realized loss gate.
-- `arb-lab-v4/test_multi_asset.py`: 8 asset isolation, capital, resolution and risk tests.
+- `arb-lab-v4/test_multi_asset.py`: 9 asset isolation, capital, resolution and risk tests.
 - `arb-lab-v4/poly_engine_service.py`: separate FastAPI engine service.
 - `arb-lab-v4/test_inventory_risk.py`: 14 regression tests for risk and inventory order handling.
 - `arb-lab-v4/wallet_research_service.py` and `wallet_strategy_research.py`: current hosted research service source.
@@ -69,7 +69,7 @@ This repository upload includes the orb upgrade but does not deploy it. Existing
 
 All four crypto 5-minute scanners run concurrently. The dashboard shows total portfolio equity and selectable per-asset details. Each lane has a separate $5 simulated allocation and a $0.50 loss gate; all lanes stop opening exposure at a combined $1.50 realized or marked loss. The first-leg residual cap remains $0.50 and the timeout remains 15 seconds. Market minimum sizes and fee-adjusted hedge funding can block trades at this small balance. These limits are gates, not guaranteed maximum losses during illiquidity or gaps.
 
-Wallet-inspired staged inventory starts with a conservative queue-simulated first-side quote, then an affordable fee-aware complement or bounded recovery exit. Pair targets are 0.980 BTC and 0.970 ETH/SOL/XRP; these are experiment settings, not inferred wallet parameters. Existing executable complete-set and lag paper paths remain active. No signing keys, account credentials or real orders are used.
+Wallet-inspired staged inventory starts with a conservative queue-simulated first-side quote, then an affordable fee-aware complement or bounded recovery exit. Pair targets are 0.980 BTC and 0.970 ETH/SOL/XRP; these are experiment settings, not inferred wallet parameters. Executable complete-set paths remain active. Directional lag entries are disabled in V13.1 after the first V13 paper trial lost about $1.03 across BTC and SOL; signal diagnostics remain visible. The new deployment starts a fresh paper run, not a recovery of those losses. No signing keys, account credentials or real orders are used.
 
 The evidence covers BTC/ETH only. SOL/XRP are unvalidated paper extensions and require their own market and matching fresh reference feed. Unavailable assets stay gated. Expired residuals wait for an authoritative closed/resolved market result; unresolved inventory is preserved and prevents market rollover. A feed's latest tick is not treated as settlement.
 

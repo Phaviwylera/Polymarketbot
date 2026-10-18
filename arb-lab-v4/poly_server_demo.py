@@ -35,7 +35,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="13.0-multi-asset-paper"
+ENGINE_REVISION="13.1-wallet-pairing-paper"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -89,6 +89,7 @@ class PolyServerDemo:
         self.session_loss_limit=min(SESSION_LOSS_LIMIT_USD,self.balance*.10) if balance!=DEMO_BALANCE else SESSION_LOSS_LIMIT_USD
         # Separate profiles; wallet averages are not executable expected returns.
         self.pair_target={'BTC':.980,'ETH':.970,'SOL':.970,'XRP':.970}[asset]
+        self.lag_trading_enabled=False
         self.portfolio_guard=portfolio_guard
         self.market=None
         self.bbo={'up':{'bid':None,'ask':None,'bidSize':0.0,'askSize':0.0},
@@ -527,6 +528,13 @@ class PolyServerDemo:
             self.latest_mode='OPEN_STABILIZE';return 'opening stabilization period'
         if m['remaining']<4:
             self.latest_mode='CLOSE_LOCK';return 'too close to resolution'
+
+        if not self.lag_trading_enabled:
+            self.latest_mode='INVENTORY_PAIRING'
+            inv=p.get('inventory') or {}
+            if inv.get('quote'):return 'inventory quote awaiting conservative queue fill; directional entries disabled'
+            if self._inventory_has_residual():return 'managing bounded residual; directional entries disabled'
+            return 'waiting for funded fee-aware pair within first-leg risk cap; directional entries disabled'
 
         slug=self.market.get('slug') if self.market else None
         if slug and slug in (p.get('tradedMarkets') or []):
@@ -1309,6 +1317,7 @@ class PolyServerDemo:
         self._save()
 
     async def _enter(self,best,m,confidence):
+        if not self.lag_trading_enabled:return
         if self.pending or not self.paper or self.paper.get('position'):return
         p=self.paper;market=self.market
         if time.time()>=p['endsAt']:return
@@ -1499,7 +1508,7 @@ class PolyServerDemo:
                     'fairUp':m.get('fairUp'),'upAsk':self.bbo['up'].get('ask'),
                     'equity':self._equity(),'mode':self.latest_mode,'decision':reason
                 })
-            if reason=='OPPORTUNITY_LAG' and best and self.latest_core['TITAN']['verdict']=='APPROVE':
+            if self.lag_trading_enabled and reason=='OPPORTUNITY_LAG' and best and self.latest_core['TITAN']['verdict']=='APPROVE':
                 p['signals']+=1
                 mk=p.get('maker')
                 maker_residual=bool(mk and (mk.get('upFilledPrice') is not None or mk.get('downFilledPrice') is not None))
@@ -1546,7 +1555,7 @@ class PolyServerDemo:
             'twap':self.twap,'twapAgeSec':time.time()-self.twap_ts if self.twap_ts else None,
             'openRef':self.open_ref,'openTrusted':self.open_trusted,
             'model':self.latest_model,'candidate':self.latest_candidate,'decision':self.latest_reason,'mode':self.latest_mode,'core':self.latest_core,'pair':self.latest_pair,
-            'risk':{'maxTradeNotional':MAX_TRADE_NOTIONAL,'maxTradeLossUsd':MAX_TRADE_LOSS_USD,
+            'risk':{'directionalLagEntriesEnabled':self.lag_trading_enabled,'maxTradeNotional':MAX_TRADE_NOTIONAL,'maxTradeLossUsd':MAX_TRADE_LOSS_USD,
                     'sessionLossLimitUsd':self.session_loss_limit,'lagConfirmSec':LAG_CONFIRM_SEC,
                     'alignmentSide':self.alignment_side,'alignmentAgeSec':max(0,time.time()-self.alignment_since) if self.alignment_since else 0,
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
