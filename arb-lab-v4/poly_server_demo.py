@@ -37,7 +37,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="15.1-confirmed-trend"
+ENGINE_REVISION="15.2-cost-aware-risk"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -110,6 +110,8 @@ class PolyServerDemo:
         self.book_observed={'up':0.,'down':0.}
         self.book_event_lag={'up':None,'down':None}
         self.trade_event_lag=None
+        self.risk_loop_lag=0.
+        self.stale_book_messages=0;self._stale_book_run=0;self._last_stale_log=0.;self._clob_resync_needed=False
         self._book_levels={side:{'bids':{},'asks':{}} for side in ('up','down')}
         self._fetched_books={}
         self._last_book_refresh=0.
@@ -174,6 +176,7 @@ class PolyServerDemo:
             asyncio.create_task(self.clob_worker(),name='poly-clob'),
             asyncio.create_task(self.rtds_worker(),name='poly-rtds'),
             asyncio.create_task(self.engine_worker(),name='poly-paper'),
+            asyncio.create_task(self.position_worker(),name='poly-position-risk'),
         ]
 
         for task in self.tasks:task.add_done_callback(self._worker_done)
@@ -346,6 +349,7 @@ class PolyServerDemo:
                     self.book_observed={'up':0.,'down':0.}
                     print('POLY_DEMO_MARKET',m['slug'],flush=True)
                 self.market=m;self._apply_rest_book(m);self.feed['market']='live'
+                self._recover_open_reference()
             except Exception as e:
                 self._diagnostic('FEED_ERROR',feed='market',error=repr(e))
                 self.feed['market']='error:'+type(e).__name__
@@ -360,7 +364,7 @@ class PolyServerDemo:
             try:
                 async with websockets.connect(CLOB_WS,ping_interval=None,close_timeout=2,max_size=2_000_000) as ws:
                     await ws.send(json.dumps({'type':'market','assets_ids':[up,down],'initial_dump':True,'custom_feature_enabled':True}))
-                    self.feed['clob']='live'
+                    self.feed['clob']='live';self._clob_resync_needed=False;self._stale_book_run=0
                     print('POLY_DEMO_CLOB_CONNECTED',self.market.get('slug'),flush=True)
                     async def pinger():
                         while True:
@@ -375,6 +379,8 @@ class PolyServerDemo:
                             except Exception: continue
                             msgs=data if isinstance(data,list) else [data]
                             for msg in msgs:self._handle_clob(msg)
+                            if self._clob_resync_needed:raise RuntimeError('stale order-book backlog; reconnect for current snapshot')
+                            await asyncio.sleep(0)
                     finally:
                         pt.cancel()
             except Exception as e:
@@ -388,7 +394,6 @@ class PolyServerDemo:
             if str(t)==str(self.market.get('upToken')): return 'up'
             if str(t)==str(self.market.get('downToken')): return 'down'
             return None
-        self._diagnostic('CLOB_MESSAGE',message=m)
         et=m.get('event_type')
         if et in {'book','price_change','best_bid_ask'}:
             received=time.time()
@@ -397,8 +402,14 @@ class PolyServerDemo:
                 lag=received-ts
             except Exception:lag=0.
             if lag>5 or lag< -1:
-                self._diagnostic('STALE_BOOK_MESSAGE',lagSeconds=lag,eventType=et)
+                self.stale_book_messages+=1;self._stale_book_run+=1
+                if received-self._last_stale_log>=1:
+                    self._last_stale_log=received
+                    self._diagnostic('STALE_BOOK_MESSAGE',lagSeconds=lag,eventType=et,totalRejected=self.stale_book_messages,sample=m)
+                if self._stale_book_run>=50 or lag>15:self._clob_resync_needed=True
                 return
+            self._stale_book_run=0
+            self._diagnostic('CLOB_MESSAGE',message=m)
             if et=='book':
                 side=side_for(m.get('asset_id'))
                 if side:self._ingest_book(side,m);self.book_event_lag[side]=lag
@@ -421,6 +432,7 @@ class PolyServerDemo:
                     self._publish_book(side,float(m['best_bid']) if m.get('best_bid') is not None else None,float(m['best_ask']) if m.get('best_ask') is not None else None)
                     self.book_observed[side]=received;self.book_event_lag[side]=lag
         elif et=='last_trade_price':
+            self._diagnostic('CLOB_MESSAGE',message=m)
             side=side_for(m.get('asset_id'))
             if side:
                 try:
@@ -478,6 +490,14 @@ class PolyServerDemo:
                 self.feed['rtds']='error:'+type(e).__name__
                 print('POLY_DEMO_RTDS_ERROR',type(e).__name__,str(e)[:180],flush=True)
                 await asyncio.sleep(1)
+
+    def _recover_open_reference(self):
+        if self.open_ref is not None or not self.market:return
+        opens=[r for r in self.twap_hist if abs(r['t']-float(self.market['startTs']))<=8]
+        if opens:
+            opening=min(opens,key=lambda r:abs(r['t']-float(self.market['startTs'])))
+            self.open_ref=opening['p'];self.open_ref_ts=opening['t'];self.open_trusted=True
+            self._diagnostic('OPEN_REFERENCE_RECOVERED',sample=opening)
 
     def _handle_rtds(self,m):
         if not isinstance(m,dict) or m.get('message'):return
@@ -1490,8 +1510,8 @@ class PolyServerDemo:
                 'openRef':self.open_ref,'openTrusted':self.open_trusted,'market':self.market,'model':self.latest_model,
                 'decision':self.latest_reason,'entryAudit':self.entry_audit,'entryChecks':self.entry_checks,
                 'momentumEnabled':self.momentum_enabled,'momentumDecision':self.momentum_decision,'momentumSignal':self.momentum_candidate,
-                'bookObservedAt':self.book_observed,'bookEventLagSec':self.book_event_lag,'lastTradeEventLagSec':self.trade_event_lag,'cash':p.get('cash'),'status':p.get('status'),
-                'pending':self.pending,'inventory':inv,'realizedPnl':p.get('realizedPnl'),'riskLockReason':p.get('riskLockReason'),
+                'bookObservedAt':self.book_observed,'bookEventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag,'cash':p.get('cash'),'status':p.get('status'),
+                'pending':self.pending,'position':p.get('position'),'inventory':inv,'realizedPnl':p.get('realizedPnl'),'riskLockReason':p.get('riskLockReason'),
                 'pairTarget':self.pair_target,'residualCap':self.residual_cap,'stopLoss':self.inventory_stop,'laneLossLimit':self.session_loss_limit,
                 'equity':self._equity() if self.paper else self.balance,'fees':p.get('fees'),'trades':p.get('trades'),
                 'sessionEndsAt':p.get('endsAt'),'tradeSeq':self.trade_seq,'executionLatencySec':EXECUTION_LATENCY_SEC,
@@ -1514,7 +1534,7 @@ class PolyServerDemo:
         return {'t':time.time(),'model':m,'market':self.market,'bbo':self.bbo,'feed':self.feed,
                 'openTrusted':self.open_trusted,'spotTs':self.spot_ts,'twapTs':self.twap_ts,
                 'bookAges':{k:time.time()-v for k,v in self.book_observed.items()},
-                'cash':(self.paper or {}).get('cash',0),'startingBalance':self.balance}
+                'cash':(self.paper or {}).get('cash',0),'startingBalance':self.balance,'stopLossUsd':self.inventory_stop}
 
     def _momentum_signal(self,m,allow_weak=False):
         return momentum_signal(self._momentum_context(m),list(self.book_history),allow_weak)
@@ -1529,6 +1549,7 @@ class PolyServerDemo:
         if inv and inv.get('quote'):self._inventory_cancel_quote(inv,'confirmed momentum entry takes priority')
         side=candidate['side'];key=side.lower();shares=candidate['shares'];tick=float(market.get('minTickSize') or .01)
         max_price=candidate['ask']+tick
+        submitted=time.time()
         self.pending=True;p['executionAttempts']+=1;p['momentumOrders']=int(p.get('momentumOrders',0))+1
         self._record('ORDER',side=side,price=candidate['ask'],detail=f'MOMENTUM_SCALP marketable paper order; {shares:.2f} shares; max {max_price:.3f}')
         self._diagnostic('MOMENTUM_ORDER',signal=candidate,context=self._diagnostic_context())
@@ -1536,6 +1557,10 @@ class PolyServerDemo:
         try:
             if self.paper is not p or self.market_version!=version or self.market.get('slug')!=market['slug']:return False
             self._update_risk()
+            if time.time()-submitted>1.0:
+                p['nofills']+=1;p['postLatencyRejects']+=1
+                self._record('NOFILL',side=side,detail='entry execution deadline exceeded 1 second')
+                return False
             if p['status']!='running' or time.time()>=p['endsAt']:return False
             fresh,reason=self._momentum_signal(self._model(),True)
             if not fresh or fresh['side']!=side or fresh['ask']>max_price+1e-9:
@@ -1548,7 +1573,9 @@ class PolyServerDemo:
             p.setdefault('tradedMarkets',[]).append(market['slug']);p['tradedMarkets']=p['tradedMarkets'][-32:]
             p['position']={'marketSlug':market['slug'],'side':side,'entryPrice':ask,'shares':shares,'entryFee':fee,
                            'entryNotional':shares*ask,'entryTotalCost':cost,'entryAt':time.time(),'mode':'MOMENTUM_SCALP',
-                           'modelFair':fresh['fair'],'entryNetEdge':fresh['modelEdgeEstimate'],'stopLossUsd':.30,'takeProfitUsd':.18,'maxHoldSec':30}
+                           'modelFair':fresh['fair'],'entryNetEdge':fresh['modelEdgeEstimate'],
+                           'entryFrictionUsd':fresh['entryFrictionUsd'],'adverseMoveBudgetUsd':fresh['adverseMoveBudgetUsd'],
+                           'stopLossUsd':fresh['stopLossUsd'],'takeProfitUsd':fresh['takeProfitUsd'],'maxHoldSec':fresh['maxHoldSec']}
             self._record('BUY',side=side,price=ask,detail=f'MOMENTUM_SCALP; {shares:.2f} shares; confirmed depth; fee {fee:.5f}; estimated edge {fresh["modelEdgeEstimate"]:.4f}')
             return True
         finally:self.pending=False
@@ -1558,7 +1585,7 @@ class PolyServerDemo:
         if not pos or pos.get('mode')!='MOMENTUM_SCALP' or self.pending:return
         if not self.market or pos['marketSlug']!=self.market['slug']:return
         side=pos['side'].lower();bid=self.bbo[side].get('bid');now=time.time();age=now-pos['entryAt']
-        reason=None
+        reason=pos.get('exitRequestedReason')
         if p.get('status')!='running' or now>=p['endsAt']:reason='momentum risk/session exit'
         elif age>=pos['maxHoldSec']:reason='momentum maximum hold'
         elif self.market['endTs']-now<=15:reason='momentum market closing'
@@ -1566,8 +1593,10 @@ class PolyServerDemo:
             net=pos['shares']*(bid-_fee_per_share(bid))-pos['entryTotalCost']
             if net<=-pos['stopLossUsd']:reason='momentum net loss stop'
             elif net>=pos['takeProfitUsd']:reason='momentum net profit target'
-            elif m and age>=5 and m.get('leadBps',0)*(1 if side=='up' else -1)<-.2:reason='momentum oracle direction reversed'
+            elif m and max(now-self.spot_ts,now-self.twap_ts)<5 and age>=5 and m.get('leadBps',0)*(1 if side=='up' else -1)<-.2:reason='momentum oracle direction reversed'
         if reason:
+            pos.setdefault('exitRequestedAt',now);pos.setdefault('exitRequestedReason',reason)
+            reason=pos['exitRequestedReason']
             if now-self.book_observed.get(side,0)>3:
                 self.momentum_decision='risk exit waiting for a current executable book';return
             await self._try_sell(reason)
@@ -1702,17 +1731,27 @@ class PolyServerDemo:
         min_sh=float(self.market.get('minOrderSize') or 0) if self.market else 0
         if pos['shares']<min_sh:return False
         bid0=self.bbo[key].get('bid');size0=float(self.bbo[key].get('bidSize') or 0)
-        if bid0 is None or size0<pos['shares']:return False
+        if bid0 is None or size0<pos['shares']:
+            if time.time()-pos.get('exitWaitLoggedAt',0)>=3:
+                pos['exitWaitLoggedAt']=time.time()
+                self._diagnostic('EXIT_WAIT',reason='insufficient confirmed bid depth',exitReason=reason,context=self._diagnostic_context())
+            return False
         bid0=float(bid0);tick=max(.001,float(self.market.get('minTickSize') or .01));min_price=max(.01,bid0-tick)
+        submitted=time.time()
         self.pending=True;self._record('ORDER',side=pos['side'],price=bid0,detail=f'paper FAK sell; {reason}')
         await asyncio.sleep(EXECUTION_LATENCY_SEC)
         try:
             if self.paper is not p or self.market_version!=version or p.get('position') is not pos:return False
             if not self.market or self.market.get('slug')!=pos.get('marketSlug'):return False
-            if pos.get('mode')=='MOMENTUM_SCALP' and time.time()-self.book_observed.get(key,0)>3:return False
+            if pos.get('mode')=='MOMENTUM_SCALP' and time.time()-self.book_observed.get(key,0)>3:
+                p['nofills']+=1
+                self._record('NOFILL',side=pos['side'],detail='exit rejected: book older than 3 seconds after latency')
+                self._diagnostic('EXIT_ATTEMPT',filled=False,reason='stale post-latency book',elapsedSec=time.time()-submitted,context=self._diagnostic_context())
+                return False
             bid=self.bbo[key].get('bid');avail=float(self.bbo[key].get('bidSize') or 0)
             if bid is None or float(bid)<min_price or avail<pos['shares']:
-                p['nofills']+=1;self._record('NOFILL',side=pos['side'],price=float(bid) if bid is not None else None,detail='exit book moved during 350ms latency');return False
+                p['nofills']+=1;self._record('NOFILL',side=pos['side'],price=float(bid) if bid is not None else None,detail=f'exit book moved or insufficient depth during {time.time()-submitted:.3f}s latency');return False
+            self._diagnostic('EXIT_ATTEMPT',filled=True,reason=reason,elapsedSec=time.time()-submitted,requestedAt=pos.get('exitRequestedAt'),context=self._diagnostic_context())
             bid=float(bid);fee=pos['shares']*_fee_per_share(bid);proceeds=pos['shares']*bid-fee
             pnl=proceeds-pos['entryTotalCost']
             p['cash']+=proceeds;p['fees']+=fee;p['realizedPnl']+=pnl;p['trades']+=1
@@ -1751,6 +1790,13 @@ class PolyServerDemo:
         self._last_saved_at=now
         try:self.state_file.write_text(json.dumps(self.snapshot(),separators=(',',':')),encoding='utf-8')
         except Exception as exc:self._diagnostic('STATE_SAVE_ERROR',error=repr(exc))
+
+    async def position_worker(self):
+        while True:
+            expected=time.monotonic()+.1
+            await asyncio.sleep(.1)
+            self.risk_loop_lag=max(0.,time.monotonic()-expected)
+            if self.momentum_enabled:await self._momentum_manage(self.latest_model)
 
     async def engine_worker(self):
         last_audit=0.0
@@ -1856,8 +1902,8 @@ class PolyServerDemo:
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
-            'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':.30,'takeProfitUsd':.18,'maxHoldSec':30,'modelCalibrated':False},
-            'bookHealth':{'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'lastTradeEventLagSec':self.trade_event_lag},
+            'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
+            'bookHealth':{'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
             'diagnostics':self.diagnostics.status(),
             'history':list(self.visual_history)[-240:],
             'reasonCounts':dict(self.reason_counts),

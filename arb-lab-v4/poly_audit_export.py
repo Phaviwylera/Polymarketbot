@@ -13,8 +13,8 @@ async def diagnostic_response(engine):
 def _build_archive(snapshot,journals):
     fd,path=tempfile.mkstemp(prefix='poly-audit-',suffix='.zip');os.close(fd)
     manifest={'format':'poly-edge-diagnostics-v14.1','exportedAt':time.time(),'paperOnly':True,
-              'coverage':'Received CLOB messages, accepted asset RTDS, quote/print decisions, engine events, one-second state. Not an exchange execution ledger.',
-              'limitations':['Rolling 100000-event tail per asset; older events may be pruned.','Ephemeral disk: restart/deploy can erase journals.','Feed gaps and unknown queue depth prevent exact execution reconstruction.','Maker fills require sell-aggressor volume during the quote lifetime; no partial fills are assumed.'], 'assets':{}}
+              'coverage':'Accepted CLOB messages, one-second stale-message samples and rejection counts, accepted asset RTDS, quote/print decisions, engine events, one-second state. Not an exchange execution ledger.',
+              'limitations':['Per asset: 100000 raw messages, 20000 state observations and 20000 critical events retained separately; older rows may be pruned.','Ephemeral disk: restart/deploy can erase journals.','Feed gaps and unknown queue depth prevent exact execution reconstruction.','Maker fills require sell-aggressor volume during the quote lifetime; no partial fills are assumed.'], 'assets':{}}
     try:
         with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED,compresslevel=1) as z:
             z.writestr('snapshot.json',snapshot)
@@ -24,6 +24,8 @@ def _build_archive(snapshot,journals):
             z.writestr('README.txt','Start with manifest.json for coverage, gaps and retention. snapshot.json is the all-asset state. Each ASSET.ndjson is chronological, with journalSeq, receipt time, market and session identity. Raw CLOB messages retain exchange timestamps. QUOTE_PLACE, QUOTE_PRINT, QUOTE_FILL_EVIDENCE and QUOTE_CANCEL link by quote id. STATE and ENGINE_EVENT contain book, feed, risk, inventory and cash context. No profit is guaranteed.\n')
     except Exception:
         Path(path).unlink(missing_ok=True);raise
+    finally:
+        for asset,journal,capture in journals:journal.release_capture(capture)
     return path
 
 def _archive_response(path,delete_after=False):
@@ -75,6 +77,7 @@ class DiagnosticDownloads:
             item['path']=await asyncio.to_thread(_build_archive,snapshot,journals)
             item.update(state='ready',bytes=Path(item['path']).stat().st_size,finishedAt=time.time())
         except Exception as exc:
+            for asset,journal,capture in journals:journal.release_capture(capture)
             item.update(state='failed',detail='Archive preparation failed. Try again.',finishedAt=time.time())
             print('POLY_EXPORT_ERROR',repr(exc),flush=True)
     def response(self,engine,job=None):

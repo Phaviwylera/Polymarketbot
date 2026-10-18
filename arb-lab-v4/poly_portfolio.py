@@ -37,7 +37,7 @@ class PaperPortfolio:
             async with httpx.AsyncClient(timeout=5) as client:
                 response=await client.get('https://poly-edge-paper-engine.onrender.com/api/poly/demo/server',params={'all_assets':'true'})
                 response.raise_for_status();live=response.json()
-                if live.get('revision')=='15.0-executable-momentum':recovery=live
+                if str(live.get('revision','')).startswith(('14.','15.')) and live.get('assets') and float(live.get('serverTime') or 0)>=float(recovery.get('serverTime') or 0):recovery=live
         except Exception:pass
         self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))

@@ -35,6 +35,14 @@ def signal(context,history,allow_weak_impulse=False):
     if prior_bid is None or bid-float(prior_bid)<tick-1e-9:return reject('best bid has not risen a full tick')
     edge=fair-ask-fee(ask)-fee(fair)-.01
     if not math.isfinite(edge) or edge<.02:return reject('model advantage below fees plus 2-cent buffer')
+    # A net stop includes crossing the spread and both taker fees. Reserve at
+    # least one tick and 25% of the stop for adverse movement after entry.
+    stop=float(c.get('stopLossUsd',.30))
+    friction=shares*(ask-bid+fee(ask)+fee(bid))
+    headroom=max(shares*tick,stop*.25)
+    if not math.isfinite(stop) or stop<=0 or friction+headroom>stop+1e-9:
+        return reject('fees and spread leave insufficient room inside configured loss stop')
     return {'side':side.upper(),'ask':ask,'bid':bid,'shares':shares,'fair':fair,'roundTripNet':edge,
-            'modelEdgeEstimate':edge,'entryTotalCost':total,'notionalCap':cap,'bookMove':move,
+            'modelEdgeEstimate':edge,'entryFrictionUsd':friction,'adverseMoveBudgetUsd':stop-friction,
+            'stopLossUsd':stop,'takeProfitUsd':max(.18,stop),'maxHoldSec':30,'entryTotalCost':total,'notionalCap':cap,'bookMove':move,
             'leadBps':m['leadBps'],'impulse5Bps':m['impulse5Bps'],'marketSlug':market['slug']},'OPPORTUNITY_MOMENTUM'

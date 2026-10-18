@@ -7,7 +7,7 @@ from poly_momentum import signal
 class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
-        self.e=mod.PolyServerDemo('ETH',80,state_file=Path(self.tmp.name)/'state.json',risk_profile={'momentumEnabled':True,'sessionLossLimit':4})
+        self.e=mod.PolyServerDemo('ETH',80,state_file=Path(self.tmp.name)/'state.json',risk_profile={'momentumEnabled':True,'sessionLossLimit':4,'stopLoss':.30})
         e=self.e;e._save=lambda:None;e._new_session();self.addCleanup(e.close);now=time.time()
         e.market={'slug':'eth-test','upToken':'u','downToken':'d','startTs':now-60,'endTs':now+240,'acceptingOrders':True,'minOrderSize':5,'minTickSize':.01}
         e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.open_trusted=True;e.spot_ts=e.twap_ts=now
@@ -30,9 +30,9 @@ class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
             self.e.paper['cash']+=pos['entryTotalCost'];self.e.paper['position']=None
     async def test_profit_exit_uses_actual_bid_and_both_fees(self):
         self.e._save=lambda:self.e.snapshot()
-        await self.e._momentum_enter(self.candidate());pos=dict(self.e.paper['position']);self.e.bbo['up'].update(bid=.48,bidSize=100)
+        await self.e._momentum_enter(self.candidate());pos=dict(self.e.paper['position']);self.e.bbo['up'].update(bid=.50,bidSize=100)
         await self.e._momentum_manage(self.m)
-        self.assertIsNone(self.e.paper['position']);expected=5*(.48-mod._fee_per_share(.48))-pos['entryTotalCost']
+        self.assertIsNone(self.e.paper['position']);expected=5*(.50-mod._fee_per_share(.50))-pos['entryTotalCost']
         self.assertAlmostEqual(self.e.paper['realizedPnl'],expected);self.assertAlmostEqual(self.e.paper['cash'],80+expected)
         self.assertEqual(self.e.paper['trades'],1);self.assertEqual(self.e.paper['momentumCloses'],1)
         self.assertLess(self.e.paper['peakEquity'],81)
@@ -66,7 +66,7 @@ class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.e.paper['position']);self.assertLess(self.e.paper['realizedPnl'],0)
         self.assertGreater(self.e.paper['cooldownUntil'],time.time());self.assertEqual(self.e.paper['losses'],1)
     async def test_one_entry_per_round_no_martingale(self):
-        c=self.candidate();await self.e._momentum_enter(c);self.e.bbo['up'].update(bid=.48,bidSize=100)
+        c=self.candidate();await self.e._momentum_enter(c);self.e.bbo['up'].update(bid=.50,bidSize=100)
         await self.e._momentum_manage(self.m);self.assertFalse(await self.e._momentum_enter(c))
         self.assertEqual(self.e.paper['momentumFills'],1)
     async def test_old_model_and_deep_passive_quote_are_not_required(self):
@@ -98,5 +98,58 @@ class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
         async def mutate(*args):self.e.market_version+=1
         with patch.object(mod.asyncio,'sleep',side_effect=mutate):self.assertFalse(await self.e._try_sell('test'))
         self.assertEqual(old['cash'],cash);self.assertIsNotNone(old['position'])
+
+    def test_configured_stop_rejects_friction_and_preserves_risk_headroom(self):
+        self.e.inventory_stop=.15
+        c,reason=self.e._momentum_signal(self.m)
+        self.assertIsNone(c);self.assertIn('fees and spread',reason)
+        self.e.inventory_stop=.40;c=self.candidate()
+        self.assertEqual(c['stopLossUsd'],.40);self.assertGreaterEqual(c['takeProfitUsd'],c['stopLossUsd'])
+        self.assertGreaterEqual(c['adverseMoveBudgetUsd'],.10)
+    async def test_stale_exit_is_logged_and_latched_until_executable(self):
+        await self.e._momentum_enter(self.candidate());self.e.bbo['up'].update(bid=.30,bidSize=100)
+        async def stale(*args):self.e.book_observed['up']=time.time()-10
+        with patch.object(mod.asyncio,'sleep',side_effect=stale):await self.e._momentum_manage(self.m)
+        self.assertIsNotNone(self.e.paper['position'])
+        self.assertIn('loss stop',self.e.paper['position']['exitRequestedReason'])
+        self.assertTrue(any(x['action']=='NOFILL' and 'book older' in x['detail'] for x in self.e.paper['events']))
+        self.e.book_observed['up']=time.time();self.e.bbo['up']['bid']=.40
+        await self.e._momentum_manage(None)
+        self.assertIsNone(self.e.paper['position'])
+    async def test_delayed_entry_deadline_never_debits_cash(self):
+        c=self.candidate();now=time.time()
+        async def slow(*args):clock.return_value=now+1.2
+        with patch.object(mod.time,'time',return_value=now) as clock,patch.object(mod.asyncio,'sleep',side_effect=slow):
+            self.assertFalse(await self.e._momentum_enter(c))
+        self.assertEqual(self.e.paper['cash'],80);self.assertIsNone(self.e.paper['position'])
+        self.assertIn('deadline exceeded',self.e.paper['events'][0]['detail'])
+    def test_market_discovery_recovers_only_timestamped_opening_twap(self):
+        e=self.e;e.open_ref=None;e.open_trusted=False;start=e.market['startTs']
+        e.twap_hist.extend([{'t':start-1,'p':3000},{'t':start+5,'p':3001},{'t':start+60,'p':3010}])
+        e._recover_open_reference();self.assertEqual(e.open_ref,3000);self.assertTrue(e.open_trusted)
+        e.open_ref=None;e.open_trusted=False;e.twap_hist.clear();e.twap_hist.append({'t':start+60,'p':3010})
+        e._recover_open_reference();self.assertIsNone(e.open_ref);self.assertFalse(e.open_trusted)
+
+    def test_stale_backlog_requests_resync_and_aggregates_warnings(self):
+        e=self.e
+        for i in range(60):
+            e._handle_clob({'event_type':'book','asset_id':'u','timestamp':(time.time()-20)*1000,'bids':[],'asks':[]})
+        self.assertTrue(e._clob_resync_needed);self.assertEqual(e.stale_book_messages,60)
+        self.assertEqual(e.bbo['up']['ask'],.40)
+        import io,json
+        out=io.BytesIO();e.diagnostics.export(out)
+        warnings=[json.loads(x) for x in out.getvalue().splitlines() if json.loads(x)['kind']=='STALE_BOOK_MESSAGE']
+        self.assertEqual(len(warnings),1)
+
+    async def test_dedicated_risk_worker_exits_without_strategy_loop(self):
+        await self.e._momentum_enter(self.candidate())
+        self.e.paper['position']['entryAt']-=31
+        task=asyncio.create_task(self.e.position_worker())
+        try:
+            await asyncio.sleep(.15)
+            self.assertIsNone(self.e.paper['position'])
+            self.assertEqual(self.e.paper['trades'],1)
+        finally:
+            task.cancel();await asyncio.gather(task,return_exceptions=True)
 
 if __name__=='__main__':unittest.main()

@@ -17,13 +17,15 @@ class ReleaseRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 async def restore(e=e):self.assertTrue(e._restore_saved())
                 e.start=restore
             local=p.engines['BTC'];local._new_session();local.paper['cash']=59;local._last_saved_at=0;local._save()
-            response=httpx.Response(200,json={**recovery,'revision':'15.0-executable-momentum'},request=httpx.Request('GET','https://test'))
+            response=httpx.Response(200,json={**recovery,'revision':'15.1-confirmed-trend'},request=httpx.Request('GET','https://test'))
             client=AsyncMock();client.get.return_value=response;context=AsyncMock();context.__aenter__.return_value=client
             with patch('poly_portfolio.httpx.AsyncClient',return_value=context):await p.start()
             self.assertEqual(p.engines['BTC'].paper['cash'],59)
-            self.assertAlmostEqual(p.engines['SOL'].paper['realizedPnl'],-.3567)
-            self.assertAlmostEqual(p.engines['XRP'].paper['realizedPnl'],-.4619)
-            self.assertAlmostEqual(p.snapshot()['portfolio']['totalPnl'],-1.8186)
+            self.assertAlmostEqual(p.engines['SOL'].paper['realizedPnl'],recovery['assets']['SOL']['paper']['realizedPnl'])
+            self.assertAlmostEqual(p.engines['XRP'].paper['realizedPnl'],recovery['assets']['XRP']['paper']['realizedPnl'])
+            expected=-1+sum(recovery['assets'][a]['paper']['totalPnl'] for a in ('ETH','SOL','XRP'))
+            self.assertAlmostEqual(p.snapshot()['portfolio']['totalPnl'],expected)
+            self.assertEqual(p.engines['ETH'].paper['status'],recovery['assets']['ETH']['paper']['status'])
             for e in p.engines.values():e.close()
     async def test_restore_keeps_original_reference_age(self):
         with tempfile.TemporaryDirectory() as tmp:

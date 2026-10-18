@@ -70,7 +70,7 @@ class QuoteLifecycleTests(unittest.TestCase):
         placed=next(x for x in rows if x['kind']=='QUOTE_PLACE');filled=next(x for x in rows if x['kind']=='QUOTE_FILL_EVIDENCE')
         self.assertEqual(placed['quote']['id'],filled['quote']['id']);self.assertEqual(filled['triggerTrade']['aggressor'],'SELL')
     def test_retention_explicitly_reports_missing_earlier_events(self):
-        log=self.e.diagnostics;log.MAX_ROWS=10
+        log=self.e.diagnostics;log.MAX_CRITICAL_ROWS=10
         for i in range(1000):log.append('TEST',n=i)
         out=io.BytesIO();meta=log.export(out)
         self.assertTrue(meta['earlierRowsPruned']);self.assertFalse(meta['complete']);self.assertLessEqual(meta['retained'],30)
