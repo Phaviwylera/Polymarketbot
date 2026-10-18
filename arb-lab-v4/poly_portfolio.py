@@ -1,6 +1,8 @@
 """Parallel, isolated crypto paper lanes. No signing keys or real order submission."""
 from __future__ import annotations
-import asyncio,time
+import asyncio,time,json
+from pathlib import Path
+import httpx
 from poly_server_demo import PolyServerDemo,ENGINE_REVISION
 
 ASSETS=('BTC','ETH','SOL','XRP')
@@ -26,6 +28,23 @@ class PaperPortfolio:
     async def start(self):
         if self.started:return
         self.started=True
+        # Preserve the paper ledger across this release on ephemeral hosting.
+        # Existing local state always wins; a prior live instance is preferred to the checkpoint.
+        recovery={}
+        try:recovery=json.loads(Path(__file__).with_name('paper_recovery.json').read_text())
+        except Exception:pass
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response=await client.get('https://poly-edge-paper-engine.onrender.com/api/poly/demo/server',params={'all_assets':'true'})
+                response.raise_for_status();live=response.json()
+                if live.get('revision')=='15.0-executable-momentum':recovery=live
+        except Exception:pass
+        self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
+        self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
+        for asset,e in self.engines.items():
+            saved=(recovery.get('assets') or {}).get(asset);p=(saved or {}).get('paper') or {}
+            if not e.state_file.exists() and p.get('version')==14 and p.get('startingBalance')==e.balance and float(p.get('endsAt') or 0)>time.time():
+                e.state_file.write_text(json.dumps(saved))
         await asyncio.gather(*(e.start() for e in self.engines.values()))
     async def reset(self):
         # Do not erase unresolved or pending simulated exposure.

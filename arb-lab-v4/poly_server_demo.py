@@ -37,7 +37,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="15.0-executable-momentum"
+ENGINE_REVISION="15.1-confirmed-trend"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -214,8 +214,8 @@ class PolyServerDemo:
                 self.spot=data.get('spot')
                 self.twap=data.get('twap')
                 sa=data.get('spotAgeSec');ta=data.get('twapAgeSec')
-                if self.spot is not None:self.spot_ts=now-max(0,float(sa or 0))
-                if self.twap is not None:self.twap_ts=now-max(0,float(ta or 0))
+                if self.spot is not None:self.spot_ts=float(data.get('serverTime') or now)-max(0,float(sa or 0))
+                if self.twap is not None:self.twap_ts=float(data.get('serverTime') or now)-max(0,float(ta or 0))
             print(f"POLY_DEMO_RESTORED session={self.paper.get('sessionId')} market={self.market.get('slug') if self.market else None} openTrusted={self.open_trusted}",flush=True)
             return True
         except Exception as exc:
@@ -1578,7 +1578,8 @@ class PolyServerDemo:
         if not self.book_history or now-self.book_history[-1]['t']>=.2:
             row={'t':now,'marketSlug':self.market['slug']}
             for side in ('up','down'):
-                b=self.bbo[side];row[side]=(b['bid']+b['ask'])/2 if b['bid'] is not None and b['ask'] is not None and now-self.book_observed.get(side,0)<=3 else None
+                b=self.bbo[side];row[side+'Bid']=b['bid']
+                row[side]=(b['bid']+b['ask'])/2 if b['bid'] is not None and b['ask'] is not None and now-self.book_observed.get(side,0)<=3 else None
             self.book_history.append(row)
         await self._momentum_manage(m)
         p=self.paper;self._update_risk()

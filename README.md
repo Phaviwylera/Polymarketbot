@@ -1,3 +1,9 @@
+# POLY / EDGE V15.1 — confirmed-trend paper execution
+
+V15 placed and filled two live paper entries (SOL and XRP) and closed them at a combined -$0.81860. V15.1 rejects those cheap countertrend rebounds: estimated round direction must agree (fair probability at least 0.55), and the actual best bid must have advanced a full tick. An ask-only midpoint change cannot confirm a buy. These changes do not establish profitability. The prior closed paper ledger is checkpointed and the previous live instance is queried during this release startup so known losses are carried rather than presented as recovered. Existing local state takes precedence; hosting storage remains ephemeral.
+
+59 tests pass. The tightened in-sample execution replay is in `research/v151_replay_summary.json`; it is not out-of-sample validation. The V15 replay and its limitations remain below for comparison.
+
 # POLY / EDGE V15 — executable multi-asset paper workstation
 
 V15 restores a funded marketable momentum execution path for BTC, ETH, SOL and XRP. It does not enable the older disabled lag trader. The previous staged-first-leg strategy could quote only 3–6 ticks below the book and recorded no fills. New passive first-leg quotes are suppressed while momentum is enabled; existing residual inventory is still managed, and genuinely executable complete sets retain priority.

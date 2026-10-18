@@ -80,6 +80,16 @@ class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(e.bbo['up']['askSize'],2);self.assertIsNone(e._momentum_signal(self.m)[0])
         e._handle_clob({'event_type':'price_change','timestamp':time.time()*1000,'price_changes':[{'asset_id':'u','side':'SELL','price':'.40','size':'0','best_bid':'.39','best_ask':'.41'}]})
         self.assertEqual(e.bbo['up']['ask'],.41);self.assertEqual(e.bbo['up']['askSize'],0)
+    def test_cheap_countertrend_rebound_is_rejected(self):
+        self.m.update(fairUp=.35,fairDown=.65)
+        self.e.bbo['up'].update(ask=.12,bid=.11)
+        self.e.book_history.clear();self.e.book_history.append({'t':time.time()-3,'marketSlug':'eth-test','up':.09,'down':.91})
+        candidate,reason=self.e._momentum_signal(self.m)
+        self.assertIsNone(candidate);self.assertEqual(reason,'estimated round direction does not confirm scalp direction')
+    def test_ask_only_midpoint_change_cannot_confirm_buy(self):
+        self.e.book_history.clear();self.e.book_history.append({'t':time.time()-3,'marketSlug':'eth-test','up':.385,'upBid':.39,'down':.615})
+        candidate,reason=self.e._momentum_signal(self.m)
+        self.assertIsNone(candidate);self.assertEqual(reason,'best bid has not risen a full tick')
     def test_delayed_book_cannot_override_fresh_depth(self):
         e=self.e;e._handle_clob({'event_type':'book','asset_id':'u','timestamp':(time.time()-60)*1000,'bids':[{'price':'.8','size':'100'}],'asks':[{'price':'.9','size':'100'}]})
         self.assertEqual(e.bbo['up']['ask'],.40)

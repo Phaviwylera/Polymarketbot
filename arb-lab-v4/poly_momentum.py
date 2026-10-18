@@ -30,6 +30,9 @@ def signal(context,history,allow_weak_impulse=False):
     move=(ask+bid)/2-float(prior[-1][side])
     if move<tick/2-1e-9:return reject('token book does not confirm oracle momentum')
     fair=float(m['fairUp'] if side=='up' else m['fairDown'])
+    if fair<.55:return reject('estimated round direction does not confirm scalp direction')
+    prior_bid=prior[-1].get(side+'Bid',float(prior[-1][side])-tick/2)
+    if prior_bid is None or bid-float(prior_bid)<tick-1e-9:return reject('best bid has not risen a full tick')
     edge=fair-ask-fee(ask)-fee(fair)-.01
     if not math.isfinite(edge) or edge<.02:return reject('model advantage below fees plus 2-cent buffer')
     return {'side':side.upper(),'ask':ask,'bid':bid,'shares':shares,'fair':fair,'roundTripNet':edge,
