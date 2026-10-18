@@ -52,5 +52,5 @@ async def health():
     }
 
 @app.get("/api/poly/demo/server")
-async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC'):
-    return engine.snapshot(asset)
+async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=False):
+    return engine.snapshot(asset,include_assets=all_assets)

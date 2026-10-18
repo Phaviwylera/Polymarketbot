@@ -35,7 +35,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="13.1-wallet-pairing-paper"
+ENGINE_REVISION="14.0-all-asset-board"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -81,7 +81,7 @@ def _floor_tick(price,tick):
     return round(math.floor((float(price)+1e-12)/tick)*tick,6)
 
 class PolyServerDemo:
-    def __init__(self,asset='BTC',balance=DEMO_BALANCE,state_file=None,portfolio_guard=None):
+    def __init__(self,asset='BTC',balance=DEMO_BALANCE,state_file=None,portfolio_guard=None,risk_profile=None):
         if asset not in {'BTC','ETH','SOL','XRP'}:raise ValueError('unsupported crypto asset')
         self.asset=asset;self.symbol=asset.lower()+'/usd';self.balance=float(balance)
         if self.balance<=0:raise ValueError('positive paper allocation required')
@@ -89,6 +89,13 @@ class PolyServerDemo:
         self.session_loss_limit=min(SESSION_LOSS_LIMIT_USD,self.balance*.10) if balance!=DEMO_BALANCE else SESSION_LOSS_LIMIT_USD
         # Separate profiles; wallet averages are not executable expected returns.
         self.pair_target={'BTC':.980,'ETH':.970,'SOL':.970,'XRP':.970}[asset]
+        profile=risk_profile or {}
+        self.wallet_quotes=bool(profile.get('walletQuotes',False))
+        self.residual_cap=float(profile.get('residualCap',INVENTORY_MAX_RESIDUAL_USD))
+        self.first_price_cap=float(profile.get('firstPriceCap',INVENTORY_MAX_FIRST_PRICE))
+        self.inventory_stop=float(profile.get('stopLoss',INVENTORY_STOP_LOSS_USD))
+        self.session_loss_limit=float(profile.get('sessionLossLimit',self.session_loss_limit))
+        self.entry_audit='warming'
         self.lag_trading_enabled=False
         self.portfolio_guard=portfolio_guard
         self.market=None
@@ -146,7 +153,7 @@ class PolyServerDemo:
             data=json.loads(self.state_file.read_text(encoding='utf-8'))
             p=data.get('paper')
             now=time.time()
-            if not isinstance(p,dict) or int(p.get('version') or 0)!=13 or data.get('asset')!=self.asset or float(p.get('startingBalance') or 0)!=self.balance or float(p.get('endsAt') or 0)<=now:
+            if not isinstance(p,dict) or int(p.get('version') or 0)!=14 or data.get('asset')!=self.asset or float(p.get('startingBalance') or 0)!=self.balance or float(p.get('endsAt') or 0)<=now:
                 return False
             # Strip calculated presentation fields before resuming mutable state.
             p=dict(p)
@@ -181,7 +188,7 @@ class PolyServerDemo:
     def _new_session(self):
         now=time.time()
         self.paper={
-            'version':13,'revision':ENGINE_REVISION,'sessionId':'srv_'+hex(int(now*1_000_000))[2:],
+            'version':14,'revision':ENGINE_REVISION,'sessionId':'srv_'+hex(int(now*1_000_000))[2:],
             'startedAt':now,'endsAt':now+10800,'startingBalance':self.balance,'cash':self.balance,
             'realizedPnl':0.0,'fees':0.0,'trades':0,'wins':0,'losses':0,
             'blocked':0,'nofills':0,'peakEquity':self.balance,'maxDrawdown':0.0,
@@ -534,7 +541,7 @@ class PolyServerDemo:
             inv=p.get('inventory') or {}
             if inv.get('quote'):return 'inventory quote awaiting conservative queue fill; directional entries disabled'
             if self._inventory_has_residual():return 'managing bounded residual; directional entries disabled'
-            return 'waiting for funded fee-aware pair within first-leg risk cap; directional entries disabled'
+            return self.entry_audit+'; directional entries disabled'
 
         slug=self.market.get('slug') if self.market else None
         if slug and slug in (p.get('tradedMarkets') or []):
@@ -737,16 +744,22 @@ class PolyServerDemo:
         now=time.time();elapsed=now-float(self.market.get('startTs') or now);remaining=float(self.market.get('endTs') or 0)-now
         if elapsed<INVENTORY_OPEN_AFTER_SEC or remaining<=INVENTORY_STOP_NEW_REMAINING_SEC:return None
         tick=max(.001,float(self.market.get('minTickSize') or .01));shares=max(5.0,float(self.market.get('minOrderSize') or 0))
-        choices=[]
+        choices=[];self.entry_audit='no funded fee-aware quote within residual cap'
         for side in ('up','down'):
             opp='down' if side=='up' else 'up'
             bid=self.bbo[side].get('bid');ask=self.bbo[side].get('ask');oppask=self.bbo[opp].get('ask')
             if None in (bid,ask,oppask):continue
             bid=float(bid);ask=float(ask);oppask=float(oppask)
-            if bid>INVENTORY_MAX_FIRST_PRICE+1e-9:continue
-            maker_px=min(INVENTORY_MAX_FIRST_PRICE,_floor_tick(max(bid,min(ask-tick,INVENTORY_MAX_FIRST_PRICE)),tick))
+            if self.wallet_quotes:
+                # Work a passive price that already funds the opposite taker leg and fees.
+                ceiling=min(self.first_price_cap,self.residual_cap/shares,self.pair_target-oppask-_fee_per_share(oppask))
+                maker_px=_floor_tick(min(bid,ask-tick,ceiling),tick)
+                if bid-maker_px>6*tick+1e-9:continue
+            else:
+                if bid>self.first_price_cap+1e-9:continue
+                maker_px=min(self.first_price_cap,_floor_tick(max(bid,min(ask-tick,self.first_price_cap)),tick))
             if maker_px<.03 or maker_px>=ask-1e-9:continue
-            if shares*maker_px>min(INVENTORY_MAX_RESIDUAL_USD,float(self.paper.get('cash') or 0))+1e-9:continue
+            if shares*maker_px>min(self.residual_cap,float(self.paper.get('cash') or 0))+1e-9:continue
             hedge_cost=shares*(oppask+_fee_per_share(oppask))
             if float(self.bbo[opp].get('askSize') or 0)<shares:continue
             if shares*maker_px+hedge_cost>float(self.paper['cash']):continue
@@ -756,10 +769,11 @@ class PolyServerDemo:
             if projected>self.pair_target+INVENTORY_MAX_INITIAL_GAP:continue
             direction=1 if side=='up' else -1
             lead=float(m.get('leadBps') or 0)*direction;imp=float(m.get('impulse5Bps') or 0)*direction
-            if lead<INVENTORY_MIN_REVERSAL_LEAD_BPS or imp<INVENTORY_MIN_REVERSAL_IMPULSE_BPS:continue
+            if not self.wallet_quotes and (lead<INVENTORY_MIN_REVERSAL_LEAD_BPS or imp<INVENTORY_MIN_REVERSAL_IMPULSE_BPS):continue
             choices.append((maker_px,projected,lead,imp,side,shares,bid,ask))
         if not choices:return None
         maker_px,projected,lead,imp,side,shares,bid,ask=min(choices,key=lambda x:(x[1],x[0]))
+        self.entry_audit=f'funded passive {side} quote; projected fee-adjusted set {projected:.4f}'
         return {'side':side,'price':maker_px,'shares':shares,'projected':projected,'lead':lead,'impulse':imp,'bid':bid,'ask':ask}
 
     def _inventory_place_quote(self,inv,side,price,shares,kind):
@@ -793,10 +807,10 @@ class PolyServerDemo:
         if q.get('kind')=='FIRST':
             candidate=self._inventory_first_leg_candidate(inv,m)
             opp='down' if side=='up' else 'up';ask=self.bbo[opp].get('ask')
-            if not candidate or candidate['side']!=side or ask is None or float(q['price'])+float(ask)+_fee_per_share(float(ask))>self.pair_target or float(q['shares'])*float(q['price'])>INVENTORY_MAX_RESIDUAL_USD:
+            if not candidate or candidate['side']!=side or ask is None or float(q['price'])+float(ask)+_fee_per_share(float(ask))>self.pair_target or float(q['shares'])*float(q['price'])>self.residual_cap:
                 self._inventory_cancel_quote(inv,'entry no longer hedgeable within risk cap');return
             direction=1 if side=='up' else -1
-            if float(m.get('leadBps') or 0)*direction<-0.05:
+            if not self.wallet_quotes and float(m.get('leadBps') or 0)*direction<-0.05:
                 self._inventory_cancel_quote(inv,'cheap-leg reversal signal failed');return
         last=int(q.get('lastTradeSeq') or 0)
         newprints=[z for z in self.trade_prints if int(z.get('seq') or 0)>last]
@@ -805,10 +819,11 @@ class PolyServerDemo:
             if z.get('side')!=side:continue
             zp=float(z.get('price') or 99);qp=float(q['price'])
             if zp<qp-tick/2:
-                q['seen']=max(float(q.get('seen') or 0),float(q.get('queueNeed') or 0))
+                q['throughSeen']=float(q.get('throughSeen') or 0)+max(0.0,float(z.get('size') or 0))
             elif abs(zp-qp)<=tick/2:
                 q['seen']=float(q.get('seen') or 0)+max(0.0,float(z.get('size') or 0))
-        if float(q.get('seen') or 0)<float(q.get('queueNeed') or 1e18):return
+        if (float(q.get('seen') or 0)<float(q.get('queueNeed') or 1e18)
+                and float(q.get('throughSeen') or 0)<float(q['shares'])):return
         cost=float(q['shares'])*float(q['price'])
         if cost>float(self.paper.get('cash') or 0)+1e-9:
             self._inventory_cancel_quote(inv,'cash unavailable at simulated fill');return
@@ -892,7 +907,7 @@ class PolyServerDemo:
             age=time.time()-min(float(lot['t']) for lot in inv[res+'Lots'])
             bid=self.bbo[res].get('bid')
             pnl=(float(bid)-_fee_per_share(float(bid)))*totals[res]['shares']-totals[res]['cost'] if bid is not None else 0
-            force=(age>=INVENTORY_MAX_HOLD_SEC or pnl<=-INVENTORY_STOP_LOSS_USD
+            force=(age>=INVENTORY_MAX_HOLD_SEC or pnl<=-self.inventory_stop
                    or self.paper.get('status')!='running' or time.time()>=self.paper['endsAt']
                    or float(self.market['endTs'])-time.time()<=15)
             if await self._inventory_recovery_exit(inv,res,force=force):return
@@ -1560,7 +1575,7 @@ class PolyServerDemo:
                     'alignmentSide':self.alignment_side,'alignmentAgeSec':max(0,time.time()-self.alignment_since) if self.alignment_since else 0,
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
-                    'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':INVENTORY_STOP_LOSS_USD,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':INVENTORY_MAX_RESIDUAL_USD,'inventoryMaxFirstPrice':INVENTORY_MAX_FIRST_PRICE},
+                    'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
             'history':list(self.visual_history)[-240:],
             'reasonCounts':dict(self.reason_counts),
             'paper':{**p,'revision':ENGINE_REVISION,'equity':eq,'maxDrawdownPct':100*float(p.get('maxDrawdown') or 0),

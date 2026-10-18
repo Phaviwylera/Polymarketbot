@@ -1,76 +1,53 @@
-# POLY / EDGE — Polymarket bot project
+# POLY / EDGE V14 — all-asset paper workstation
 
-Full source snapshot of the dashboard, V13 multi-asset paper engine, terminal-themed network orb and wallet research tools.
+BTC, ETH, SOL and XRP 5-minute crypto markets run concurrently. All four P&L cards, price/TWAP graphs and paper-P&L graphs share one dashboard, with a common all-asset network orb and execution tape. There are no asset-switch tabs.
 
-## Run the dashboard locally
+## Paper allocation and experiment settings
 
-Requires Python 3.10 or newer. From the repository root:
+| Asset | Allocation | First-leg residual cost cap | Marked residual stop | Session loss gate | Fee-adjusted pair target |
+|---|---:|---:|---:|---:|---:|
+| BTC | $60 | $1.50 | $0.30 | $3.00 | 0.980 |
+| ETH | $80 | $2.00 | $0.40 | $4.00 | 0.970 |
+| SOL | $30 | $0.75 | $0.15 | $1.50 | 0.970 |
+| XRP | $30 | $0.75 | $0.15 | $1.50 | 0.970 |
+
+Total simulated capital: $200. Portfolio realized/marked loss gate: $6. These experimental allocations favor the BTC/ETH data coverage; they are not optimized investment weights. The database research covered BTC/ETH only, and its net profitability remains unverified. SOL/XRP are paper extensions. Risk gates do not guarantee maximum losses when liquidity or prices move abruptly.
+
+V14 quotes passively at the minimum of the book bid, passive ask limit, exposure budget and affordable fee-adjusted complement price, at most six ticks behind the best bid. The complement must have sufficient current size and both legs must fit available cash. Quote processing revalidates the hedge budget. A trade-through requires enough accumulated observed volume, or the simulated ahead queue must be consumed, before an order fills. These are conservative paper assumptions, not verified real queue position or actual maker access. Directional lag entries stay disabled; the model remains a diagnostic input. The residual timeout remains 15 seconds; outstanding orphan quotes are canceled before exits and merges.
+
+The uploaded V13.1 diagnostic had 393 BTC snapshots with zero quotes/fills. With V14 settings, 129 snapshots produced funded quote candidates, maximum projected all-in pair cost 0.97988. This is quote eligibility only, not an execution backtest or profit result. In the initial V13 trial, legacy directional BTC/SOL trades lost about $1.03; that path was disabled in V13.1. New paper allocations start a new experiment and do not recover old losses.
+
+## Run
+
+Python 3.10+:
 
 ```bash
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-# source .venv/bin/activate
 python -m pip install -r arb-lab-v4/requirements.txt
 cd arb-lab-v4
 python -m uvicorn server:app --host 127.0.0.1 --port 8765
 ```
 
-Open http://127.0.0.1:8765/poly for POLY / EDGE. The root `/` retains the earlier ARB/LAB dashboard.
+Open `/poly`. The dashboard uses the deployed dedicated engine URL in `poly.js`; set `BASE` there to an empty string for a combined local server. `POLY_ENGINE_ROLE=frontend` skips the local engine when deploying the dashboard separately.
 
-The dashboard currently polls the deployed dedicated engine at `https://poly-edge-paper-engine.onrender.com` (see `POLY_ENGINE_BASE` at the top of `arb-lab-v4/poly.js`). To use the combined local engine, set that constant to an empty string and reload. It then polls the same-origin `/api/poly/demo/server` endpoint. The server's existing role/environment settings are retained.
-
-## Included source
-
-- `arb-lab-v4/poly.html`, `poly.js`, `poly.css`, `poly-demo.js`, `poly-log.js`: trading dashboard and downloadable diagnostics.
-- `arb-lab-v4/poly-orb.js`: amber/cyan spherical network with incoming telemetry signal animation, sparse orbiting particles, 40-second rotation loop, reduced-motion support, pause/play and 3840×2160 PNG export.
-- `arb-lab-v4/poly_server_demo.py`: asset-isolated V13 paper-trading engine and inventory risk controls.
-- `arb-lab-v4/poly_portfolio.py`: BTC/ETH/SOL/XRP 5-minute parallel lanes, $5 each ($20 total), aggregate $1.50 marked/realized loss gate.
-- `arb-lab-v4/test_multi_asset.py`: 9 asset isolation, capital, resolution and risk tests.
-- `arb-lab-v4/poly_engine_service.py`: separate FastAPI engine service.
-- `arb-lab-v4/test_inventory_risk.py`: 14 regression tests for risk and inventory order handling.
-- `arb-lab-v4/wallet_research_service.py` and `wallet_strategy_research.py`: current hosted research service source.
-- `tools/wallet-downloader/`: resumable Windows public-wallet downloader, defaulting to `D:\Phavi\PolyWalletResearch`.
-- `previews/Network_Orb_Preview.html`: self-contained offline orb preview. Open directly in a browser.
-- `arb-lab-v4/index.html`, `app.js`, `market.js`, `style.css`: retained ARB/LAB dashboard.
-- Root `server.js`, `package.json`, `package-lock.json`: retained legacy Node service; `npm start` runs that legacy service, not the Python dashboard.
-
-## Run the dedicated services
-
-From `arb-lab-v4`, with the Python dependencies installed:
+Dedicated engine:
 
 ```bash
+cd arb-lab-v4
 python -m uvicorn poly_engine_service:app --host 0.0.0.0 --port 8766
-python -m uvicorn wallet_research_service:app --host 0.0.0.0 --port 8767
 ```
 
-Run these commands in separate terminals when needed. The research service starts its collection task on startup. Its current implementation uses a temporary database and starts over on process startup; use `tools/wallet-downloader` for a resumable local archive. Research coverage and PnL reconciliation remain incomplete until verified reports are generated.
+`GET /api/poly/demo/server?all_assets=true` returns a coherent all-asset payload, portfolio totals and individual market, book, risk, paper and history snapshots. The default single-asset endpoint remains compatible. The new export log includes every asset and the portfolio, plus sampled recent history. Feed status reflects observed freshness; the orb is illustrative.
 
-The dedicated service CORS origins and self-health URL still refer to the existing Render deployment. Adjust those explicitly when setting up different hosts.
-
-## Validation
+## Verification
 
 ```bash
 python -m unittest discover -s arb-lab-v4 -p "test_*.py" -v
-node --check arb-lab-v4/poly-orb.js
 node --check arb-lab-v4/poly.js
+node --check arb-lab-v4/poly-orb.js
 ```
 
-The orb passed geometry, loop-continuity and finite-coordinate checks at mobile, desktop and 4K dimensions. Browser visual QA was unavailable in the authoring environment.
+25 risk/inventory/multi-asset tests. Expired positions require an authoritative closed/resolved result; the latest tick is not treated as settlement. Separate asset state files use `/tmp/poly_v14_<asset>_paper.json`, which can disappear on hosting restart. No credentials or signing keys are needed for this paper engine; no real orders are submitted.
 
-## Trading and deployment status
+## Retained project components
 
-POLY / EDGE executes simulated paper trades. Its controls do not establish profitability or eliminate unmatched-fill risk. The retained ARB/LAB browser wallet and swap interface is a separate experimental feature described in `arb-lab-v4/README.md`.
-
-This repository upload includes the orb upgrade but does not deploy it. Existing Render services still use their previously configured source repository. No wallet dataset, local database, private key or account credential is included in this source snapshot.
-
-## V13 paper scope
-
-All four crypto 5-minute scanners run concurrently. The dashboard shows total portfolio equity and selectable per-asset details. Each lane has a separate $5 simulated allocation and a $0.50 loss gate; all lanes stop opening exposure at a combined $1.50 realized or marked loss. The first-leg residual cap remains $0.50 and the timeout remains 15 seconds. Market minimum sizes and fee-adjusted hedge funding can block trades at this small balance. These limits are gates, not guaranteed maximum losses during illiquidity or gaps.
-
-Wallet-inspired staged inventory starts with a conservative queue-simulated first-side quote, then an affordable fee-aware complement or bounded recovery exit. Pair targets are 0.980 BTC and 0.970 ETH/SOL/XRP; these are experiment settings, not inferred wallet parameters. Executable complete-set paths remain active. Directional lag entries are disabled in V13.1 after the first V13 paper trial lost about $1.03 across BTC and SOL; signal diagnostics remain visible. The new deployment starts a fresh paper run, not a recovery of those losses. No signing keys, account credentials or real orders are used.
-
-The evidence covers BTC/ETH only. SOL/XRP are unvalidated paper extensions and require their own market and matching fresh reference feed. Unavailable assets stay gated. Expired residuals wait for an authoritative closed/resolved market result; unresolved inventory is preserved and prevents market rollover. A feed's latest tick is not treated as settlement.
-
-GET `/api/poly/demo/server?asset=ETH` returns ETH details plus all portfolio lane summaries. BTC is the default; unsupported assets are rejected. State files are per asset under `/tmp`; hosting restarts can discard ephemeral paper history. V13 starts a new experiment and does not recover earlier paper losses.
+The root `/` retains ARB/LAB. Root Node sources remain legacy; `npm start` does not start the Python dashboard. `wallet_research_service.py` and `wallet_strategy_research.py` retain the research service; its temporary database resets on startup. `tools/wallet-downloader/` provides the resumable Windows archive downloader. `previews/Network_Orb_Preview.html` is an older standalone orb preview, not the current live dashboard. Legacy single-asset scripts remain in the repository but V14 does not load them.

@@ -35,8 +35,9 @@
     // Telemetry cards -> signal spine -> spherical network. Pulses follow the actual curves.
     const snap=data.snap||{},model=snap.model||{},history=data.history||[],compact=w<560;
     const left=compact?7:12,cardW=w*(compact?.225:.18),spine=w*.365;
-    const top=24,bottom=h-48,step=(bottom-top)/6,cardH=step-5;
-    const cards=[
+    const top=24,bottom=h-48,step=(bottom-top)/(snap.assets?4:6),cardH=step-5;
+    const assetColors=['#ffc45a','#65d5ff','#bdabff','#67f3a2'];
+    const cards=snap.assets?['BTC','ETH','SOL','XRP'].map(asset=>{const a=snap.assets[asset]||{},fresh=a.spotAgeSec!=null&&a.twapAgeSec!=null&&Math.max(a.spotAgeSec,a.twapAgeSec)<5,live=fresh&&Object.values(a.feed||{}).every(v=>v==='live');return [asset+' / '+(live?'LIVE':'WAIT'),a.pair?.lockedEdgePerShare,asset,100];}):[
       [(snap.asset||'BTC')+' LEAD',model.leadBps,'lead',1],['IMPULSE',model.impulse5Bps,'imp',1],
       ['FAIR UP',model.fairUp,'fair',100],['UP ASK',snap.bbo?.up?.ask,'up',100],
       ['DOWN ASK',snap.bbo?.down?.ask,'down',100],['PAIR EDGE',snap.pair?.lockedEdgePerShare,'pair',100]
@@ -47,7 +48,7 @@
     ctx.strokeStyle='rgba(129,144,137,.045)';ctx.lineWidth=.6;
     for(let i=1;i<8;i++){ctx.beginPath();ctx.moveTo(0,i*h/8);ctx.lineTo(w,i*h/8);ctx.stroke();}
     cards.forEach(([label,value,key,mult],i)=>{
-      const y=top+i*step,sy=y+cardH/2,ty=cy+(i-2.5)*h*.045,start=left+cardW;
+      const y=top+i*step,sy=y+cardH/2,ty=cy+(i-(cards.length-1)/2)*h*.065,start=left+cardW;
       ctx.fillStyle='#0a1112';ctx.strokeStyle='rgba(129,144,137,.2)';ctx.lineWidth=.7;
       ctx.fillRect(left,y,cardW,cardH);ctx.strokeRect(left,y,cardW,cardH);
       ctx.fillStyle='#819089';ctx.font=(compact?'6':'7')+'px ui-monospace,monospace';ctx.fillText(label,left+5,y+11);
@@ -62,7 +63,7 @@
       const c1=start+(spine-start)*.45,c2=spine-(spine-start)*.25;
       ctx.strokeStyle='rgba(103,243,162,.28)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(start,sy);ctx.bezierCurveTo(c1,sy,c2,ty,spine,ty);ctx.stroke();
       const q=(phase*12+i/6)%1;
-      ctx.fillStyle='#67f3a2';ctx.beginPath();ctx.arc(curve(start,c1,c2,spine,q),curve(sy,sy,ty,ty,q),1.8,0,TAU);ctx.fill();
+      ctx.fillStyle=snap.assets?assetColors[i%4]:'#67f3a2';ctx.beginPath();ctx.arc(curve(start,c1,c2,spine,q),curve(sy,sy,ty,ty,q),1.8,0,TAU);ctx.fill();
     });
     ctx.strokeStyle='rgba(101,213,255,.5)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(spine,top);ctx.lineTo(spine,bottom);ctx.stroke();
     for(let i=0;i<13;i++){ctx.fillStyle=i%3?'#65d5ff':'#ffc45a';ctx.beginPath();ctx.arc(spine,top+i*(bottom-top)/12,i%3?1.2:2,0,TAU);ctx.fill();}
@@ -74,7 +75,7 @@
       ctx.strokeStyle='rgba(101,213,255,'+(.10+(i%3)*.025)+')';ctx.lineWidth=.65;
       ctx.beginPath();ctx.moveTo(spine,sy);ctx.bezierCurveTo(c1,sy,c2,ey,ex,ey);ctx.stroke();
       const q=(phase*(6+i%4*2)+i/24)%1;
-      ctx.fillStyle=i%4?'#65d5ff':'#67f3a2';ctx.globalAlpha=.8;
+      ctx.fillStyle=snap.assets?assetColors[Math.floor(i/6)]:i%4?'#65d5ff':'#67f3a2';ctx.globalAlpha=.8;
       ctx.beginPath();ctx.arc(curve(spine,c1,c2,ex,q),curve(sy,sy,ey,ey,q),1.3,0,TAU);ctx.fill();ctx.globalAlpha=1;
     }
     ctx.save();ctx.translate(cx,cy);

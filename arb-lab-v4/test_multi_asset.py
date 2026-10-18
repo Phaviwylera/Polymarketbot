@@ -2,16 +2,16 @@ import asyncio,json,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import AsyncMock,patch
 from poly_server_demo import PolyServerDemo
-from poly_portfolio import PaperPortfolio,ASSETS
+from poly_portfolio import PaperPortfolio,ASSETS,TOTAL_BALANCE,ALLOCATIONS
 
 class MultiAssetTests(unittest.IsolatedAsyncioTestCase):
     def lane(self,asset='ETH'):
         e=PolyServerDemo(asset,balance=5,state_file='/tmp/test-do-not-save.json');e._save=lambda:None;e._new_session();return e
-    def test_total_capital_is_twenty_not_twenty_per_asset(self):
+    def test_total_capital_and_weighted_allocations(self):
         p=PaperPortfolio()
         for e in p.engines.values():e._save=lambda:None;e._new_session()
-        s=p.snapshot('ETH');self.assertEqual(s['asset'],'ETH');self.assertEqual(s['paper']['cash'],5)
-        self.assertEqual(s['portfolio']['equity'],20);self.assertEqual(len(s['portfolio']['assets']),4)
+        s=p.snapshot('ETH');self.assertEqual(s['asset'],'ETH');self.assertEqual(s['paper']['cash'],ALLOCATIONS['ETH'])
+        self.assertEqual(s['portfolio']['equity'],TOTAL_BALANCE);self.assertEqual(len(s['portfolio']['assets']),4)
         self.assertEqual(len({e.state_file for e in p.engines.values()}),4)
         with self.assertRaises(ValueError):p.snapshot('DOGE')
     def test_asset_feed_cannot_contaminate_other_asset(self):
@@ -32,10 +32,10 @@ class MultiAssetTests(unittest.IsolatedAsyncioTestCase):
     def test_portfolio_loss_locks_all_lanes_and_stays_locked(self):
         p=PaperPortfolio()
         for e in p.engines.values():e._save=lambda:None;e._new_session()
-        p.engines['BTC'].paper['cash']=4;p.engines['ETH'].paper['cash']=4.4
+        p.engines['BTC'].paper['cash']=ALLOCATIONS['BTC']-4;p.engines['ETH'].paper['cash']=ALLOCATIONS['ETH']-3
         s=p.snapshot();self.assertTrue(s['portfolio']['riskLocked'])
         self.assertTrue(all(e.paper['status']=='risk_locked' for e in p.engines.values()))
-        p.engines['BTC'].paper['cash']=5
+        p.engines['BTC'].paper['cash']=ALLOCATIONS['BTC']
         self.assertFalse(p.entry_allowed())
     def test_asset_profiles_are_separate_and_fee_aware(self):
         b=self.lane('BTC');e=self.lane('ETH')
@@ -57,6 +57,29 @@ class MultiAssetTests(unittest.IsolatedAsyncioTestCase):
         for e in p.engines.values():e._save=lambda:None;e._new_session()
         e=p.engines['XRP'];e.market={'slug':'xrp-test'};inv=e._inventory_get();e._inventory_add_lot(inv,'down',5,.1,0,'MAKER')
         self.assertEqual((await p.reset())['status'],'blocked');self.assertTrue(e._inventory_has_residual())
+    def test_all_asset_snapshot_has_no_circular_or_selected_only_data(self):
+        p=PaperPortfolio()
+        for e in p.engines.values():e._save=lambda:None;e._new_session()
+        s=p.snapshot(include_assets=True);json.dumps(s)
+        self.assertEqual(set(s['assets']),set(ASSETS))
+        self.assertEqual(sum(a['paper']['startingBalance'] for a in s['assets'].values()),TOTAL_BALANCE)
+    def test_wallet_quote_is_funded_fee_aware_and_bounded(self):
+        p=PaperPortfolio();e=p.engines['ETH'];e._save=lambda:None;e._new_session();now=time.time()
+        e.market={'slug':'test','startTs':now-60,'endTs':now+240,'minOrderSize':5,'minTickSize':.01,'acceptingOrders':True}
+        e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.spot_ts=e.twap_ts=now;e.open_trusted=True
+        e.bbo={'up':{'bid':.33,'ask':.34,'bidSize':10,'askSize':100},'down':{'bid':.66,'ask':.67,'bidSize':10,'askSize':100}}
+        inv=e._inventory_get();candidate=e._inventory_first_leg_candidate(inv,{})
+        self.assertIsNotNone(candidate);self.assertLessEqual(candidate['projected'],e.pair_target)
+        self.assertLessEqual(candidate['shares']*candidate['price'],e.residual_cap)
+        e._inventory_place_quote(inv,candidate['side'],candidate['price'],candidate['shares'],'FIRST')
+        e.trade_prints.append({'seq':1,'side':candidate['side'],'price':candidate['price']-.01,'size':.1})
+        e._inventory_process_quote(inv,{})
+        self.assertEqual(e.paper['inventoryFills'],0)
+        e.trade_prints.append({'seq':2,'side':candidate['side'],'price':candidate['price']-.01,'size':4.9})
+        e._inventory_process_quote(inv,{})
+        self.assertEqual(e.paper['inventoryFills'],1)
+        self.assertGreaterEqual(e.paper['cash'],0)
+        e.bbo['down']['askSize']=0;self.assertIsNone(e._inventory_first_leg_candidate(inv,{}))
     async def test_directional_lag_entry_cannot_place_order(self):
         e=self.lane();await e._enter({'ask':.5},{},99)
         self.assertEqual(e.paper['cash'],5);self.assertEqual(e.paper['executionAttempts'],0)

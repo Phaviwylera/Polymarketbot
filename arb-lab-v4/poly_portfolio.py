@@ -4,14 +4,17 @@ import asyncio,time
 from poly_server_demo import PolyServerDemo,ENGINE_REVISION
 
 ASSETS=('BTC','ETH','SOL','XRP')
-TOTAL_BALANCE=20.0
-PORTFOLIO_LOSS_LIMIT=1.50
+ALLOCATIONS={'BTC':60.0,'ETH':80.0,'SOL':30.0,'XRP':30.0}
+TOTAL_BALANCE=sum(ALLOCATIONS.values())
+PORTFOLIO_LOSS_LIMIT=6.0
 
 class PaperPortfolio:
     def __init__(self):
         self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False
-        self.engines={asset:PolyServerDemo(asset=asset,balance=TOTAL_BALANCE/len(ASSETS),
-            state_file=f'/tmp/poly_v13_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed) for asset in ASSETS}
+        self.engines={asset:PolyServerDemo(asset=asset,balance=ALLOCATIONS[asset],
+            state_file=f'/tmp/poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
+            risk_profile={'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
+                'stopLoss':min(.40,ALLOCATIONS[asset]*.005),'sessionLossLimit':ALLOCATIONS[asset]*.05}) for asset in ASSETS}
     def entry_allowed(self):
         equity=sum(e._equity() if e.paper else e.balance for e in self.engines.values())
         realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
@@ -31,7 +34,7 @@ class PaperPortfolio:
         self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.
         for e in self.engines.values():e._new_session()
         return self.snapshot()
-    def snapshot(self,asset='BTC'):
+    def snapshot(self,asset='BTC',include_assets=False):
         if asset not in self.engines:raise ValueError('unsupported asset')
         self.entry_allowed()
         snaps={a:e.snapshot() for a,e in self.engines.items()}
@@ -52,8 +55,9 @@ class PaperPortfolio:
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
-            'maxDrawdownUsd':self.max_drawdown,'allocationPerAsset':TOTAL_BALANCE/len(ASSETS),
+            'maxDrawdownUsd':self.max_drawdown,'allocations':dict(ALLOCATIONS),
             'assets':lanes,'scope':'crypto-updown-5m','strategy':'fee-aware staged inventory pairing and executable direct sets; directional lag entries disabled'}
+        if include_assets:return {**selected,'assets':{a:{k:v for k,v in s.items() if k!='portfolio'} for a,s in snaps.items()}}
         return selected
 
 engine=PaperPortfolio()
