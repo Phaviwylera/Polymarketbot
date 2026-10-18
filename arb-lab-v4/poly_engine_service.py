@@ -1,10 +1,11 @@
 from __future__ import annotations
+from typing import Literal
 import time
 from collections import defaultdict, deque
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from poly_server_demo import engine
+from poly_portfolio import engine
 
 app=FastAPI(title="POLY/EDGE Paper Engine",docs_url=None,redoc_url=None)
 app.add_middleware(
@@ -42,6 +43,8 @@ async def health():
     return {
         "status":"online",
         "role":"dedicated-paper-engine",
+        "revision":snap.get("revision"),
+        "portfolio":snap.get("portfolio"),
         "feed":snap.get("feed"),
         "market":(snap.get("market") or {}).get("slug"),
         "openTrusted":snap.get("openTrusted"),
@@ -49,5 +52,5 @@ async def health():
     }
 
 @app.get("/api/poly/demo/server")
-async def snapshot():
-    return engine.snapshot()
+async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC'):
+    return engine.snapshot(asset)

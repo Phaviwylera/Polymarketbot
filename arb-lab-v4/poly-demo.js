@@ -93,13 +93,13 @@
         if(up.sh>dn.sh+1e-9||dn.sh>up.sh+1e-9){
           const side=up.sh>dn.sh?'UP':'DOWN',obj=side==='UP'?up:dn,key=side.toLowerCase(),bid=Number(j.bbo?.[key]?.bid);
           const shares=Math.abs(up.sh-dn.sh),unit=obj.sh?obj.cost/obj.sh:0;
-          const txt='V12.1 RESIDUAL '+side+' · '+shares.toFixed(2)+' shares · avg '+(unit*100).toFixed(1)+'¢ · live bid '+(Number.isFinite(bid)?(bid*100).toFixed(1)+'¢':'—')+' · unrealized '+money(p.unrealizedPnl||0,4);
+          const txt='V13 RESIDUAL '+side+' · '+shares.toFixed(2)+' shares · avg '+(unit*100).toFixed(1)+'¢ · live bid '+(Number.isFinite(bid)?(bid*100).toFixed(1)+'¢':'—')+' · unrealized '+money(p.unrealizedPnl||0,4);
           set('demoPosition',txt,'warn');set('positionForensic',txt);
         }else if(inv.quote){
-          const txt='V12.1 '+String(inv.quote.kind||'').toUpperCase()+' QUOTE · '+String(inv.quote.side||'').toUpperCase()+' '+(Number(inv.quote.price||0)*100).toFixed(1)+'¢ · '+Number(inv.quote.shares||0).toFixed(2)+' shares';
+          const txt='V13 '+String(inv.quote.kind||'').toUpperCase()+' QUOTE · '+String(inv.quote.side||'').toUpperCase()+' '+(Number(inv.quote.price||0)*100).toFixed(1)+'¢ · '+Number(inv.quote.shares||0).toFixed(2)+' shares';
           set('demoPosition',txt);set('positionForensic',txt);
         }else{
-          const txt='V12.1 INVENTORY IDLE · cycles '+Number(inv.cycles||0)+' / 3';
+          const txt='V13 INVENTORY IDLE · cycles '+Number(inv.cycles||0)+' / 3';
           set('demoPosition',txt,'good');set('positionForensic',txt);
         }
       }else{set('demoPosition','NO OPEN PAPER POSITION');set('positionForensic','NO OPEN PAPER POSITION');}

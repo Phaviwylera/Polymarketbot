@@ -3,7 +3,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
 (() => {
   const $=id=>document.getElementById(id);
   const state={
-    snap:null,history:[],tape:[],alerts:false,lastMarket:'',lastSignalKey:'',lastSignalAt:0,
+    asset:'BTC',snap:null,history:[],tape:[],alerts:false,lastMarket:'',lastSignalKey:'',lastSignalAt:0,
     market:null,spot:0,twap:0,openRef:0,openTrusted:false,bbo:{up:{},down:{}},
     latestBest:null,latestOpportunity:false,latestMode:'WARMING',
     clob:{readyState:0},rtds:{readyState:0}
@@ -19,6 +19,33 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
   const istMarket=ts=>new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true}).format(new Date(Number(ts)*1000));
   const set=(id,val,cls='')=>{const e=$(id);if(!e)return;e.textContent=val;if(cls)e.className=cls};
 
+  function renderPortfolio(j){
+    const p=j.portfolio;
+    set('assetPriceLabel',state.asset+' / TWAP PRICE');set('mobileAssetLabel',state.asset);
+    if(!p){set('portfolioRisk','ENGINE UPDATE PENDING');return;}
+    set('portfolioEquity','$'+fmt(p.equity,4));
+    set('portfolioPnl','P/L '+(p.totalPnl>=0?'+$':'-$')+fmt(Math.abs(p.totalPnl),4),p.totalPnl>=0?'good':'bad');
+    set('portfolioRisk',p.riskLocked?'PORTFOLIO LOCKED':'PAPER SCANNERS ACTIVE',p.riskLocked?'bad':'good');
+    set('assetScope','Selected '+state.asset+' · $'+fmt(p.allocationPerAsset,2)+' allocation · all four scanners run in parallel');
+    for(const lane of p.assets||[]){
+      const button=document.querySelector('[data-asset="'+lane.asset+'"]');if(!button)continue;
+      const fresh=lane.spotAgeSec!=null&&lane.twapAgeSec!=null&&Math.max(lane.spotAgeSec,lane.twapAgeSec)<5;
+      const live=fresh&&Object.values(lane.feed||{}).every(v=>v==='live');
+      button.textContent=lane.asset+' · '+(lane.status==='risk_locked'?'LOCKED':live?'LIVE':'SYNCING')+' · '+(lane.totalPnl>=0?'+$':'-$')+fmt(Math.abs(lane.totalPnl||0),3);
+      button.setAttribute('aria-pressed',String(lane.asset===state.asset));
+      button.title=(lane.decision||'Waiting for market/feed')+' · '+(lane.trades||0)+' completed paper trades';
+    }
+  }
+  function selectAsset(asset){
+    if(asset===state.asset)return;
+    state.asset=asset;state.history=[];state.tape=[];state.snap=null;state.lastMarket='';state.lastSignalKey='';
+    for(const button of document.querySelectorAll('[data-asset]'))button.setAttribute('aria-pressed',String(button.dataset.asset===asset));
+    set('assetPriceLabel',asset+' / TWAP PRICE');set('mobileAssetLabel',asset);set('feedStatus','SWITCHING TO '+asset,'warn');
+    window.PolyNetworkOrb?.setTelemetry({},[]);
+    // In-flight responses for the old asset are discarded by render().
+    if(!pollBusy){clearTimeout(pollTimer);poll();}
+  }
+
   function syncPublicState(j){
     state.snap=j;
     state.market=j.market||null;state.spot=num(j.spot)||0;state.twap=num(j.twap)||0;
@@ -29,7 +56,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
 
   function renderCore(core){
     if(!core){
-      set('vegaVerdict','WARMING','warn');set('vegaSummary','Waiting for BTC/TWAP direction and impulse.');
+      set('vegaVerdict','WARMING','warn');set('vegaSummary','Waiting for asset/TWAP direction and impulse.');
       set('titanVerdict','WAIT','warn');set('titanSummary','Waiting for executable signal and hard risk checks.');
       set('coreFinal','WAIT','warn');return;
     }
@@ -43,7 +70,9 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
   }
 
   function render(j){
+    if(j.asset&&j.asset!==state.asset)return;
     syncPublicState(j);
+    renderPortfolio(j);
     renderCore(j.core);
     window.dispatchEvent(new CustomEvent('poly-edge-server-snapshot',{detail:j}));
     const m=j.market||{},b=j.bbo||{},model=j.model||{},c=j.candidate||{},paper=j.paper||{};
@@ -52,7 +81,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     set('feedStatus',feedLive?'SERVER LIVE':'SYNCING',feedLive?'good':'warn');
     set('clock',istClock(new Date(now*1000))+' IST');
     set('marketState',m.acceptingOrders?'ACCEPTING ORDERS':'READ ONLY',m.acceptingOrders?'good':'warn');
-    set('question',m.startTs&&m.endTs?('Bitcoin Up or Down · '+istMarket(m.startTs)+' – '+istMarket(m.endTs)+' IST'):(m.question||'Bitcoin Up or Down · 5m'));
+    set('question',m.startTs&&m.endTs?((j.asset||'BTC')+' Up or Down · '+istMarket(m.startTs)+' – '+istMarket(m.endTs)+' IST'):(m.question||(j.asset||'BTC')+' Up or Down · 5m'));
     const leftText=String(Math.floor(left/60)).padStart(2,'0')+':'+String(Math.floor(left%60)).padStart(2,'0');
     set('timeLeft',leftText);set('mobileDockTimer',leftText);
     set('volume','$'+fmt(m.volume,0));set('liquidity','$'+fmt(m.liquidity,0));set('minOrder',m.minOrderSize?fmt(m.minOrderSize,2)+' shares':'—');
@@ -85,7 +114,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     set('avgPairCost',num(paper.avgMatchedSetCost)==null?'—':Number(paper.avgMatchedSetCost).toFixed(4));
     set('residualState',residual,residualWarn?'warn':'good');
     const invState=inv&&inv.status?String(inv.status):'SCANNING';
-    const pairStateText=pair.directEligible?'LOCKABLE NOW':(pair.hedge&&pair.hedge.eligible?'HEDGE READY':(invState==='RESIDUAL'?'V12 RESIDUAL':invState==='QUOTING'?'V12 QUOTING':invState==='MERGED'?'V12 MERGED':'V12 SCANNING'));
+    const pairStateText=pair.directEligible?'LOCKABLE NOW':(pair.hedge&&pair.hedge.eligible?'HEDGE READY':(invState==='RESIDUAL'?'V13 RESIDUAL':invState==='QUOTING'?'V13 QUOTING':invState==='MERGED'?'V13 MERGED':'V13 SCANNING'));
     set('pairState',pairStateText,(pair.directEligible||(pair.hedge&&pair.hedge.eligible)||invState==='MERGED')?'good':invState==='RESIDUAL'?'warn':'');
     set('orbPairCost',pairCost==null?'—':pairCost.toFixed(4));
     set('orbMatched',fmt(paper.matchedSets||0,2));
@@ -182,7 +211,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     const w=Math.max(120,r.width),h=Math.max(70,r.height);
     c.width=Math.floor(w*dpr);c.height=Math.floor(h*dpr);
     const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
-    const valid=v=>Number.isFinite(v)&&v>1000,data=state.history.filter(q=>valid(q.spot)||valid(q.twap)).slice(-220);
+    const valid=v=>Number.isFinite(v)&&v>0,data=state.history.filter(q=>valid(q.spot)||valid(q.twap)).slice(-220);
     if(data.length<2){requestAnimationFrame(drawChart);return}
     const L=30,R=w-6,T=7,B=h-9,t0=data[0].t,t1=data[data.length-1].t||t0+1,px=t=>L+(t-t0)/Math.max(1,t1-t0)*(R-L);
     const vals=data.flatMap(q=>[q.spot,q.twap].filter(valid));let lo=Math.min(...vals),hi=Math.max(...vals),mid=(lo+hi)/2;
@@ -284,7 +313,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     pollBusy=true;
     const started=performance.now();
     try{
-      const r=await fetch(POLY_ENGINE_BASE+'/api/poly/demo/server',{cache:'no-store',mode:'cors'});
+      const r=await fetch(POLY_ENGINE_BASE+'/api/poly/demo/server?asset='+encodeURIComponent(state.asset),{cache:'no-store',mode:'cors'});
       let j=null;try{j=await r.json()}catch{}
       if(r.status===429){
         const retry=Number(r.headers.get('Retry-After'))||5;
@@ -295,6 +324,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
         return;
       }
       if(!r.ok)throw new Error(j?.detail||('HTTP '+r.status));
+      if((j.asset||'BTC')!==state.asset)return;
       pollDelay=1000;
       render(j);
       window.POLY_EDGE_LATEST_SNAPSHOT=j;
@@ -331,6 +361,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
 
   function boot(){
     initMobileDock();
+    for(const button of document.querySelectorAll('[data-asset]'))button.addEventListener('click',()=>selectAsset(button.dataset.asset));
     if($('alertsBtn'))$('alertsBtn').onclick=alerts;
     poll();requestAnimationFrame(drawChart);requestAnimationFrame(drawOrb);requestAnimationFrame(drawLifecycle);requestAnimationFrame(drawEdgeMatrix);requestAnimationFrame(drawHedgeFlow);
   }

@@ -5,6 +5,7 @@ Live transaction signing, when explicitly enabled, happens ONLY in the unlocked 
 This is experimental, non-atomic and cannot ensure realized profitability.
 """
 from __future__ import annotations
+from typing import Literal
 import os
 import re
 import time
@@ -18,7 +19,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
-from poly_server_demo import engine as poly_server_engine
+from poly_portfolio import engine as poly_server_engine
 
 ROOT = Path(__file__).resolve().parent
 JUPITER = 'https://api.jup.ag/swap/v2'
@@ -380,8 +381,8 @@ async def poly_demo_event(body:PolyDemoEvent):
     return {'status':'ok','events':len(session['events'])}
 
 @app.get('/api/poly/demo/server')
-async def poly_demo_server():
-    return poly_server_engine.snapshot()
+async def poly_demo_server(asset:Literal['BTC','ETH','SOL','XRP']='BTC'):
+    return poly_server_engine.snapshot(asset)
 
 @app.post('/api/poly/demo/server/reset')
 async def poly_demo_server_reset():

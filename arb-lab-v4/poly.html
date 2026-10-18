@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#050607">
-<title>POLY/EDGE V12.1 — Inventory Pairing Workstation</title>
+<title>POLY/EDGE V13 — Inventory Pairing Workstation</title>
 <link rel="stylesheet" href="/poly.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="mark">PE</span>
-      <div><b>POLY/EDGE</b><small>BTC 5M · V12.1 BOUNDED INVENTORY PAIRING + LAG ENGINE</small></div>
+      <div><b>POLY/EDGE</b><small>MULTI-ASSET 5M · V13 PAPER INVENTORY + LAG ENGINE</small></div>
     </div>
     <div class="statusCluster">
       <span class="statusPill"><i class="live-dot"></i><b id="feedStatus">CONNECTING</b></span>
@@ -27,26 +27,34 @@
 
   <div class="ticker">
     <div class="tickerTrack">
-      <span>CHAINLINK BTC/USD</span><i>•</i><span>60S TWAP</span><i>•</i><span>POLYMARKET CLOB</span><i>•</i>
-      <span>VEGA → TITAN FAST CORE</span><i>•</i><span>V12.1 CHEAP-LEG INVENTORY PAIRING</span><i>•</i><span>350MS PAPER LATENCY</span><i>•</i>
+      <span>BTC · ETH · SOL · XRP / USD</span><i>•</i><span>60S TWAP</span><i>•</i><span>POLYMARKET CLOB</span><i>•</i>
+      <span>VEGA → TITAN FAST CORE</span><i>•</i><span>V13 STAGED INVENTORY PAIRING</span><i>•</i><span>350MS PAPER LATENCY</span><i>•</i>
       <span>$20 PAPER CAPITAL</span><i>•</i><span>REAL ORDERS LOCKED</span>
     </div>
   </div>
 
   <nav class="mobileDock" aria-label="Mobile quick navigation">
     <a href="#mobilePnl"><span>ACCOUNT</span><b id="mobileDockEquity">$20.00</b></a>
-    <a href="#mobilePrice"><span>BTC</span><b id="mobileDockBtc">—</b></a>
+    <a href="#mobilePrice"><span id="mobileAssetLabel">BTC</span><b id="mobileDockBtc">—</b></a>
     <a href="#mobileMarket"><span>MARKET</span><b id="mobileDockTimer">--:--</b></a>
     <a href="#mobileNeural"><span>CORE</span><b id="mobileDockCore">WAIT</b></a>
     <a href="#mobileHistory"><span>HISTORY</span><b>LOGS</b></a>
   </nav>
 
+  <section class="portfolioBar" aria-label="Multi-asset paper portfolio">
+    <div class="portfolioTotals"><span>ALL ASSETS · $20 PAPER</span><b id="portfolioEquity">$20.0000</b><span id="portfolioPnl">P/L $0.0000</span><span id="portfolioRisk">SCANNING</span></div>
+    <div class="assetLanes" id="assetLanes" aria-label="Select asset details">
+      <button type="button" data-asset="BTC" aria-pressed="true">BTC · CONNECTING</button><button type="button" data-asset="ETH" aria-pressed="false">ETH · CONNECTING</button><button type="button" data-asset="SOL" aria-pressed="false">SOL · CONNECTING</button><button type="button" data-asset="XRP" aria-pressed="false">XRP · CONNECTING</button>
+    </div>
+    <small id="assetScope">Selected BTC · $5 allocation · all four scanners run in parallel</small>
+  </section>
+
   <main class="workstation">
     <div class="liveViewport">
     <section class="hudTop">
       <article class="panel pnlPanel" id="mobilePnl">
-        <div class="panelTop"><span>WALLET / PAPER P&L</span><em id="demoStatus">STARTING</em></div>
-        <div class="pnlBig"><small>EQUITY</small><b id="demoEquity">$20.0000</b></div>
+        <div class="panelTop"><span>SELECTED ASSET / PAPER P&L</span><em id="demoStatus">STARTING</em></div>
+        <div class="pnlBig"><small>EQUITY</small><b id="demoEquity">$5.0000</b></div>
         <div class="pnlDelta"><span>REALIZED</span><b id="demoPnl">$0.0000</b></div>
         <div class="pnlStrip">
           <div><span>TRADES</span><b id="demoTrades">0</b></div>
@@ -66,7 +74,7 @@
       </article>
 
       <article class="panel pricePanel" id="mobilePrice">
-        <div class="panelTop"><span>BTC / TWAP PRICE</span><em id="refState">SYNCING</em></div>
+        <div class="panelTop"><span id="assetPriceLabel">BTC / TWAP PRICE</span><em id="refState">SYNCING</em></div>
         <div class="priceHead">
           <b id="spotPrice">$—</b>
           <span>TWAP <strong id="twapPrice">$—</strong></span>

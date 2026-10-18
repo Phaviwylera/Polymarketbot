@@ -37,7 +37,7 @@
     const left=compact?7:12,cardW=w*(compact?.225:.18),spine=w*.365;
     const top=24,bottom=h-48,step=(bottom-top)/6,cardH=step-5;
     const cards=[
-      ['BTC LEAD',model.leadBps,'lead',1],['IMPULSE',model.impulse5Bps,'imp',1],
+      [(snap.asset||'BTC')+' LEAD',model.leadBps,'lead',1],['IMPULSE',model.impulse5Bps,'imp',1],
       ['FAIR UP',model.fairUp,'fair',100],['UP ASK',snap.bbo?.up?.ask,'up',100],
       ['DOWN ASK',snap.bbo?.down?.ask,'down',100],['PAIR EDGE',snap.pair?.lockedEdgePerShare,'pair',100]
     ];

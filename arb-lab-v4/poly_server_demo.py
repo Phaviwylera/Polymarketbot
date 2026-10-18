@@ -35,7 +35,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="12.1-risk-fix"
+ENGINE_REVISION="13.0-multi-asset-paper"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -81,7 +81,15 @@ def _floor_tick(price,tick):
     return round(math.floor((float(price)+1e-12)/tick)*tick,6)
 
 class PolyServerDemo:
-    def __init__(self):
+    def __init__(self,asset='BTC',balance=DEMO_BALANCE,state_file=None,portfolio_guard=None):
+        if asset not in {'BTC','ETH','SOL','XRP'}:raise ValueError('unsupported crypto asset')
+        self.asset=asset;self.symbol=asset.lower()+'/usd';self.balance=float(balance)
+        if self.balance<=0:raise ValueError('positive paper allocation required')
+        self.state_file=Path(state_file) if state_file is not None else STATE_FILE
+        self.session_loss_limit=min(SESSION_LOSS_LIMIT_USD,self.balance*.10) if balance!=DEMO_BALANCE else SESSION_LOSS_LIMIT_USD
+        # Separate profiles; wallet averages are not executable expected returns.
+        self.pair_target={'BTC':.980,'ETH':.970,'SOL':.970,'XRP':.970}[asset]
+        self.portfolio_guard=portfolio_guard
         self.market=None
         self.bbo={'up':{'bid':None,'ask':None,'bidSize':0.0,'askSize':0.0},
                   'down':{'bid':None,'ask':None,'bidSize':0.0,'askSize':0.0}}
@@ -133,11 +141,11 @@ class PolyServerDemo:
 
     def _restore_saved(self):
         try:
-            if not STATE_FILE.exists(): return False
-            data=json.loads(STATE_FILE.read_text(encoding='utf-8'))
+            if not self.state_file.exists(): return False
+            data=json.loads(self.state_file.read_text(encoding='utf-8'))
             p=data.get('paper')
             now=time.time()
-            if not isinstance(p,dict) or int(p.get('version') or 0)!=12 or float(p.get('endsAt') or 0)<=now:
+            if not isinstance(p,dict) or int(p.get('version') or 0)!=13 or data.get('asset')!=self.asset or float(p.get('startingBalance') or 0)!=self.balance or float(p.get('endsAt') or 0)<=now:
                 return False
             # Strip calculated presentation fields before resuming mutable state.
             p=dict(p)
@@ -172,10 +180,10 @@ class PolyServerDemo:
     def _new_session(self):
         now=time.time()
         self.paper={
-            'version':12,'revision':ENGINE_REVISION,'sessionId':'srv_'+hex(int(now*1_000_000))[2:],
-            'startedAt':now,'endsAt':now+10800,'startingBalance':20.0,'cash':20.0,
+            'version':13,'revision':ENGINE_REVISION,'sessionId':'srv_'+hex(int(now*1_000_000))[2:],
+            'startedAt':now,'endsAt':now+10800,'startingBalance':self.balance,'cash':self.balance,
             'realizedPnl':0.0,'fees':0.0,'trades':0,'wins':0,'losses':0,
-            'blocked':0,'nofills':0,'peakEquity':20.0,'maxDrawdown':0.0,
+            'blocked':0,'nofills':0,'peakEquity':self.balance,'maxDrawdown':0.0,
             'position':None,'events':[],'status':'running','lastOpportunityAt':0.0,
             'signals':0,'candidatesSeen':0,'executionAttempts':0,'postLatencyRejects':0,'tradedMarkets':[],'cooldownUntil':0.0,
             'pairMarkets':[],'pairAttempts':0,'matchedSets':0.0,'lockedPairPnl':0.0,'pairCostSum':0.0,'pairSharesSum':0.0,
@@ -193,7 +201,7 @@ class PolyServerDemo:
 
     async def _seed_sigma(self):
         try:
-            data=await self._get(COINBASE_REST+'/products/BTC-USD/candles',
+            data=await self._get(COINBASE_REST+f'/products/{self.asset}-USD/candles',
                                  params={'granularity':'60'},headers={'User-Agent':'POLY-EDGE/1.0'})
             rows=sorted(data,key=lambda x:x[0])[-120:]
             closes=[float(x[4]) for x in rows]
@@ -208,7 +216,7 @@ class PolyServerDemo:
         now=int(time.time());bucket=(now//300)*300
         selected=None
         for ts in [bucket,bucket+300,bucket-300]:
-            try: data=await self._get(POLY_GAMMA+'/markets',{'slug':f'btc-updown-5m-{ts}'})
+            try: data=await self._get(POLY_GAMMA+'/markets',{'slug':f'{self.asset.lower()}-updown-5m-{ts}'})
             except Exception: continue
             if isinstance(data,list) and data:
                 selected=(ts,data[0])
@@ -224,8 +232,8 @@ class PolyServerDemo:
             self._get(POLY_CLOB+'/book',{'token_id':down})
         )
         return {
-            'slug':m.get('slug') or f'btc-updown-5m-{ts}','question':m.get('question'),
-            'startTs':ts,'endTs':ts+300,'active':bool(m.get('active')),
+            'slug':m.get('slug') or f'{self.asset.lower()}-updown-5m-{ts}','question':m.get('question'),
+            'asset':self.asset,'interval':'5m','startTs':ts,'endTs':ts+300,'active':bool(m.get('active')),
             'closed':bool(m.get('closed')),'acceptingOrders':bool(m.get('acceptingOrders')),
             'minOrderSize':float(m.get('orderMinSize') or 0),
             'minTickSize':float(m.get('orderPriceMinTickSize') or .01),
@@ -256,6 +264,10 @@ class PolyServerDemo:
                         await self._settle_maker(old.get('slug'))
                     if old and self.paper and isinstance(self.paper.get('inventory'),dict) and self.paper['inventory'].get('marketSlug')==old.get('slug'):
                         await self._settle_inventory(old.get('slug'))
+                    if self.paper and (self.paper.get('position') or self._inventory_has_residual()):
+                        self.feed['market']='awaiting_settlement'
+                        await asyncio.sleep(3)
+                        continue
                     self.open_ref=None;self.open_ref_ts=0;self.open_trusted=False
                     self.alignment_side=None;self.alignment_since=0.0
                     self.market_version+=1
@@ -338,7 +350,7 @@ class PolyServerDemo:
         while True:
             try:
                 async with websockets.connect(RTDS_WS,ping_interval=None,close_timeout=2,max_size=2_000_000) as ws:
-                    flt=json.dumps({'symbol':'btc/usd'},separators=(',',':'))
+                    flt=json.dumps({'symbol':self.symbol},separators=(',',':'))
                     await ws.send(json.dumps({'action':'subscribe','subscriptions':[
                         {'topic':'crypto_prices_chainlink','type':'update','filters':flt},
                         {'topic':'crypto_prices_twap_sixty','type':'update','filters':flt}
@@ -366,6 +378,8 @@ class PolyServerDemo:
         if not isinstance(m,dict) or m.get('message'):return
         topic=str(m.get('topic') or '')
         p=m.get('payload') or m.get('data') or {}
+        if not isinstance(p,dict):return
+        if p.get('symbol') and str(p['symbol']).lower()!=self.symbol:return
         try:value=float(p.get('value',p.get('full_accuracy_value',m.get('value'))))
         except Exception:return
         try:ts=float(p.get('timestamp',m.get('timestamp',time.time()*1000)))
@@ -494,7 +508,7 @@ class PolyServerDemo:
 
         if p.get('status')=='risk_locked':
             self.latest_mode='RISK_LOCK';return p.get('riskLockReason') or 'risk lock active'
-        if float(p.get('realizedPnl') or 0)<=-SESSION_LOSS_LIMIT_USD:
+        if float(p.get('realizedPnl') or 0)<=-self.session_loss_limit:
             p['status']='risk_locked';p['riskLockReason']='session loss limit reached'
             self.latest_mode='RISK_LOCK';return 'session loss limit reached'
         if now<float(p.get('cooldownUntil') or 0):
@@ -533,7 +547,7 @@ class PolyServerDemo:
 
         if not stable:
             self.alignment_side=None;self.alignment_since=0.0
-            return 'waiting for aligned BTC/TWAP direction'
+            return f'waiting for aligned {self.asset}/TWAP direction'
 
         if self.alignment_side!=best['side']:
             self.alignment_side=best['side'];self.alignment_since=now
@@ -589,7 +603,7 @@ class PolyServerDemo:
             'checks':{
                 'feedFresh':fresh,'feedLive':feed_live,'marketOpen':market_ok,'liquidityOk':liquidity>500,
                 'maxTradeNotional':MAX_TRADE_NOTIONAL,'maxTradeLossUsd':MAX_TRADE_LOSS_USD,
-                'sessionLossLimitUsd':SESSION_LOSS_LIMIT_USD,
+                'sessionLossLimitUsd':self.session_loss_limit,
                 'roundTripEdgeOk':bool(best and float(best.get('roundTripNet') or -99)>=LAG_ROUNDTRIP_EDGE_MIN)
             }
         }
@@ -693,11 +707,13 @@ class PolyServerDemo:
     def _update_risk(self):
         p=self.paper
         if not p:return
+        if self.portfolio_guard and not self.portfolio_guard():
+            p['status']='risk_locked';p['riskLockReason']='portfolio loss limit reached'
         eq=self._equity();peak=max(float(p.get('peakEquity') or p['startingBalance']),eq)
         p['peakEquity']=peak
         p['maxDrawdownUsd']=max(float(p.get('maxDrawdownUsd') or 0),peak-eq)
         p['maxDrawdown']=max(float(p.get('maxDrawdown') or 0),(peak-eq)/peak if peak>0 else 0)
-        if min(float(p.get('realizedPnl') or 0),eq-float(p['startingBalance']))<=-SESSION_LOSS_LIMIT_USD:
+        if min(float(p.get('realizedPnl') or 0),eq-float(p['startingBalance']))<=-self.session_loss_limit:
             p['status']='risk_locked';p['riskLockReason']='session realized or marked loss limit reached'
         if int(p.get('consecutiveLosses') or 0)>=2:
             p['status']='risk_locked';p['riskLockReason']='two consecutive losses'
@@ -726,10 +742,10 @@ class PolyServerDemo:
             hedge_cost=shares*(oppask+_fee_per_share(oppask))
             if float(self.bbo[opp].get('askSize') or 0)<shares:continue
             if shares*maker_px+hedge_cost>float(self.paper['cash']):continue
-            loss_budget=SESSION_LOSS_LIMIT_USD+min(float(self.paper['realizedPnl']),self._equity()-float(self.paper['startingBalance']))
+            loss_budget=self.session_loss_limit+min(float(self.paper['realizedPnl']),self._equity()-float(self.paper['startingBalance']))
             if shares*maker_px>loss_budget:continue
             projected=maker_px+oppask+_fee_per_share(oppask)
-            if projected>INVENTORY_PAIR_TARGET+INVENTORY_MAX_INITIAL_GAP:continue
+            if projected>self.pair_target+INVENTORY_MAX_INITIAL_GAP:continue
             direction=1 if side=='up' else -1
             lead=float(m.get('leadBps') or 0)*direction;imp=float(m.get('impulse5Bps') or 0)*direction
             if lead<INVENTORY_MIN_REVERSAL_LEAD_BPS or imp<INVENTORY_MIN_REVERSAL_IMPULSE_BPS:continue
@@ -769,7 +785,7 @@ class PolyServerDemo:
         if q.get('kind')=='FIRST':
             candidate=self._inventory_first_leg_candidate(inv,m)
             opp='down' if side=='up' else 'up';ask=self.bbo[opp].get('ask')
-            if not candidate or candidate['side']!=side or ask is None or float(q['price'])+float(ask)+_fee_per_share(float(ask))>INVENTORY_PAIR_TARGET or float(q['shares'])*float(q['price'])>INVENTORY_MAX_RESIDUAL_USD:
+            if not candidate or candidate['side']!=side or ask is None or float(q['price'])+float(ask)+_fee_per_share(float(ask))>self.pair_target or float(q['shares'])*float(q['price'])>INVENTORY_MAX_RESIDUAL_USD:
                 self._inventory_cancel_quote(inv,'entry no longer hedgeable within risk cap');return
             direction=1 if side=='up' else -1
             if float(m.get('leadBps') or 0)*direction<-0.05:
@@ -798,7 +814,7 @@ class PolyServerDemo:
         totals=self._inventory_totals(inv);shares=float(totals[res_side]['shares'] or 0)
         if ask0 is None or shares<=0 or avail0<shares:return False
         ask0=float(ask0);allin=res_unit+ask0+_fee_per_share(ask0)
-        if allin>INVENTORY_PAIR_TARGET+1e-9:return False
+        if allin>self.pair_target+1e-9:return False
         total0=shares*(ask0+_fee_per_share(ask0))
         if total0>float(self.paper.get('cash') or 0)+1e-9:return False
         self._inventory_cancel_quote(inv,'cancel maker complement before taker hedge')
@@ -811,7 +827,7 @@ class PolyServerDemo:
             ask=self.bbo[opp].get('ask');avail=float(self.bbo[opp].get('askSize') or 0)
             if ask is None or avail<shares:return False
             ask=float(ask);fee=shares*_fee_per_share(ask);fresh=res_unit+ask+_fee_per_share(ask)
-            if fresh>INVENTORY_PAIR_TARGET+1e-9 or shares*(ask+_fee_per_share(ask))>float(self.paper.get('cash') or 0)+1e-9:
+            if fresh>self.pair_target+1e-9 or shares*(ask+_fee_per_share(ask))>float(self.paper.get('cash') or 0)+1e-9:
                 self._record('INV_HEDGE_NOFILL',side=opp.upper(),price=ask,detail=f'post-latency pair {fresh:.4f}');return False
             self.paper['inventoryTakerHedges']=int(self.paper.get('inventoryTakerHedges') or 0)+1
             self._inventory_add_lot(inv,opp,shares,ask,fee,'TAKER')
@@ -876,7 +892,7 @@ class PolyServerDemo:
                 self._inventory_cancel_quote(inv,'risk exit pending executable liquidity')
                 inv['status']='EXIT_PENDING';inv['lastAction']='risk exit waiting for liquidity';return
             opp='down' if res=='up' else 'up'
-            max_opp=_floor_tick(INVENTORY_PAIR_TARGET-unit,float(self.market.get('minTickSize') or .01))
+            max_opp=_floor_tick(self.pair_target-unit,float(self.market.get('minTickSize') or .01))
             if max_opp>=.03 and not inv.get('quote'):
                 bid=self.bbo[opp].get('bid');ask=self.bbo[opp].get('ask')
                 if bid is not None and ask is not None:
@@ -891,6 +907,16 @@ class PolyServerDemo:
         cand=self._inventory_first_leg_candidate(inv,m)
         if cand:self._inventory_place_quote(inv,cand['side'],cand['price'],cand['shares'],'FIRST')
 
+    async def _resolved_winner(self,slug):
+        try:
+            data=await self._get(POLY_GAMMA+'/markets',{'slug':slug})
+            row=data[0] if isinstance(data,list) and data else None
+            if not row or not row.get('closed') or row.get('umaResolutionStatus') not in ('resolved','finalized'):return None
+            outs=_jsonish(row.get('outcomes'));prices=_jsonish(row.get('outcomePrices'))
+            winners=[str(o).lower() for o,p in zip(outs,prices) if float(p)>=.999999]
+            return winners[0] if len(winners)==1 and winners[0] in ('up','down') else None
+        except Exception:return None
+
     async def _settle_inventory(self,slug):
         p=self.paper
         if not p:return
@@ -900,9 +926,9 @@ class PolyServerDemo:
         self._inventory_merge_available(inv)
         totals=self._inventory_totals(inv);res=totals.get('residualSide')
         if not res:return
-        if self.twap is None or self.open_ref is None:
-            self._record('INV_RESIDUAL_UNSETTLED',side=res.upper(),detail='missing trusted final/open reference');return
-        winner='up' if float(self.twap)>=float(self.open_ref) else 'down'
+        winner=await self._resolved_winner(slug)
+        if winner is None:
+            inv['status']='AWAITING_SETTLEMENT';return
         shares=float(totals[res]['shares'] or 0);cost=float(totals[res]['cost'] or 0);payout=shares if res==winner else 0.0;pnl=payout-cost
         self._inventory_consume(inv[res+'Lots'],shares)
         p['cash']+=payout;p['realizedPnl']+=pnl;p['trades']+=1;p['inventoryResidualSettles']=int(p.get('inventoryResidualSettles') or 0)+1
@@ -912,7 +938,7 @@ class PolyServerDemo:
         inv['status']='SETTLED';inv['lastAction']=f'residual settled {pnl:+.4f}'
         if pnl<0:p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
         self._update_risk()
-        if p['realizedPnl']<=-SESSION_LOSS_LIMIT_USD or int(p.get('consecutiveLosses') or 0)>=2:
+        if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
             p['status']='risk_locked';p['riskLockReason']='V12 bounded residual settlement risk lock'
 
     def _maker_quote_candidate(self):
@@ -1039,7 +1065,7 @@ class PolyServerDemo:
             p['makerResidualExits']=int(p.get('makerResidualExits') or 0)+1
             self._record('MAKER_RESIDUAL_EXIT',side=filled_side.upper(),price=bid,pnl=pnl,detail=reason+f'; exit fee USD {fee:.5f}')
             p['maker']=None
-            if p['realizedPnl']<=-SESSION_LOSS_LIMIT_USD or int(p.get('consecutiveLosses') or 0)>=2:
+            if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
                 p['status']='risk_locked';p['riskLockReason']='maker residual risk lock'
             return True
         finally:
@@ -1131,7 +1157,7 @@ class PolyServerDemo:
         p['makerResidualSettles']=int(p.get('makerResidualSettles') or 0)+1
         if pnl>=0:p['wins']+=1;p['consecutiveLosses']=0
         else:p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
-        if p['realizedPnl']<=-SESSION_LOSS_LIMIT_USD or int(p.get('consecutiveLosses') or 0)>=2:
+        if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
             p['status']='risk_locked';p['riskLockReason']='maker residual loss risk lock'
         self._record('MAKER_RESIDUAL_SETTLE',side=side,price=1.0 if side==winner else 0.0,pnl=pnl,detail=f"winner {winner}; one maker leg remained unmatched")
         p['maker']=None
@@ -1405,7 +1431,7 @@ class PolyServerDemo:
             else:
                 p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
                 p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
-            if p['realizedPnl']<=-SESSION_LOSS_LIMIT_USD or int(p.get('consecutiveLosses') or 0)>=2:
+            if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
                 p['status']='risk_locked'
                 p['riskLockReason']='session risk lock after losses'
             self._record('SELL',side=pos['side'],price=bid,pnl=pnl,detail=reason+f'; fee USD {fee:.5f}')
@@ -1416,20 +1442,20 @@ class PolyServerDemo:
     async def _settle_position(self,slug):
         p=self.paper
         if not p or not p.get('position') or p['position'].get('marketSlug')!=slug:return
-        pos=p['position'];final=self.twap
-        if final is None or pos.get('openRef') is None:return
-        winner='UP' if final>=pos['openRef'] else 'DOWN'
+        pos=p['position'];resolved=await self._resolved_winner(slug)
+        if resolved is None:return
+        winner=resolved.upper()
         payout=pos['shares'] if pos['side']==winner else 0.0
         pnl=payout-pos['entryTotalCost']
         p['cash']+=payout;p['realizedPnl']+=pnl;p['trades']+=1
         if pnl>=0:p['wins']+=1
         else:p['losses']+=1
         self._record('SETTLE',side=pos['side'],price=1.0 if pos['side']==winner else 0.0,pnl=pnl,
-                     detail=f'TWAP resolution winner {winner}; final {final:.2f}')
+                     detail=f'verified market resolution winner {winner}')
         p['position']=None
 
     def _save(self):
-        try:STATE_FILE.write_text(json.dumps(self.snapshot(),separators=(',',':')),encoding='utf-8')
+        try:self.state_file.write_text(json.dumps(self.snapshot(),separators=(',',':')),encoding='utf-8')
         except Exception:pass
 
     async def engine_worker(self):
@@ -1515,16 +1541,16 @@ class PolyServerDemo:
         p=self.paper or {}
         eq=self._equity() if self.paper else 0
         return {
-            'status':'ok','revision':ENGINE_REVISION,'serverTime':time.time(),'feed':dict(self.feed),'market':self.market,
+            'status':'ok','asset':self.asset,'revision':ENGINE_REVISION,'serverTime':time.time(),'feed':dict(self.feed),'market':self.market,
             'bbo':self.bbo,'spot':self.spot,'spotAgeSec':time.time()-self.spot_ts if self.spot_ts else None,
             'twap':self.twap,'twapAgeSec':time.time()-self.twap_ts if self.twap_ts else None,
             'openRef':self.open_ref,'openTrusted':self.open_trusted,
             'model':self.latest_model,'candidate':self.latest_candidate,'decision':self.latest_reason,'mode':self.latest_mode,'core':self.latest_core,'pair':self.latest_pair,
             'risk':{'maxTradeNotional':MAX_TRADE_NOTIONAL,'maxTradeLossUsd':MAX_TRADE_LOSS_USD,
-                    'sessionLossLimitUsd':SESSION_LOSS_LIMIT_USD,'lagConfirmSec':LAG_CONFIRM_SEC,
+                    'sessionLossLimitUsd':self.session_loss_limit,'lagConfirmSec':LAG_CONFIRM_SEC,
                     'alignmentSide':self.alignment_side,'alignmentAgeSec':max(0,time.time()-self.alignment_since) if self.alignment_since else 0,
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
-                    'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':INVENTORY_PAIR_TARGET,
+                    'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':INVENTORY_STOP_LOSS_USD,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':INVENTORY_MAX_RESIDUAL_USD,'inventoryMaxFirstPrice':INVENTORY_MAX_FIRST_PRICE},
             'history':list(self.visual_history)[-240:],
             'reasonCounts':dict(self.reason_counts),
