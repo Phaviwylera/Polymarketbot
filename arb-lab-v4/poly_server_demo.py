@@ -106,6 +106,7 @@ class PolyServerDemo:
         self.market=None
         self.bbo={'up':{'bid':None,'ask':None,'bidSize':0.0,'askSize':0.0},
                   'down':{'bid':None,'ask':None,'bidSize':0.0,'askSize':0.0}}
+        self.depth={'up':{'bids':[],'asks':[]},'down':{'bids':[],'asks':[]}}
         self.spot=None; self.spot_ts=0.0
         self.twap=None; self.twap_ts=0.0
         self.open_ref=None; self.open_ref_ts=0.0; self.open_trusted=False
@@ -353,6 +354,14 @@ class PolyServerDemo:
             if not side:return
             bids=[(float(x['price']),float(x.get('size') or 0)) for x in (m.get('bids') or []) if 'price'in x]
             asks=[(float(x['price']),float(x.get('size') or 0)) for x in (m.get('asks') or []) if 'price'in x]
+            b_map=defaultdict(float)
+            for p,s in bids: b_map[p]+=s
+            a_map=defaultdict(float)
+            for p,s in asks: a_map[p]+=s
+            self.depth[side]={
+                'bids':[{'price':p,'size':round(s,1)} for p,s in sorted(b_map.items(),key=lambda x:-x[0])[:3]],
+                'asks':[{'price':p,'size':round(s,1)} for p,s in sorted(a_map.items(),key=lambda x:x[0])[:3]]
+            }
             if not bids:self.bbo[side].update(bid=None,bidSize=0.)
             if not asks:self.bbo[side].update(ask=None,askSize=0.)
             if bids:
@@ -1688,7 +1697,7 @@ class PolyServerDemo:
         eq=self._equity() if self.paper else 0
         return {
             'status':'ok','asset':self.asset,'revision':ENGINE_REVISION,'serverTime':time.time(),'feed':dict(self.feed),'market':self.market,
-            'bbo':self.bbo,'spot':self.spot,'spotAgeSec':time.time()-self.spot_ts if self.spot_ts else None,
+            'bbo':self.bbo,'depth':self.depth,'spot':self.spot,'spotAgeSec':time.time()-self.spot_ts if self.spot_ts else None,
             'twap':self.twap,'twapAgeSec':time.time()-self.twap_ts if self.twap_ts else None,
             'openRef':self.open_ref,'openTrusted':self.open_trusted,
             'model':self.latest_model,'candidate':self.latest_candidate,'decision':self.latest_reason,'mode':self.latest_mode,'core':self.latest_core,'pair':self.latest_pair,

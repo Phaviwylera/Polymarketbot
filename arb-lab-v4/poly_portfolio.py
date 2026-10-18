@@ -93,6 +93,62 @@ class PaperPortfolio:
                     eng.first_price_cap = round(float(cfg['firstPriceCap']), 3)
         return self.get_config()
 
+    def get_performance(self):
+        lanes = []
+        for a in ASSETS:
+            eng = self.engines[a]
+            p = eng.paper or {}
+            trades = int(p.get('trades') or 0)
+            wins = int(p.get('wins') or 0)
+            losses = int(p.get('losses') or 0)
+            realized = float(p.get('realizedPnl') or 0.0)
+            equity = eng._equity() if eng.paper else eng.balance
+            fees = float(p.get('fees') or 0.0)
+            matched = float(p.get('matchedSets') or 0.0)
+            lanes.append({
+                'asset': a,
+                'allocation': eng.balance,
+                'equity': round(equity, 2),
+                'totalPnl': round(equity - eng.balance, 2),
+                'realizedPnl': round(realized, 2),
+                'unrealizedPnl': round(equity - eng.balance - realized, 2),
+                'trades': trades,
+                'wins': wins,
+                'losses': losses,
+                'winRatePct': round((wins / trades * 100) if trades > 0 else 0.0, 1),
+                'fees': round(fees, 4),
+                'matchedSets': round(matched, 2),
+                'maxDrawdownPct': round(float(p.get('maxDrawdown') or 0.0) * 100, 2),
+                'pairTarget': eng.pair_target,
+                'status': p.get('status', 'warming')
+            })
+        total_trades = sum(l['trades'] for l in lanes)
+        total_wins = sum(l['wins'] for l in lanes)
+        total_losses = sum(l['losses'] for l in lanes)
+        total_equity = sum(l['equity'] for l in lanes)
+        total_realized = sum(l['realizedPnl'] for l in lanes)
+        total_fees = sum(l['fees'] for l in lanes)
+        total_matched = sum(l['matchedSets'] for l in lanes)
+        return {
+            'portfolio': {
+                'startingCapital': TOTAL_BALANCE,
+                'currentEquity': round(total_equity, 2),
+                'totalPnl': round(total_equity - TOTAL_BALANCE, 2),
+                'realizedPnl': round(total_realized, 2),
+                'unrealizedPnl': round(total_equity - TOTAL_BALANCE - total_realized, 2),
+                'totalTrades': total_trades,
+                'totalWins': total_wins,
+                'totalLosses': total_losses,
+                'winRatePct': round((total_wins / total_trades * 100) if total_trades > 0 else 0.0, 1),
+                'totalFeesPaid': round(total_fees, 4),
+                'totalMatchedSets': round(total_matched, 2),
+                'maxDrawdownUsd': round(self.max_drawdown, 2),
+                'sessionLossLimitUsd': PORTFOLIO_LOSS_LIMIT,
+                'riskLocked': self.locked
+            },
+            'assets': lanes
+        }
+
     def close(self):
         for e in self.engines.values():
             e.close()

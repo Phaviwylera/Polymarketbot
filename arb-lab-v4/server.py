@@ -669,6 +669,10 @@ async def poly_demo_diagnostics(job:str|None=None):
 async def get_strategy_config():
     return poly_server_engine.get_config()
 
+@app.get("/api/poly/performance")
+async def get_performance_summary():
+    return poly_server_engine.get_performance()
+
 @app.post("/api/poly/strategy/config")
 async def update_strategy_config(request:Request):
     try:body=await request.json()

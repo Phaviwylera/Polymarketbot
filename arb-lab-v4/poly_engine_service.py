@@ -69,6 +69,10 @@ async def diagnostics(job:str|None=None):
 async def get_strategy_config():
     return engine.get_config()
 
+@app.get("/api/poly/performance")
+async def get_performance_summary():
+    return engine.get_performance()
+
 @app.post("/api/poly/strategy/config")
 async def update_strategy_config(request:Request):
     try:body=await request.json()
