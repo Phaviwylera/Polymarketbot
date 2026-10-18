@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#050708">
+<meta name="description" content="ARB/LAB live Solana arbitrage scanner and experimental non-custodial auto-trading terminal">
+<title>ARB/LAB — Live Solana Arbitrage Terminal</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="terminal-shell">
+  <header class="commandbar">
+    <div class="brandline"><span class="brandmark">AL</span><b>ARB/LAB</b><span class="dim">/ SOLANA MAINNET / LIVE ROUTER</span></div>
+    <div class="live-strip"><span class="dot"></span><b>LIVE FEED</b><span>SCAN <i id="scanCountdown">00:00</i></span><span>UTC <i id="utcClock">--:--:--</i></span><span id="networkState">NETWORK CHECKING</span></div>
+  </header>
+
+  <div class="ticker" aria-label="system ticker">
+    <span>JUPITER V2</span><b>•</b><span>$2 HYPOTHETICAL LOOP</span><b>•</b><span>CONTINUOUS SCAN</span><b>•</b><span>REAL EXECUTION REQUIRES FUNDED + UNLOCKED + ARMED BOT WALLET</span><b>•</b><span>NO GUARANTEED PROFIT</span>
+  </div>
+
+  <main>
+    <section class="hero-grid">
+      <article class="module pnl-card">
+        <div class="module-title"><span>01 / MARKET EDGE</span><em id="scanStatus">WAITING FOR FIRST SCAN</em></div>
+        <div class="big-pnl" id="simProfit">$—</div>
+        <div class="caption">PROJECTED NET P/L ON <b>$2.00</b> NOW</div>
+        <div class="micro-grid">
+          <div><span>PROJECTED RETURN</span><b id="simReturn">$—</b></div>
+          <div><span>SOL REFERENCE</span><b id="solPrice">$—</b></div>
+          <div><span>EDGE</span><b id="spreadBps">— bps</b></div>
+          <div><span>LAST SCAN</span><b id="lastScan">—</b></div>
+        </div>
+        <div class="confidence-row">
+          <div><span>PROFIT CONFIDENCE*</span><b id="confidence">—%</b></div>
+          <div class="bar"><i id="confidenceBar"></i></div>
+        </div>
+        <p class="fine">*Heuristic quote-confidence score, not a calibrated probability or guarantee.</p>
+      </article>
+
+      <article class="module quote-card">
+        <div class="module-title"><span>02 / ROUND-TRIP QUOTE</span><em>JUPITER AGGREGATED</em></div>
+        <div class="route-line">
+          <div><small>START</small><strong>SOL</strong><span id="qSpend">—</span></div>
+          <i>→</i>
+          <div><small>LEG 1</small><strong>USDC</strong><span id="midUsdc">$—</span></div>
+          <i>→</i>
+          <div><small>RETURN</small><strong>SOL</strong><span id="qReturn">—</span></div>
+        </div>
+        <div class="matrix">
+          <div><span>RAW ROUND-TRIP EDGE</span><b id="rawProfit">$—</b></div>
+          <div><span>FEE ALLOWANCE</span><b id="feeAllowance">$—</b></div>
+          <div><span>PRICE-MOVE BUFFER</span><b id="moveBuffer">$—</b></div>
+          <div class="netrow"><span>CONSERVATIVE NET</span><b id="qNet">—</b></div>
+        </div>
+        <div class="verdict-line"><span id="marketState">SCANNING</span><small id="scanHint">Market scanning starts automatically when this page opens.</small></div>
+      </article>
+
+      <article class="module wallet-snapshot">
+        <div class="module-title"><span>03 / BOT WALLET</span><em id="vaultTag" class="amber">VAULT MISSING</em></div>
+        <div class="wallet-balance"><span>SOL</span><b id="solBal">0.000000</b></div>
+        <div class="wallet-balance"><span>USDC</span><b id="usdcBal">0.0000</b></div>
+        <div class="wallet-state">
+          <div><span>MODE</span><b id="modeBadge">● DISARMED</b></div>
+          <div><span>ATTEMPTS</span><b id="cycleCount">0 <i>/ 3</i></b></div>
+        </div>
+        <div class="guard">NO BALANCE = SCAN ONLY · NO TRADE</div>
+      </article>
+    </section>
+
+    <section class="market-grid">
+      <article class="module neural">
+        <div class="module-title"><span>04 / ROUTE NEURAL SHELL</span><em>LIVE QUOTE TOPOLOGY</em></div>
+        <div class="canvas-wrap"><canvas id="flowCanvas"></canvas><div class="core-label"><span>ARB CORE</span><b id="coreScore">—</b><small>EDGE SCORE</small></div></div>
+        <div class="signal-strip">
+          <div><span>QUOTE FRESHNESS</span><b id="freshness">—</b></div>
+          <div><span>ROUTE VENUES</span><b id="routeVenues">—</b></div>
+          <div><span>AUTO EXEC</span><b id="autoExecState">LOCKED</b></div>
+          <div><span>DISLOCATION</span><b id="dislocationScore">— / 100</b></div><div><span>SHORT MOMENTUM</span><b id="momentumShort">— bps</b></div><div><span>SCAN ENGINE</span><b class="green">ACTIVE</b></div>
+        </div>
+      </article>
+
+      <article class="module history-panel">
+        <div class="module-title"><span>05 / EDGE HISTORY</span><em>LAST 12 SCANS</em></div>
+        <canvas id="pnlCanvas" height="150"></canvas>
+        <div class="history-head"><span>TIME</span><span>NET $</span><span>EDGE</span><span>CONF</span><span>STATE</span></div>
+        <div id="historyBody" class="history-body"><div class="history-empty">Collecting live scans…</div></div>
+      </article>
+    </section>
+
+    <section class="module execution-console" id="strategy">
+      <div class="module-title"><span>06 / EXECUTION CONTROL</span><em>REAL MONEY GATED</em></div>
+      <div class="console-grid">
+        <div class="console-info">
+          <h2>Scanner always on. Trading only when funded.</h2>
+          <p>The terminal scans current Jupiter routes continuously on the server even if your bot wallet is empty or missing. Real trades remain impossible until the encrypted bot wallet is unlocked, funded, manually armed once, and a fresh executable quote passes all checks.</p>
+          <div class="status-cells">
+            <div><span>SCAN</span><b class="green">ALWAYS ON</b></div>
+            <div><span>LIVE TRADE LIMIT</span><b>≤ $1 PER CYCLE</b></div>
+            <div><span>ROUND TRIP</span><b>JITO BUNDLE</b></div>
+            <div><span>FAIL MODE</span><b>NO LOOSE FALLBACK</b></div>
+          </div>
+        </div>
+        <div class="console-actions">
+          <button id="scanBtn">↻ REQUOTE NOW</button><button id="notifyBtn">🔔 ENABLE OPPORTUNITY ALERTS</button>
+          <button id="startBtn" class="arm">▶ ARM AUTO TRADING</button>
+          <button id="stopBtn" class="stop" disabled>■ STOP BOT</button>
+          <div class="console-note">The $2 panel is a continuous executable-route model. Funded execution uses a stricter ≤$1 cycle, 1-bp slippage cap and a Jito all-or-nothing bundle.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ops-grid">
+      <article class="module" id="wallet">
+        <div class="module-title"><span>07 / FUNDING & VAULT</span><em>LOCAL ENCRYPTION</em></div>
+        <div id="createVault">
+          <label>ENCRYPTION PASSPHRASE · MIN 12 CHARACTERS</label>
+          <input id="vaultPass" type="password" autocomplete="new-password" placeholder="Strong unique passphrase">
+          <label>REPEAT PASSPHRASE</label>
+          <input id="vaultPass2" type="password" autocomplete="new-password" placeholder="Repeat passphrase">
+          <button id="createBtn">＋ CREATE BOT WALLET + ENCRYPTED BACKUP</button>
+        </div>
+        <div id="unlockVault" hidden>
+          <label>UNLOCK ENCRYPTED BOT WALLET</label>
+          <input id="unlockPass" type="password" autocomplete="current-password" placeholder="Vault passphrase">
+          <div class="button-row"><button id="unlockBtn">UNLOCK</button><button id="lockBtn">LOCK</button><button id="backupBtn">BACKUP</button></div>
+        </div>
+        <label class="filebutton" for="importFile">IMPORT ENCRYPTED BACKUP</label><input type="file" id="importFile" accept="application/json,.json" hidden>
+        <div class="divider"></div>
+        <label>BOT DEPOSIT ADDRESS · SOLANA MAINNET</label>
+        <div class="address" id="botAddress">Create your bot wallet above</div>
+        <button id="copyBtn">COPY DEPOSIT ADDRESS</button>
+        <button id="phantomBtn">CONNECT PHANTOM PUBLIC ADDRESS</button>
+        <div id="phantomAddr" class="tiny">Not connected. You can still fund by copying the bot address.</div>
+        <label>JUPITER API ACCESS</label>
+        <input id="jupKey" type="password" autocomplete="off" placeholder="Server configured · optional per-tab override">
+        <button id="refreshBtn">↻ REFRESH WALLET BALANCES</button>
+      </article>
+
+      <article class="module" id="withdraw">
+        <div class="module-title"><span>08 / WITHDRAW</span><em>TO PHANTOM</em></div>
+        <label>PHANTOM DESTINATION</label><input id="withdrawDest" placeholder="Solana public address" spellcheck="false" autocomplete="off">
+        <button id="usePhantom">USE CONNECTED PHANTOM</button>
+        <label>SOL AMOUNT</label><input id="withdrawAmount" type="number" step="0.000000001" min="0.00001" placeholder="0.001000000">
+        <label>TYPE WITHDRAW TO AUTHORIZE</label><input id="withdrawWord" placeholder="WITHDRAW" autocomplete="off">
+        <button id="withdrawBtn" class="arm">↗ WITHDRAW SOL</button>
+        <button id="recoverUsdc">↺ RECOVER STRANDED USDC → SOL</button>
+        <p class="fine">Stop auto trading first. Blockchain transfers cannot be reversed.</p>
+      </article>
+
+      <article class="module" id="events">
+        <div class="module-title"><span>09 / EXECUTION TAPE</span><button id="clearHistory" class="ghost">CLEAR</button></div>
+        <div id="activity" class="activity"><div class="history-empty">No execution events yet.</div></div>
+      </article>
+    </section>
+  </main>
+
+  <footer><span>ARB/LAB V6 · LIVE SOLANA SEARCHER</span><span id="sidebarStatus">DISARMED</span><span>JITO BUNDLE EXECUTION · EXPERIMENTAL · NO GUARANTEED RETURNS</span></footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/market.js" defer></script>
+<script src="https://unpkg.com/@solana/web3.js@1.98.4/lib/index.iife.min.js" defer></script>
+<script src="/app.js" defer></script>
+</body></html>
