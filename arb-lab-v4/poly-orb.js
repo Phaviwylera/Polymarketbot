@@ -2,7 +2,10 @@
 /* Procedural vector paths; no image/video assets. One complete loop = 40 seconds. */
 (() => {
   const TAU=Math.PI*2, LOOP=40000, N=224;
-  const palette=['#ed792d','#2d82d4'];
+  const palette=['#ffc45a','#65d5ff'];
+  let telemetry={snap:{},history:[]};
+  const finite=v=>v!==null&&v!==undefined&&Number.isFinite(Number(v));
+  const curve=(a,b,c,d,q)=>{const t=1-q;return t*t*t*a+3*t*t*q*b+3*t*q*q*c+q*q*q*d;};
   const nodes=Array.from({length:N},(_,i)=>{
     const y=1-2*(i+.5)/N, r=Math.sqrt(1-y*y), a=i*Math.PI*(3-Math.sqrt(5));
     return {x:Math.cos(a)*r,y,z:Math.sin(a)*r,color:i%5<2?0:1};
@@ -22,18 +25,63 @@
     const y=p.y*ct-z*st,depth=p.y*st+z*ct,scale=3.5/(3.5-depth*.22);
     return {x:x*scale,y:y*scale,z:depth,scale};
   }
-  function frame(ctx,w,h,phase){
+  function frame(ctx,w,h,phase,data=telemetry){
     phase=((phase%1)+1)%1;
-    const cx=w/2,cy=h*.49,R=Math.min(w*.30,h*.365),u=R/135;
-    ctx.clearRect(0,0,w,h);ctx.fillStyle='#fbfcfe';ctx.fillRect(0,0,w,h);
+    const cx=w*.72,cy=h*.51,R=Math.min(w*.235,h*.37),u=R/135;
+    ctx.clearRect(0,0,w,h);ctx.fillStyle='#080d0e';ctx.fillRect(0,0,w,h);
     const aura=ctx.createRadialGradient(cx,cy,R*.2,cx,cy,R*1.65);
-    aura.addColorStop(0,'rgba(225,235,248,.17)');aura.addColorStop(1,'rgba(255,255,255,0)');
+    aura.addColorStop(0,'rgba(101,213,255,.075)');aura.addColorStop(1,'rgba(8,13,14,0)');
     ctx.fillStyle=aura;ctx.fillRect(0,0,w,h);
+    // Telemetry cards -> signal spine -> spherical network. Pulses follow the actual curves.
+    const snap=data.snap||{},model=snap.model||{},history=data.history||[],compact=w<560;
+    const left=compact?7:12,cardW=w*(compact?.225:.18),spine=w*.365;
+    const top=24,bottom=h-48,step=(bottom-top)/6,cardH=step-5;
+    const cards=[
+      ['BTC LEAD',model.leadBps,'lead',1],['IMPULSE',model.impulse5Bps,'imp',1],
+      ['FAIR UP',model.fairUp,'fair',100],['UP ASK',snap.bbo?.up?.ask,'up',100],
+      ['DOWN ASK',snap.bbo?.down?.ask,'down',100],['PAIR EDGE',snap.pair?.lockedEdgePerShare,'pair',100]
+    ];
+    ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    ctx.font=(compact?'6':'7')+'px ui-monospace,monospace';ctx.fillStyle='#819089';
+    ctx.fillText('MARKET INPUTS',left,13);
+    ctx.strokeStyle='rgba(129,144,137,.045)';ctx.lineWidth=.6;
+    for(let i=1;i<8;i++){ctx.beginPath();ctx.moveTo(0,i*h/8);ctx.lineTo(w,i*h/8);ctx.stroke();}
+    cards.forEach(([label,value,key,mult],i)=>{
+      const y=top+i*step,sy=y+cardH/2,ty=cy+(i-2.5)*h*.045,start=left+cardW;
+      ctx.fillStyle='#0a1112';ctx.strokeStyle='rgba(129,144,137,.2)';ctx.lineWidth=.7;
+      ctx.fillRect(left,y,cardW,cardH);ctx.strokeRect(left,y,cardW,cardH);
+      ctx.fillStyle='#819089';ctx.font=(compact?'6':'7')+'px ui-monospace,monospace';ctx.fillText(label,left+5,y+11);
+      ctx.fillStyle=finite(value)?'#e9f2ed':'#819089';ctx.font=(compact?'9':'11')+'px ui-monospace,monospace';
+      ctx.fillText(finite(value)?(Number(value)*mult).toFixed(mult===100?1:2):'—',left+5,y+Math.min(cardH-5,25));
+      const vals=history.map(q=>key==='lead'?(q.spot&&q.twap?(q.spot/q.twap-1)*10000:null):key==='fair'?q.fairUp:key==='up'?q.upAsk:key==='down'?q.downAsk:key==='pair'?q.pairEdge:null).filter(finite).map(Number);
+      if(!compact&&vals.length>2){
+        const lo=Math.min(...vals),range=Math.max(.001,Math.max(...vals)-lo),sx=left+cardW*.46,sw=cardW*.5;
+        ctx.strokeStyle='rgba(101,213,255,.65)';ctx.beginPath();
+        vals.forEach((v,j)=>{const px=sx+j/(vals.length-1)*sw,py=y+cardH-5-(v-lo)/range*(cardH-12);j?ctx.lineTo(px,py):ctx.moveTo(px,py);});ctx.stroke();
+      }
+      const c1=start+(spine-start)*.45,c2=spine-(spine-start)*.25;
+      ctx.strokeStyle='rgba(103,243,162,.28)';ctx.lineWidth=.8;ctx.beginPath();ctx.moveTo(start,sy);ctx.bezierCurveTo(c1,sy,c2,ty,spine,ty);ctx.stroke();
+      const q=(phase*12+i/6)%1;
+      ctx.fillStyle='#67f3a2';ctx.beginPath();ctx.arc(curve(start,c1,c2,spine,q),curve(sy,sy,ty,ty,q),1.8,0,TAU);ctx.fill();
+    });
+    ctx.strokeStyle='rgba(101,213,255,.5)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(spine,top);ctx.lineTo(spine,bottom);ctx.stroke();
+    for(let i=0;i<13;i++){ctx.fillStyle=i%3?'#65d5ff':'#ffc45a';ctx.beginPath();ctx.arc(spine,top+i*(bottom-top)/12,i%3?1.2:2,0,TAU);ctx.fill();}
+    for(let i=0;i<4;i++){ctx.fillStyle='#ffc45a';ctx.beginPath();ctx.arc(spine,top+((phase*8+i/4)%1)*(bottom-top),2.4,0,TAU);ctx.fill();}
+    // Endpoints are projected sphere nodes, so the paths stay attached as it rotates.
+    for(let i=0;i<24;i++){
+      const p=project(nodes[(i*9)%N],phase),ex=cx+p.x*R,ey=cy+p.y*R,sy=cy+(i-11.5)*h*.009;
+      const c1=w*.46,c2=cx-R*.85;
+      ctx.strokeStyle='rgba(101,213,255,'+(.10+(i%3)*.025)+')';ctx.lineWidth=.65;
+      ctx.beginPath();ctx.moveTo(spine,sy);ctx.bezierCurveTo(c1,sy,c2,ey,ex,ey);ctx.stroke();
+      const q=(phase*(6+i%4*2)+i/24)%1;
+      ctx.fillStyle=i%4?'#65d5ff':'#67f3a2';ctx.globalAlpha=.8;
+      ctx.beginPath();ctx.arc(curve(spine,c1,c2,ex,q),curve(sy,sy,ey,ey,q),1.3,0,TAU);ctx.fill();ctx.globalAlpha=1;
+    }
     ctx.save();ctx.translate(cx,cy);
     // A restrained ground shadow gives the wire sphere a floating, three-dimensional silhouette.
     ctx.save();ctx.translate(0,R*1.18);ctx.scale(1,.12);
     const shadow=ctx.createRadialGradient(0,0,0,0,0,R*.76);
-    shadow.addColorStop(0,'rgba(54,85,123,.10)');shadow.addColorStop(1,'rgba(54,85,123,0)');
+    shadow.addColorStop(0,'rgba(0,0,0,.3)');shadow.addColorStop(1,'rgba(54,85,123,0)');
     ctx.fillStyle=shadow;ctx.beginPath();ctx.arc(0,0,R*.76,0,TAU);ctx.fill();ctx.restore();
     const particles=Array.from({length:64},(_,i)=>{
       const a=TAU*(i/64+phase*(i%3===0?-1:1));
@@ -50,8 +98,8 @@
     const edges=links.map(([a,b])=>({a:pts[a],b:pts[b],z:(pts[a].z+pts[b].z)/2})).sort((a,b)=>a.z-b.z);
     edges.forEach(({a,b,z})=>{
       const front=(z+1)/2;
-      ctx.strokeStyle=a.color===b.color?(a.color===0?'#dc9b72':'#7caddb'):'#9eb5c9';
-      ctx.globalAlpha=.08+.28*front;ctx.lineWidth=(.44+.23*front)*u;
+      ctx.strokeStyle=a.color===b.color?(a.color===0?'#ffc45a':'#65d5ff'):'#67f3a2';
+      ctx.globalAlpha=.14+.34*front;ctx.lineWidth=(.44+.23*front)*u;
       ctx.beginPath();ctx.moveTo(a.x*R,a.y*R);ctx.lineTo(b.x*R,b.y*R);ctx.stroke();
     });
     pts.sort((a,b)=>a.z-b.z).forEach((p,i)=>{
@@ -69,7 +117,7 @@
   }
   function mount(canvas){
     if(!canvas||canvas.dataset.networkOrb)return;
-    canvas.dataset.networkOrb='orange-blue-v1';
+    canvas.dataset.networkOrb='terminal-flow-v2';
     const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)return;
     const media=window.matchMedia('(prefers-reduced-motion: reduce)');
     const pause=document.getElementById('orbPause'),exportButton=document.getElementById('orbExport');
@@ -107,5 +155,5 @@
     if(window.IntersectionObserver)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;sync();}).observe(canvas);
     paint();sync();
   }
-  window.PolyNetworkOrb={mount,frame,project,nodes,links,loopMs:LOOP};
+  window.PolyNetworkOrb={mount,frame,project,nodes,links,loopMs:LOOP,setTelemetry(snap,history){telemetry={snap:snap||{},history:(history||[]).slice(-90)};}};
 })();

@@ -199,6 +199,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     window.PolyNetworkOrb?.mount($('orbCanvas'));
     const update=()=>{
       const snap=state.snap||{},m=snap.model||{},best=snap.candidate||{},pair=snap.pair||{};
+      window.PolyNetworkOrb?.setTelemetry(snap,state.history);
       set('orbMode',pair.directEligible?'PAIR LOCK':state.latestMode||'WAIT');
       set('orbSide',best.side||'—');
       set('orbEdge',num(best.net)==null?'—':((best.net>=0?'+':'')+(best.net*100).toFixed(2)+'c'));
