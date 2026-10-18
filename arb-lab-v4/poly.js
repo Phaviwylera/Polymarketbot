@@ -78,6 +78,7 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     renderCore(j.core);
     window.dispatchEvent(new CustomEvent('poly-edge-server-snapshot',{detail:j}));
     const m=j.market||{},b=j.bbo||{},model=j.model||{},c=j.candidate||{},paper=j.paper||{};
+    const priceDigits=j.asset==='XRP'?4:2;
     const now=Number(j.serverTime)||Date.now()/1000,left=Math.max(0,(Number(m.endTs)||now)-now);
     const feedLive=j.feed?.market==='live'&&j.feed?.clob==='live'&&j.feed?.rtds==='live';
     set('feedStatus',feedLive?'SERVER LIVE':'SYNCING',feedLive?'good':'warn');
@@ -122,11 +123,11 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     set('orbMatched',fmt(paper.matchedSets||0,2));
     set('orbResidual',residual,residualWarn?'warn':'good');
 
-    set('spotPrice',num(j.spot)==null?'$—':'$'+fmt(j.spot,2));
-    set('mobileDockBtc',num(j.spot)==null?'—':'$'+fmt(j.spot,0));
-    set('twapPrice',num(j.twap)==null?'$—':'$'+fmt(j.twap,2));
-    set('openRef',num(j.openRef)==null?'WAIT NEXT OPEN':'$'+fmt(j.openRef,2));
-    set('projectedTwap',num(model.projected)==null?'$—':'$'+fmt(model.projected,2));
+    set('spotPrice',num(j.spot)==null?'$—':'$'+fmt(j.spot,priceDigits));
+    set('mobileDockBtc',num(j.spot)==null?'—':'$'+fmt(j.spot,j.asset==='XRP'?4:j.asset==='SOL'?2:0));
+    set('twapPrice',num(j.twap)==null?'$—':'$'+fmt(j.twap,priceDigits));
+    set('openRef',num(j.openRef)==null?'WAIT NEXT OPEN':'$'+fmt(j.openRef,priceDigits));
+    set('projectedTwap',num(model.projected)==null?'$—':'$'+fmt(model.projected,priceDigits));
     set('modelDistance',bps((num(model.margin)||0)*10000),(num(model.margin)||0)>=0?'good':'bad');
     set('refState',j.openTrusted?'TRUSTED OPEN':'WAITING',j.openTrusted?'good':'warn');
     set('captureState',j.openTrusted?'TRUSTED':'WAIT',j.openTrusted?'good':'warn');
@@ -217,9 +218,9 @@ const POLY_ENGINE_BASE='https://poly-edge-paper-engine.onrender.com';
     if(data.length<2){requestAnimationFrame(drawChart);return}
     const L=30,R=w-6,T=7,B=h-9,t0=data[0].t,t1=data[data.length-1].t||t0+1,px=t=>L+(t-t0)/Math.max(1,t1-t0)*(R-L);
     const vals=data.flatMap(q=>[q.spot,q.twap].filter(valid));let lo=Math.min(...vals),hi=Math.max(...vals),mid=(lo+hi)/2;
-    const span=Math.max(4,(hi-lo)*1.35,mid*.000045);lo=mid-span/2;hi=mid+span/2;const py=p=>B-(p-lo)/Math.max(.01,hi-lo)*(B-T);
+    const span=Math.max((hi-lo)*1.35,mid*.000045);lo=mid-span/2;hi=mid+span/2;const py=p=>B-(p-lo)/Math.max(mid*1e-9,hi-lo)*(B-T);
     x.font='6px ui-monospace,monospace';x.textAlign='right';x.textBaseline='middle';
-    for(let i=0;i<4;i++){const yy=T+(B-T)*i/3,price=hi-(hi-lo)*i/3;x.strokeStyle='rgba(255,255,255,.05)';x.beginPath();x.moveTo(L,yy);x.lineTo(R,yy);x.stroke();x.fillStyle='rgba(135,150,143,.55)';x.fillText(price.toFixed(0),L-3,yy)}
+    for(let i=0;i<4;i++){const yy=T+(B-T)*i/3,price=hi-(hi-lo)*i/3;x.strokeStyle='rgba(255,255,255,.05)';x.beginPath();x.moveTo(L,yy);x.lineTo(R,yy);x.stroke();x.fillStyle='rgba(135,150,143,.55)';x.fillText(price.toFixed(mid<10?4:mid<1000?2:0),L-3,yy)}
     const line=(key,color,width)=>{const arr=data.filter(q=>valid(q[key]));if(arr.length<2)return;x.beginPath();arr.forEach((q,i)=>i?x.lineTo(px(q.t),py(q[key])):x.moveTo(px(q.t),py(q[key])));x.strokeStyle=color;x.lineWidth=width;x.lineJoin='round';x.stroke()};
     line('spot','#67f3a2',1.35);line('twap','#65d5ff',1.0);
     const open=[...data].reverse().map(q=>q.open).find(valid);if(valid(open)&&open>=lo&&open<=hi){x.setLineDash([3,3]);x.strokeStyle='rgba(255,196,90,.7)';x.beginPath();x.moveTo(L,py(open));x.lineTo(R,py(open));x.stroke();x.setLineDash([])}
