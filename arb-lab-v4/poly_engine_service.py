@@ -84,18 +84,8 @@ async def update_strategy_config(request:Request):
 
 @app.get("/api/poly/research/summary")
 async def get_research_summary():
-    return {
-        "status":"active",
-        "targetWallet":"0x31393e2f8333d4a6e2e31ca6424defe8b6cb9e2e",
-        "reconciliation":{"feeModel":"dynamic-price-decay","cryptoTakerFeePct":7.0,"makerFeePct":0.0,"latencyDecayHalfLifeSec":1.2},
-        "findings":[
-            "Taker-only copying in 5-minute markets suffers negative edge from ~7% dynamic price decay fees.",
-            "Passive first-leg maker quoting preserves edge, but requires strict queue consumption before filling.",
-            "Immediate complement hedging is vital: unhedged residual exposure past 15s triggers aggressive exit stop.",
-            "Hard session loss gate ($6.00 / 3%) prevents catastrophic drawdown during market shifts."
-        ],
-        "workstationMode":"PAPER_MULTI_ASSET_STAGE_PAIRING"
-    }
+    from poly_pair_shadow import wallet_research_summary
+    return wallet_research_summary()
 
 
 @app.on_event("shutdown")
@@ -113,3 +103,8 @@ async def v16_research():
 @app.get("/api/poly/research/v16/model")
 async def v16_model():
     return engine.research.artifact if engine.research and engine.research.artifact else {"model":None,"executionEnabled":False,"state":"collecting_data"}
+
+
+@app.get("/api/poly/research/pairs")
+async def pair_research():
+    return engine.research.pair_snapshot() if engine.research else {"mode":"SHADOW_ONLY","executionEnabled":False,"state":"starting"}

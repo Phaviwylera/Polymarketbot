@@ -7,6 +7,7 @@ from poly_external import ExchangeFeeds
 from poly_features import observe,walk,SCHEMA,POLICY,NAMES
 from poly_research_model import infer
 from poly_semantic import SemanticResearch
+from poly_pair_shadow import PairShadow,POLICY as PAIR_POLICY
 
 class ShadowLane:
     def __init__(self,asset,emit,artifact=lambda:None):
@@ -77,6 +78,7 @@ class ResearchHub:
         self.engines=engines;self.journal=DiagnosticLog(path,'RESEARCH');self.journal.MAX_CRITICAL_ROWS=100000;self.external=ExchangeFeeds();self.semantic=SemanticResearch(engines,self.journal)
         self.rows=deque(maxlen=12000);self.artifact=None;self.training={'state':'collecting_data','executionEnabled':False};self.errors=0;self.last_step=0.;self.tasks=[]
         self.lanes={a:ShadowLane(a,self.emit,lambda:self.artifact) for a in engines};self.child=None;self.directory=Path(path).parent
+        self.pairs={a:PairShadow(a,e.balance,self.emit) for a,e in engines.items()};self.pair_errors=Counter()
     def emit(self,kind,row):
         self.journal.append(kind,row=row)
         if kind=='SHADOW_OUTCOME':self.rows.append(row)
@@ -87,8 +89,14 @@ class ResearchHub:
             'spotTs':e.spot_ts,'twapTs':e.twap_ts,'feed':e.feed,'model':e._model() if e.open_trusted else None,'tradePrints':list(e.trade_prints),'stopLossUsd':e.inventory_stop}
     def step(self,now):
         for asset,e in self.engines.items():
-            obs,reason=observe(asset,self.context(e),self.external.data.get(asset,{}),now)
-            lane=self.lanes[asset];lane.reason=reason;lane.step(obs,now);e.research_state=lane.snapshot()
+            context=self.context(e)
+            obs,reason=observe(asset,context,self.external.data.get(asset,{}),now)
+            lane=self.lanes[asset];lane.reason=reason;lane.step(obs,now)
+            if not self.pair_errors[asset]:
+                try:self.pairs[asset].step(context,now)
+                except Exception as exc:
+                    self.pair_errors[asset]+=1;self.emit('PAIR_ERROR',{'asset':asset,'at':now,'error':type(exc).__name__,'executionEnabled':False})
+            e.research_state={**lane.snapshot(),'pairShadow':self.pairs[asset].snapshot()}
         self.last_step=now
     def _load_history(self):
         with sqlite3.connect(self.journal.path,timeout=1) as db:
@@ -139,8 +147,25 @@ class ResearchHub:
     async def close(self):
         for task in self.tasks:task.cancel()
         await asyncio.gather(*self.tasks,return_exceptions=True);self.tasks=[];await self.external.close();self.journal.close()
+    def pair_checkpoint(self):
+        return {a:p.export_state() for a,p in self.pairs.items()}
+    def restore_pairs(self,state):
+        for a,p in self.pairs.items():p.restore((state or {}).get(a),time.time())
+    def pair_snapshot(self):
+        assets={a:p.snapshot() for a,p in self.pairs.items()}
+        for a in assets:
+            if self.pair_errors[a]:assets[a].update(reason='shadow lane quarantined after error',state='error')
+        return {'policy':PAIR_POLICY,'mode':'SHADOW_ONLY','executionEnabled':False,'assets':assets,
+            'errors':dict(self.pair_errors),'conservativePnlUsd':sum(p.realized for p in self.pairs.values()),
+            'observedProxyPnlUsd':sum(p.observed for p in self.pairs.values()),'censoredLossBoundUsd':sum(p.censored for p in self.pairs.values()),
+            'unhedgedCostUsd':sum(p.active.get('entryCost',0.) for p in self.pairs.values() if p.active),
+            'comparison':'Non-overlapping virtual inventory strategy; no contribution to funded paper equity.'}
+    def quality(self):
+        counts=Counter(r.get('labelStatus','unknown') for r in self.rows)
+        return {'retainedLabelStatusCounts':dict(counts),'censoredFraction':counts['censored_loss']/max(1,len(self.rows)),
+            'note':'Censored labels use full entry-cost loss bounds; they are not observed exit losses. They remain in conservative training targets.'}
     def snapshot(self):
         return {'version':'16.1','schema':SCHEMA,'policy':POLICY,'mode':'SHADOW_ONLY','executionEnabled':False,'lastStepAt':self.last_step,
             'sampleAgeSec':time.time()-self.last_step if self.last_step else None,'errors':self.errors,'labelledSamples':len(self.rows),
             'independentRounds':len({r['roundStart'] for r in self.rows}),'training':self.training,'externalFeeds':self.external.snapshot(),
-            'semantic':self.semantic.snapshot(),'assets':{a:lane.snapshot() for a,lane in self.lanes.items()},'journal':self.journal.status()}
+            'semantic':self.semantic.snapshot(),'labelQuality':self.quality(),'pairShadow':self.pair_snapshot(),'assets':{a:lane.snapshot() for a,lane in self.lanes.items()},'journal':self.journal.status()}

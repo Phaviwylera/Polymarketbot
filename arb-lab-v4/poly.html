@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE V16.1 · All-Asset Paper Workstation</title><link rel="stylesheet" href="/poly.css?v=16.1"></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE V16.1 · All-Asset Paper Workstation</title><link rel="stylesheet" href="/poly.css?v=16.1-pairs"></head><body>
 <header class="topbar"><div class="brand"><span class="mark">PE</span><div><b>POLY / EDGE</b><small>V16.1 · All-asset paper workstation</small></div></div><div class="topActions"><button id="perfTearSheetBtn" title="View overall portfolio tear-sheet and metrics">Performance</button><button id="strategyTuningBtn" title="Tune risk and pair targets">Risk tuning</button><button id="researchIntelBtn" title="Inspect wallet research and fee patterns">Research</button><span id="feedStatus">CONNECTING</span><span id="clock">— IST</span><button id="downloadLogBtn">Download dev log ↗</button></div></header>
 <section class="portfolio"><div><span>TOTAL PAPER EQUITY</span><strong id="totalEquity">$200.00</strong></div><div><span>SESSION P&L</span><strong id="totalPnl">$0.00</strong></div><div><span>REALIZED / UNREALIZED</span><b id="totalSplit">$0.00 / $0.00</b></div><div><span>TRADES / MATCHED SETS</span><b id="totalTrades">0 / 0</b></div><div><span>PORTFOLIO RISK</span><b id="portfolioRisk">WARMING</b></div><div class="paperNote">$200 SIMULATED · NO REAL ORDERS<br>ETH $80 · BTC $60 · SOL $30 · XRP $30</div></section>
 <main><section id="assetGrid" class="assetGrid" aria-label="All crypto P&L and live graphs"></section>
@@ -11,8 +11,13 @@
 <section class="researchPanel" aria-label="V16 forward research">
 <div class="sectionHead"><span>Forward research · V16.1</span><b>Shadow only · No order promotion</b></div>
 <div class="researchMetrics"><div><small>LABELLED SAMPLES / UTC ROUNDS</small><b id="researchSamples">0 / 0</b></div><div><small>MODEL STATUS</small><b id="researchModel">Collecting data</b></div><div><small>RECORDED REALIZED P&L</small><b id="recordedPnl">—</b></div><div><small>EXTERNAL FEEDS</small><b id="researchFeeds">Connecting</b></div></div>
-<p id="researchSummary">Timestamped market features and 30-second shadow outcomes. Paper balances are separate.</p><p id="semanticStatus">Optional headline research is waiting for a configured model server.</p>
+<p id="researchSummary">Timestamped market features and 30-second shadow outcomes. Paper balances are separate.</p><p id="researchQuality">Checking observed outcomes and conservative loss bounds.</p><p id="semanticStatus">Optional headline research is waiting for a configured model server.</p>
 <small>Recorded P&L includes retained prior sessions. Probes can overlap and do not represent funded portfolio returns. LLM feature weight remains zero.</small>
+</section><section class="researchPanel" aria-label="Isolated two-sided inventory shadow strategy">
+<div class="sectionHead"><span>Two-sided inventory experiment</span><b>Shadow only · Separate virtual ledger</b></div>
+<p id="pairShadowTotal">Waiting for pair quotes and queue evidence.</p>
+<div class="researchMetrics"><div><small>BTC · 5 MIN</small><p id="BTCPairShadow">Collecting</p></div><div><small>ETH · 5 MIN</small><p id="ETHPairShadow">Collecting</p></div><div><small>SOL · 5 MIN</small><p id="SOLPairShadow">Collecting</p></div><div><small>XRP · 5 MIN</small><p id="XRPPairShadow">Collecting</p></div></div>
+<small>Displayed queue and sell-print fill proxy · sequential hedge latency · fees included · no rebates assumed. Censored bounds are separate from observed proxy results. This experiment cannot alter paper balances.</small>
 </section><section class="networkRow"><article class="network"><div class="sectionHead"><span>ALL-ASSET SIGNAL NETWORK</span><span id="networkStatus">FOUR PARALLEL INPUTS</span></div><div class="orbWrap"><canvas id="orbCanvas" aria-label="BTC, ETH, SOL and XRP signal paths flowing into a rotating network sphere"></canvas><div class="orbControls"><button id="orbPause" aria-label="Pause network orb animation">Pause</button><button id="orbExport">4K PNG ↗</button></div></div><footer>Packets follow connected nodes and fresh book observations. This illustrates telemetry, not real order routing.</footer></article><article class="ledger"><div class="sectionHead"><span>ALL-ASSET EXECUTION TAPE</span><div class="tapeFilters" id="tapeFilters"><button class="tapeBtn active" data-filter="ALL">ALL</button><button class="tapeBtn" data-filter="FILL">FILLS</button><button class="tapeBtn" data-filter="MERGE">MERGES</button><button class="tapeBtn" data-filter="QUOTE">QUOTES</button><button class="tapeBtn" data-filter="EXIT">EXITS</button></div><span>PAPER ONLY</span></div><div id="tradeTape" class="tradeTape">Waiting for paper events.</div><footer>Marketable momentum paper entries · fees included · one entry per asset per round · bounded loss controls</footer></article></section></main>
 
 <dialog id="tuningModal" class="modal">
@@ -51,9 +56,9 @@
           <small>Crypto: fee per share = 0.07 × price × (1 − price); 1.75¢ at a 50¢ price.</small>
         </div>
         <div class="intelItem">
-          <span>LATENCY HALF-LIFE</span>
-          <strong>1.2s</strong>
-          <small>Taker copy signals decay within 1200ms</small>
+          <span>FILL MODEL</span>
+          <strong>Queue + sell prints</strong>
+          <small>Hypothetical fills; this export does not establish maker status or a signal half-life.</small>
         </div>
         <div class="intelItem">
           <span>MAKER FEE</span>
@@ -63,16 +68,16 @@
         <div class="intelItem">
           <span>SESSION LOSS GATE</span>
           <strong>$6.00 (3%)</strong>
-          <small>Hard loss gate locks all 4 lanes immediately</small>
+          <small>New entries lock at the observed threshold; execution latency can cause overshoot.</small>
         </div>
       </div>
       <div class="intelSection">
         <b>EMPIRICAL EVIDENCE RULES</b>
         <ul>
-          <li>Passive first-leg maker quoting is strictly required to avoid excessive taker spread drag.</li>
+          <li>Two-sided inventory is a research hypothesis. Lifetime average costs are not executable arbitrage.</li>
           <li>Fills must require observed queue consumption or print trade-through evidence.</li>
           <li>Unhedged residual exposure past 15 seconds triggers aggressive exit to protect capital.</li>
-          <li>V15 runs a separate marketable momentum paper experiment. The earlier lag strategy remains disabled; model estimates are not calibrated probabilities.</li>
+          <li>The existing baseline runs a separate marketable momentum paper experiment. The earlier lag strategy remains disabled; model estimates are not calibrated probabilities.</li>
         </ul>
       </div>
     </div>
@@ -115,5 +120,5 @@
   </div>
 </dialog>
 
-<script src="/poly-orb.js?v=16.1" defer></script><script src="/poly.js?v=16.1-shadow" defer></script></body></html>
+<script src="/poly-orb.js?v=16.1" defer></script><script src="/poly.js?v=16.1-pairs-shadow" defer></script></body></html>
 

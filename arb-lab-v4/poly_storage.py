@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS poly_v161_events (
 CREATE INDEX IF NOT EXISTS poly_v161_events_kind_time ON poly_v161_events(kind,t DESC);
 """
 KINDS={'SHADOW_OUTCOME','MODEL_EVALUATION','TRADE_ATTRIBUTION','EXECUTION_REJECT',
-       'EXIT_ATTEMPT','EXIT_WAIT','MOMENTUM_ORDER','ENGINE_EVENT','DECISION_SAMPLE'}
+       'EXIT_ATTEMPT','EXIT_WAIT','MOMENTUM_ORDER','ENGINE_EVENT','DECISION_SAMPLE',
+       'PAIR_QUOTE','PAIR_CANCEL','PAIR_FIRST_FILL','PAIR_HEDGE_FILL','PAIR_EXIT_REQUEST','PAIR_OUTCOME','PAIR_ERROR'}
 def checkpoint(snapshot):
     keys={'asset','revision','serverTime','paper','market','bbo','openRef','openTrusted',
           'spot','twap','spotAgeSec','twapAgeSec','model','candidate','decision','mode','reasonCounts'}
@@ -55,7 +56,7 @@ class DurableStore:
     def snapshot(self,asset='BTC',include_assets=False):
         if self.active or not self.standby:return self.engine.snapshot(asset,include_assets=include_assets)
         result=copy.deepcopy(self.standby.get('assets',{}).get(asset,{}))
-        result.update(portfolio=copy.deepcopy(self.standby.get('portfolio',{})),infrastructure=self.status(),status='handover',revision='16.1-durable-research')
+        result.update(portfolio=copy.deepcopy(self.standby.get('portfolio',{})),infrastructure=self.status(),status='handover',revision='16.1-pair-shadow')
         if include_assets:result['assets']=copy.deepcopy(self.standby.get('assets',{}))
         return result
     async def start(self):
@@ -80,6 +81,8 @@ class DurableStore:
         # The DB is the release-independent authority; bootstrap from V16 only once.
         await self.engine.start()
         self.engine.start_research()
+        self.attach()  # Recovery cancellations and bounds also need durable evidence.
+        self.engine.research.restore_pairs((self.engine.durable_recovery or {}).get('pairResearchCheckpoint'))
         labels=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' ORDER BY t DESC LIMIT 12000")
         rows=[(json.loads(r['payload']) if isinstance(r['payload'],str) else r['payload'])['row'] for r in reversed(labels)]
         known={r['id'] for r in self.engine.research.rows}
@@ -102,13 +105,15 @@ class DurableStore:
         if not self.owner or not self.conn:return
         batch=list(self.queue);now=time.time()
         snap=checkpoint(self.engine.snapshot(include_assets=True))
+        research=self.engine.research
+        if research and hasattr(research,'pair_checkpoint'):snap['pairResearchCheckpoint']=research.pair_checkpoint()
         async with self.conn.transaction():
             if batch:await self.conn.executemany('INSERT INTO poly_v161_events(id,t,asset,kind,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING',batch)
             await self.conn.execute("INSERT INTO poly_v161_state VALUES('paper',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(snap,separators=(',',':'),allow_nan=False))
             artifact=self.engine.research.artifact if self.engine.research else None
             if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False))
             if self.commits and self.commits%300==0:
-                for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000)):
+                for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000)):
                     await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit)
         for _ in batch:self.queue.popleft()
         self.saved+=len(batch);self.last_commit=now;self.last_error=None;self.commits+=1

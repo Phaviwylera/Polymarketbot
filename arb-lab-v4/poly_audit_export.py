@@ -19,7 +19,7 @@ async def diagnostic_response(engine):
 def _build_archive(snapshot,journals):
     fd,path=tempfile.mkstemp(prefix='poly-audit-',suffix='.zip');os.close(fd)
     manifest={'format':'poly-edge-diagnostics-v16.1','exportedAt':time.time(),'paperOnly':True,
-              'coverage':'Accepted CLOB messages, one-second stale-message samples and rejection counts, accepted asset RTDS, quote/print decisions, engine events, one-second state. V16 RESEARCH.ndjson contains causal shadow samples, fills, outcomes and model evaluations. Not an exchange execution ledger.',
+              'coverage':'Accepted CLOB messages, one-second stale-message samples and rejection counts, accepted asset RTDS, quote/print decisions, engine events, one-second state. RESEARCH.ndjson contains causal directional probes, pair quote/queue/fill/hedge/exit outcomes and model evaluations. pair-shadow.json is isolated virtual performance; research-quality.json distinguishes conservative censored labels. Not an exchange execution ledger.',
               'limitations':['Per asset: 100000 raw messages, 20000 state observations and 20000 critical events retained separately; older rows may be pruned.','Ephemeral disk: restart/deploy can erase journals.','Feed gaps and unknown queue depth prevent exact execution reconstruction.','Maker fills require sell-aggressor volume during the quote lifetime; no partial fills are assumed.'], 'assets':{}}
     try:
         with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED,compresslevel=1) as z:
@@ -27,6 +27,9 @@ def _build_archive(snapshot,journals):
             parsed=json.loads(snapshot)
             z.writestr('execution-attribution.json',json.dumps(parsed.get('attribution',{}),indent=2))
             z.writestr('storage-status.json',json.dumps(parsed.get('infrastructure',{}),indent=2))
+            research=parsed.get('research') or {}
+            z.writestr('pair-shadow.json',json.dumps(research.get('pairShadow',{}),indent=2))
+            z.writestr('research-quality.json',json.dumps(research.get('labelQuality',{}),indent=2))
             for asset,journal,capture in journals:
                 with z.open(asset+'.ndjson','w') as output:manifest['assets'][asset]=journal.export(output,capture)
             z.writestr('manifest.json',json.dumps(manifest,indent=2))

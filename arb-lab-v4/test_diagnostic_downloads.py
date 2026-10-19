@@ -41,7 +41,8 @@ class DiagnosticDownloadTests(unittest.IsolatedAsyncioTestCase):
                 r=await client.get(ready['downloadUrl'])
                 self.assertEqual(r.status_code,200);self.assertIn('attachment;',r.headers['content-disposition'])
                 self.assertEqual(len(r.content),int(r.headers['content-length']))
-                z=zipfile.ZipFile(io.BytesIO(r.content));self.assertEqual(len(z.namelist()),9)
+                z=zipfile.ZipFile(io.BytesIO(r.content));self.assertEqual(len(z.namelist()),11)
+                self.assertIn('pair-shadow.json',z.namelist());self.assertIn('research-quality.json',z.namelist())
                 self.assertEqual(set(json.loads(z.read('manifest.json'))['assets']),set(self.engine.engines))
                 self.assertIn(first.headers['access-control-allow-origin'],('*','https://arb-lab-v4-unified.onrender.com'))
     async def test_unprepared_download_is_202_and_failure_can_be_retried(self):
