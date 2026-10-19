@@ -20,6 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from poly_portfolio import engine as poly_server_engine
+from poly_storage import DurableStore
+poly_storage=DurableStore(poly_server_engine)
 
 ROOT = Path(__file__).resolve().parent
 JUPITER = 'https://api.jup.ag/swap/v2'
@@ -127,8 +129,7 @@ async def start_poly_server_demo():
     if POLY_ENGINE_ROLE=='frontend':
         print('POLY_SERVER_DEMO_DISABLED role=frontend',flush=True)
         return
-    await poly_server_engine.start()
-    poly_server_engine.start_research()
+    await poly_storage.start()
     print(f'POLY_SERVER_DEMO_STARTED role={POLY_ENGINE_ROLE}',flush=True)
 
 @app.get('/health')
@@ -383,7 +384,7 @@ async def poly_demo_event(body:PolyDemoEvent):
 
 @app.get('/api/poly/demo/server')
 async def poly_demo_server(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=False):
-    return poly_server_engine.snapshot(asset,include_assets=all_assets)
+    return poly_storage.snapshot(asset,include_assets=all_assets)
 
 @app.post('/api/poly/demo/server/reset')
 async def poly_demo_server_reset():
@@ -698,7 +699,11 @@ async def get_research_summary():
 
 @app.on_event("shutdown")
 async def close_poly_research():
-    await poly_server_engine.shutdown()
+    await poly_storage.close()
+
+@app.get('/api/poly/operations')
+async def poly_operations():
+    return {'storage':poly_storage.status(),'attribution':poly_server_engine.attribution.summary(),'executionMode':'PAPER_ONLY'}
 
 @app.get("/api/poly/research/v16")
 async def poly_v16_research():

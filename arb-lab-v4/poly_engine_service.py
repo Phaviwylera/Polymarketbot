@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from poly_portfolio import engine
+from poly_storage import DurableStore
+storage=DurableStore(engine)
 
 app=FastAPI(title="POLY/EDGE Paper Engine",docs_url=None,redoc_url=None)
 app.add_middleware(
@@ -34,13 +36,12 @@ async def guard(request:Request,call_next):
 
 @app.on_event("startup")
 async def start_engine():
-    await engine.start()
-    engine.start_research()
+    await storage.start()
     print("POLY_DEDICATED_ENGINE_STARTED",flush=True)
 
 @app.get("/health")
 async def health():
-    snap=engine.snapshot()
+    snap=storage.snapshot()
     return {
         "status":"online",
         "role":"dedicated-paper-engine",
@@ -54,7 +55,7 @@ async def health():
 
 @app.get("/api/poly/demo/server")
 async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=False):
-    return engine.snapshot(asset,include_assets=all_assets)
+    return storage.snapshot(asset,include_assets=all_assets)
 
 @app.get("/api/poly/demo/diagnostics/status")
 async def diagnostic_status(prepare:bool=False,job:str|None=None):
@@ -76,6 +77,7 @@ async def get_performance_summary():
 
 @app.post("/api/poly/strategy/config")
 async def update_strategy_config(request:Request):
+    if storage.url and not storage.entry_allowed():return JSONResponse({'error':'Engine is in storage recovery or handover'},status_code=409)
     try:body=await request.json()
     except Exception:return JSONResponse({"error":"Invalid JSON"},status_code=400)
     return engine.update_config(body if isinstance(body,dict) else {})
@@ -98,7 +100,11 @@ async def get_research_summary():
 
 @app.on_event("shutdown")
 async def stop_engine():
-    await engine.shutdown()
+    await storage.close()
+
+@app.get('/api/poly/operations')
+async def operations():
+    return {'storage':storage.status(),'attribution':engine.attribution.summary(),'executionMode':'PAPER_ONLY'}
 
 @app.get("/api/poly/research/v16")
 async def v16_research():

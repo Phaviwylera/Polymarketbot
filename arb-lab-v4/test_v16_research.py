@@ -202,7 +202,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
                     p.start_research();await asyncio.sleep(1.8)
                     self.assertGreater(p.research.snapshot()['labelledSamples'],0)
                     for a,e in p.engines.items():self.assertEqual(e.paper,before[a])
-                    with patch.object(service,'engine',p),patch.object(audit,'downloads',manager):
+                    with patch.object(service,'engine',p),patch.object(service,'storage',__import__('poly_storage').DurableStore(p,url='')),patch.object(audit,'downloads',manager):
                         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service.app),base_url='https://test') as c:
                             snap=(await c.get('/api/poly/demo/server?all_assets=true')).json();self.assertEqual(snap['research']['mode'],'SHADOW_ONLY')
                             first=(await c.get('/api/poly/demo/diagnostics/status?prepare=true')).json();await manager.task

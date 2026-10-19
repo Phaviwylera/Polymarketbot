@@ -37,7 +37,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.0-shadow-research"
+ENGINE_REVISION="16.1-durable-research"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -861,6 +861,7 @@ class PolyServerDemo:
         self.entry_checks=[]
         def block(reason):
             self.entry_audit=reason;self.entry_checks.append({'scope':'entry','reason':reason});return None
+        if not self._operational_entry_allowed():return block('storage recovery or engine handover')
         if not INVENTORY_V12_ENABLED or not self.open_trusted or not self.market:return block('strategy, opening reference or market unavailable')
         if self.paper.get('status')!='running' or self.paper.get('position') or self.pending:return block('entry status, exposure or pending execution gate')
         if self._inventory_has_residual():return block('existing residual exposure')
@@ -1401,6 +1402,7 @@ class PolyServerDemo:
         p['pairSharesSum']=float(p.get('pairSharesSum') or 0)+shares
 
     async def _try_direct_pair(self,pair):
+        if not self._operational_entry_allowed():return False
         if self.pending or not self.paper or not self.market or not pair.get('directEligible'):return False
         p=self.paper;slug=self.market.get('slug')
         self._update_risk()
@@ -1540,7 +1542,19 @@ class PolyServerDemo:
     def _momentum_signal(self,m,allow_weak=False):
         return momentum_signal(self._momentum_context(m),list(self.book_history),allow_weak)
 
+    def _operational_entry_allowed(self):
+        guard=getattr(self,'operational_guard',None)
+        return guard is None or guard()
+
+    def _attribute_close(self,pos,price,fee,reason,latency_ms=0):
+        from poly_attribution import closed_trade
+        trade=closed_trade(self.asset,(self.paper or {}).get('sessionId'),pos,price,fee,reason,latency_ms=latency_ms)
+        observer=getattr(self,'trade_observer',None)
+        if observer:observer(trade)
+        self._diagnostic('TRADE_ATTRIBUTION',trade=trade)
+
     async def _momentum_enter(self,candidate):
+        if not self._operational_entry_allowed():return False
         p=self.paper;version=self.market_version;market=self.market
         if not p or self.pending or p.get('position') or self._inventory_has_residual():return False
         self._update_risk()
@@ -1557,6 +1571,7 @@ class PolyServerDemo:
         await asyncio.sleep(EXECUTION_LATENCY_SEC)
         try:
             if self.paper is not p or self.market_version!=version or self.market.get('slug')!=market['slug']:return False
+            if not self._operational_entry_allowed():return False
             self._update_risk()
             if time.time()-submitted>1.0:
                 p['nofills']+=1;p['postLatencyRejects']+=1
@@ -1574,6 +1589,8 @@ class PolyServerDemo:
             p.setdefault('tradedMarkets',[]).append(market['slug']);p['tradedMarkets']=p['tradedMarkets'][-32:]
             p['position']={'marketSlug':market['slug'],'side':side,'entryPrice':ask,'shares':shares,'entryFee':fee,
                            'entryNotional':shares*ask,'entryTotalCost':cost,'entryAt':time.time(),'mode':'MOMENTUM_SCALP',
+                           'requestedAsk':candidate['ask'],'entryLatencyMs':(time.time()-submitted)*1000,
+                           'entryFeatures':{k:fresh[k] for k in ('leadBps','impulse5Bps','bookMove','modelEdgeEstimate','entryFrictionUsd') if k in fresh},
                            'modelFair':fresh['fair'],'entryNetEdge':fresh['modelEdgeEstimate'],
                            'entryFrictionUsd':fresh['entryFrictionUsd'],'adverseMoveBudgetUsd':fresh['adverseMoveBudgetUsd'],
                            'stopLossUsd':fresh['stopLossUsd'],'takeProfitUsd':fresh['takeProfitUsd'],'maxHoldSec':fresh['maxHoldSec']}
@@ -1614,6 +1631,7 @@ class PolyServerDemo:
         await self._momentum_manage(m)
         p=self.paper;self._update_risk()
         if p.get('position'):self.momentum_decision='managing live paper position';return
+        if not self._operational_entry_allowed():self.momentum_decision='entries paused: storage recovery or handover';return
         if self._inventory_has_residual():self.momentum_decision='managing older paired-inventory exposure';return
         if p['status']!='running':self.momentum_decision=p.get('riskLockReason') or p['status'];return
         if now<p.get('cooldownUntil',0):self.momentum_decision='cooldown after loss';return
@@ -1625,6 +1643,7 @@ class PolyServerDemo:
             await self._momentum_enter(candidate)
 
     async def _enter(self,best,m,confidence):
+        if not self._operational_entry_allowed():return False
         if not self.lag_trading_enabled:return
         if self.pending or not self.paper or self.paper.get('position'):return
         p=self.paper;market=self.market
@@ -1766,6 +1785,7 @@ class PolyServerDemo:
                 p['riskLockReason']='session risk lock after losses'
             p['position']=None
             self._record('SELL',side=pos['side'],price=bid,pnl=pnl,detail=reason+f'; fee USD {fee:.5f}')
+            self._attribute_close(pos,bid,fee,reason,(time.time()-submitted)*1000)
             if pos.get('mode')=='MOMENTUM_SCALP':p['momentumCloses']=int(p.get('momentumCloses',0))+1
             return True
         finally:self.pending=False
@@ -1784,6 +1804,7 @@ class PolyServerDemo:
         p['position']=None
         self._record('SETTLE',side=pos['side'],price=1.0 if pos['side']==winner else 0.0,pnl=pnl,
                      detail=f'verified market resolution winner {winner}')
+        self._attribute_close(pos,1.0 if pos['side']==winner else 0.0,0.,'verified settlement')
 
     def _save(self):
         now=time.time()
@@ -1809,6 +1830,11 @@ class PolyServerDemo:
             if now-self.last_diagnostic_state>=1:
                 self.last_diagnostic_state=now
                 self._diagnostic('STATE',context=self._diagnostic_context())
+            if now-getattr(self,'last_decision_sample',0)>=15:
+                self.last_decision_sample=now
+                self._diagnostic('DECISION_SAMPLE',decision=self.momentum_decision,signal=self.momentum_candidate,
+                                 feed=dict(self.feed),bookAgeSec={k:now-v for k,v in self.book_observed.items()},
+                                 spotAgeSec=now-self.spot_ts,twapAgeSec=now-self.twap_ts,riskLoopLagSec=self.risk_loop_lag)
             self._update_risk()
             if now>=p['endsAt'] and not p.get('position') and not self._inventory_has_residual():
                 p['status']='complete';self._save();continue
@@ -1904,7 +1930,7 @@ class PolyServerDemo:
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
             'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
-            'bookHealth':{'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
+            'bookHealth':{'observedAt':dict(self.book_observed),'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
             'research':getattr(self,'research_state',{'mode':'SHADOW_ONLY','executionEnabled':False,'reason':'research starting'}),
             'diagnostics':self.diagnostics.status(),
             'history':list(self.visual_history)[-240:],

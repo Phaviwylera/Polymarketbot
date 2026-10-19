@@ -7,7 +7,7 @@ ASSETS=('BTC','ETH','SOL','XRP')
 class ExchangeFeeds:
     def __init__(self):
         self.data={a:{} for a in ASSETS};self.history={};self.flows={};self.ids={};self.tasks=[];self.rejected=0
-        self.status={'coinbase':'connecting','binance':'connecting'}
+        self.status={'coinbase':'connecting','binance':'connecting'};self.metrics={p:{'messages':0,'reconnects':0,'lastReceivedAt':None,'lastError':None} for p in self.status}
     @staticmethod
     def timestamp(v):
         if isinstance(v,str) and 'T' in v:return datetime.fromisoformat(v.replace('Z','+00:00')).timestamp()
@@ -48,22 +48,26 @@ class ExchangeFeeds:
                 'flow5':sum(q for t,q,total in flow)/max(sum(total for t,q,total in flow),1e-9)}
             if funding is not None and math.isfinite(funding):row.update(fundingRate=funding,fundingAt=ts,nextFundingAt=self.timestamp(m['T']))
             self.data[asset][provider]=row;self.status[provider]='live'
+            self.metrics[provider]['messages']+=1;self.metrics[provider]['lastReceivedAt']=now
         except (ValueError,KeyError,TypeError,OverflowError):self.rejected+=1
     async def worker(self,provider):
         backoff=1
         while True:
             try:
-                url='wss://ws-feed.exchange.coinbase.com' if provider=='coinbase' else 'wss://fstream.binance.com/stream?streams='+'/'.join(f'{a.lower()}usdt@{ch}' for a in ASSETS for ch in ('aggTrade','markPrice@1s'))
+                # Binance now routes aggregate trades and mark prices through /market.
+                url='wss://ws-feed.exchange.coinbase.com' if provider=='coinbase' else 'wss://fstream.binance.com/market/stream?streams='+'/'.join(f'{a.lower()}usdt@{ch}' for a in ASSETS for ch in ('aggTrade','markPrice@1s'))
                 async with websockets.connect(url,open_timeout=10,close_timeout=2,ping_interval=20,ping_timeout=20,max_queue=16) as ws:
                     if provider=='coinbase':await ws.send(json.dumps({'type':'subscribe','product_ids':[a+'-USD' for a in ASSETS],'channels':['ticker','heartbeat']}))
                     backoff=1
                     while True:
                         m=json.loads(await asyncio.wait_for(ws.recv(),30))
-                        if m.get('type')=='error':raise ValueError('subscription rejected')
+                        if m.get('type')=='error' or m.get('code'):raise ValueError('subscription rejected')
                         self.ingest(provider,m);await asyncio.sleep(0)
             except asyncio.CancelledError:raise
             except Exception as exc:
-                self.status[provider]='unavailable: '+type(exc).__name__;await asyncio.sleep(backoff);backoff=min(60,backoff*2)
+                self.status[provider]='unavailable: '+type(exc).__name__
+                self.metrics[provider]['reconnects']+=1;self.metrics[provider]['lastError']=type(exc).__name__
+                await asyncio.sleep(backoff);backoff=min(60,backoff*2)
     def start(self):
         if not self.tasks:self.tasks=[asyncio.create_task(self.worker(p),name='v16-'+p) for p in self.status]
     async def close(self):
@@ -71,4 +75,5 @@ class ExchangeFeeds:
         await asyncio.gather(*self.tasks,return_exceptions=True);self.tasks=[]
     def snapshot(self):
         now=time.time()
-        return {'providers':dict(self.status),'rejected':self.rejected,'assets':{a:{p:{**r,'ageSec':now-r['eventAt'],'fresh':0<=now-r['eventAt']<=5} for p,r in d.items()} for a,d in self.data.items()}}
+        statuses={p:('stale' if s=='live' and (not self.metrics[p]['lastReceivedAt'] or now-self.metrics[p]['lastReceivedAt']>5) else s) for p,s in self.status.items()}
+        return {'providers':statuses,'health':{p:{**m,'ageSec':now-m['lastReceivedAt'] if m['lastReceivedAt'] else None} for p,m in self.metrics.items()},'rejected':self.rejected,'assets':{a:{p:{**r,'ageSec':now-r['eventAt'],'fresh':0<=now-r['eventAt']<=5} for p,r in d.items()} for a,d in self.data.items()}}

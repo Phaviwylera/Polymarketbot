@@ -102,8 +102,9 @@ class ResearchHub:
     async def worker(self):
         try:
             rows,artifact=await asyncio.to_thread(self._load_history)
-            self.rows.extend(rows);self.artifact=artifact
-            if artifact:self.training=artifact['report']
+            known={r['id'] for r in self.rows};self.rows.extend(r for r in rows if r['id'] not in known)
+            if artifact and not self.artifact:self.artifact=artifact
+            if self.artifact:self.training=self.artifact['report']
         except Exception as exc:self.errors+=1;self.journal.append('RESEARCH_RESTORE_ERROR',error=type(exc).__name__)
         while True:
             try:self.step(time.time())
@@ -139,7 +140,7 @@ class ResearchHub:
         for task in self.tasks:task.cancel()
         await asyncio.gather(*self.tasks,return_exceptions=True);self.tasks=[];await self.external.close();self.journal.close()
     def snapshot(self):
-        return {'version':'16.0','schema':SCHEMA,'policy':POLICY,'mode':'SHADOW_ONLY','executionEnabled':False,'lastStepAt':self.last_step,
+        return {'version':'16.1','schema':SCHEMA,'policy':POLICY,'mode':'SHADOW_ONLY','executionEnabled':False,'lastStepAt':self.last_step,
             'sampleAgeSec':time.time()-self.last_step if self.last_step else None,'errors':self.errors,'labelledSamples':len(self.rows),
             'independentRounds':len({r['roundStart'] for r in self.rows}),'training':self.training,'externalFeeds':self.external.snapshot(),
             'semantic':self.semantic.snapshot(),'assets':{a:lane.snapshot() for a,lane in self.lanes.items()},'journal':self.journal.status()}

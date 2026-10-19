@@ -30,11 +30,14 @@ def merge_release_recovery(checkpoint,live):
 class PaperPortfolio:
     def __init__(self):
         self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False;self.research=None;self.ledger_history={a:{} for a in ASSETS}
+        from poly_attribution import Attribution
+        self.attribution=Attribution();self.storage=None;self.durable_recovery=None
         self.data_root=Path(os.environ.get('POLY_DATA_DIR','/tmp'));self.data_root.mkdir(parents=True,exist_ok=True)
         self.engines={asset:PolyServerDemo(asset=asset,balance=ALLOCATIONS[asset],
             state_file=self.data_root/f'poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
             risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
                 'stopLoss':min(.40,ALLOCATIONS[asset]*.005),'sessionLossLimit':ALLOCATIONS[asset]*.05}) for asset in ASSETS}
+        for lane in self.engines.values():lane.trade_observer=self.attribution.add
     def entry_allowed(self):
         equity=sum(e._equity() if e.paper else e.balance for e in self.engines.values())
         realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
@@ -67,8 +70,10 @@ class PaperPortfolio:
                 recovery=merge_release_recovery(recovery,private)
             except Exception:
                 raise ValueError('Private paper recovery checkpoint is invalid; refusing to reset the ledger') from None
+        if self.durable_recovery:recovery=merge_release_recovery(recovery,self.durable_recovery)
         checkpoint=copy.deepcopy(recovery)
         try:
+            if self.durable_recovery:raise RuntimeError('durable recovery is authoritative')
             async with httpx.AsyncClient(timeout=5) as client:
                 response=await client.get('https://poly-edge-paper-engine.onrender.com/api/poly/demo/server',params={'all_assets':'true'})
                 response.raise_for_status();live=response.json()
@@ -76,9 +81,15 @@ class PaperPortfolio:
         except Exception:pass
         self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
+        self.peak=max(self.peak,float((recovery.get('portfolio') or {}).get('peakEquity') or (recovery.get('portfolio') or {}).get('equity') or TOTAL_BALANCE))
+        if recovery.get('strategyConfig'):self.update_config(recovery['strategyConfig'])
         for asset,e in self.engines.items():
             saved=(recovery.get('assets') or {}).get(asset);p=(saved or {}).get('paper') or {}
-            if not e.state_file.exists() and p.get('version')==14 and p.get('startingBalance')==e.balance:
+            use_saved=not e.state_file.exists()
+            if self.durable_recovery and e.state_file.exists():
+                try:use_saved=float(json.loads(e.state_file.read_text()).get('serverTime',0))<float(saved.get('serverTime',recovery.get('serverTime',0)))
+                except (ValueError,OSError):use_saved=True
+            if use_saved and p.get('version')==14 and p.get('startingBalance')==e.balance:
                 e.state_file.write_text(json.dumps(saved))
         await asyncio.gather(*(e.start() for e in self.engines.values()))
         for source in (checkpoint,recovery):
@@ -104,6 +115,14 @@ class PaperPortfolio:
         if self.research is None:
             from poly_shadow import ResearchHub
             self.research=ResearchHub(self.engines,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
+
+    async def suspend(self):
+        if self.research is not None:await self.research.close();self.research=None
+        for e in self.engines.values():
+            for task in e.tasks:task.cancel()
+            await asyncio.gather(*e.tasks,return_exceptions=True)
+            e.pending=False;e._last_saved_at=0;e._save();e.started=False;e.tasks=[]
+        self.started=False
 
     async def shutdown(self):
         if self.research is not None:await self.research.close();self.research=None
@@ -139,13 +158,16 @@ class PaperPortfolio:
         prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values())
         prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values())
         selected['ledgerHistory']=copy.deepcopy(self.ledger_history)
+        selected['strategyConfig']=self.get_config()
+        selected['infrastructure']=self.storage.status() if self.storage else {'backend':'local_only','configured':False}
+        selected['attribution']=self.attribution.summary()
         selected['research']=self.research.snapshot() if self.research else {'mode':'SHADOW_ONLY','executionEnabled':False,'training':{'state':'starting'}}
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
             'priorSessionRealizedPnl':prior_pnl,'lifetimeRealizedPnl':prior_pnl+sum(l['realizedPnl'] for l in lanes),'lifetimeTrades':prior_trades+sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
-            'maxDrawdownUsd':self.max_drawdown,'allocations':dict(ALLOCATIONS),
+            'maxDrawdownUsd':self.max_drawdown,'peakEquity':self.peak,'allocations':dict(ALLOCATIONS),
             'assets':lanes,'scope':'crypto-updown-5m','strategy':'marketable fee-aware momentum paper experiment and executable complete sets; one entry per asset per round'}
         if include_assets:return {**selected,'assets':{a:{k:v for k,v in s.items() if k!='portfolio'} for a,s in snaps.items()}}
         return selected

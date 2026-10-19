@@ -8,7 +8,7 @@ class DiagnosticLog:
     MAX_CRITICAL_ROWS=20000
     MAX_EVENT_BYTES=262144
     def __init__(self,path,asset):
-        self.path=path;self.asset=asset;self.boot=uuid.uuid4().hex;self.db=None
+        self.path=path;self.asset=asset;self.boot=uuid.uuid4().hex;self.db=None;self.on_event=None
         self._captures={};self.last_commit=time.monotonic();self.pruned_by_priority={0:0,1:0,2:0}
         self.written=0;self.pruned=0;self.errors=0;self.last_error=None;self.pending=0
         try:
@@ -33,7 +33,8 @@ class DiagnosticLog:
                 event={'t':now,'kind':'OVERSIZE_EVENT','asset':self.asset,'bootId':self.boot,'originalKind':kind,'bytes':len(payload.encode())}
                 payload=json.dumps(event);self.errors+=1
             priority=0 if kind in {'CLOB_MESSAGE','RTDS_MESSAGE','REST_RESPONSE'} else 1 if kind=='STATE' else 2
-            self.db.execute('INSERT INTO events(t,payload,priority) VALUES (?,?,?)',(now,payload,priority));self.written+=1;self.pending+=1
+            cur=self.db.execute('INSERT INTO events(t,payload,priority) VALUES (?,?,?)',(now,payload,priority));self.written+=1;self.pending+=1
+            if self.on_event:self.on_event({**event,'journalSeq':cur.lastrowid})
             if self.written%1000==0:
                 for category,limit in ((0,self.MAX_ROWS),(1,self.MAX_STATE_ROWS),(2,self.MAX_CRITICAL_ROWS)):
                     cur=self.db.execute('DELETE FROM events WHERE priority=? AND seq <= (SELECT seq FROM events WHERE priority=? ORDER BY seq DESC LIMIT 1 OFFSET ?)',(category,category,limit))
