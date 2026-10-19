@@ -35,6 +35,7 @@ async def guard(request:Request,call_next):
 @app.on_event("startup")
 async def start_engine():
     await engine.start()
+    engine.start_research()
     print("POLY_DEDICATED_ENGINE_STARTED",flush=True)
 
 @app.get("/health")
@@ -94,3 +95,15 @@ async def get_research_summary():
         "workstationMode":"PAPER_MULTI_ASSET_STAGE_PAIRING"
     }
 
+
+@app.on_event("shutdown")
+async def stop_engine():
+    await engine.close()
+
+@app.get("/api/poly/research/v16")
+async def v16_research():
+    return engine.research.snapshot() if engine.research else {"mode":"SHADOW_ONLY","executionEnabled":False,"state":"starting"}
+
+@app.get("/api/poly/research/v16/model")
+async def v16_model():
+    return engine.research.artifact if engine.research and engine.research.artifact else {"model":None,"executionEnabled":False,"state":"collecting_data"}

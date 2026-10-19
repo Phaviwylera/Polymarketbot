@@ -37,7 +37,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="15.2-cost-aware-risk"
+ENGINE_REVISION="16.0-shadow-research"
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -193,18 +193,19 @@ class PolyServerDemo:
             data=json.loads(self.state_file.read_text(encoding='utf-8'))
             p=data.get('paper')
             now=time.time()
-            if not isinstance(p,dict) or int(p.get('version') or 0)!=14 or data.get('asset')!=self.asset or float(p.get('startingBalance') or 0)!=self.balance or float(p.get('endsAt') or 0)<=now:
+            if not isinstance(p,dict) or int(p.get('version') or 0)!=14 or data.get('asset')!=self.asset or float(p.get('startingBalance') or 0)!=self.balance:
                 return False
             # Strip calculated presentation fields before resuming mutable state.
             p=dict(p)
             p.pop('equity',None);p.pop('roiPct',None);p.pop('winRatePct',None)
+            if float(p.get('endsAt') or 0)<=now and not p.get('position'):p['status']='complete'
             self.paper=p
             self.reason_counts=defaultdict(int,data.get('reasonCounts') or {})
             self.visual_history.clear()
             for row in (data.get('history') or [])[-900:]:
                 if isinstance(row,dict): self.visual_history.append(row)
             m=data.get('market')
-            if isinstance(m,dict) and float(m.get('startTs') or 0)<=now<float(m.get('endTs') or 0):
+            if isinstance(m,dict) and (float(m.get('startTs') or 0)<=now<float(m.get('endTs') or 0) or (p.get('position') or {}).get('marketSlug')==m.get('slug')):
                 self.market=m
                 b=data.get('bbo')
                 if isinstance(b,dict): self.bbo=b
@@ -1904,6 +1905,7 @@ class PolyServerDemo:
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
             'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
             'bookHealth':{'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
+            'research':getattr(self,'research_state',{'mode':'SHADOW_ONLY','executionEnabled':False,'reason':'research starting'}),
             'diagnostics':self.diagnostics.status(),
             'history':list(self.visual_history)[-240:],
             'reasonCounts':dict(self.reason_counts),

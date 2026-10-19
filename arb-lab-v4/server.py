@@ -128,6 +128,7 @@ async def start_poly_server_demo():
         print('POLY_SERVER_DEMO_DISABLED role=frontend',flush=True)
         return
     await poly_server_engine.start()
+    poly_server_engine.start_research()
     print(f'POLY_SERVER_DEMO_STARTED role={POLY_ENGINE_ROLE}',flush=True)
 
 @app.get('/health')
@@ -694,3 +695,11 @@ async def get_research_summary():
         "workstationMode":"PAPER_MULTI_ASSET_STAGE_PAIRING"
     }
 
+
+@app.on_event("shutdown")
+async def close_poly_research():
+    await poly_server_engine.close()
+
+@app.get("/api/poly/research/v16")
+async def poly_v16_research():
+    return poly_server_engine.research.snapshot() if poly_server_engine.research else {"mode":"SHADOW_ONLY","executionEnabled":False,"state":"starting"}

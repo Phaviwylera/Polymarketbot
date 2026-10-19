@@ -3,17 +3,23 @@ import asyncio,json,os,tempfile,time,uuid,zipfile
 from pathlib import Path
 from fastapi.responses import StreamingResponse,JSONResponse
 
+def capture_journals(engine):
+    journals=[(asset,lane.diagnostics,lane.diagnostics.capture()) for asset,lane in engine.engines.items()]
+    research=getattr(engine,'research',None)
+    if research is not None:journals.append(('RESEARCH',research.journal,research.journal.capture()))
+    return journals
+
 async def diagnostic_response(engine):
     # Capture IDs/state quickly, then keep compression and journal reads off the feed loop.
     snapshot=json.dumps(engine.snapshot(include_assets=True),allow_nan=False,indent=2)
-    journals=[(asset,lane.diagnostics,lane.diagnostics.capture()) for asset,lane in engine.engines.items()]
+    journals=capture_journals(engine)
     path=await asyncio.to_thread(_build_archive,snapshot,journals)
     return _archive_response(path,delete_after=True)
 
 def _build_archive(snapshot,journals):
     fd,path=tempfile.mkstemp(prefix='poly-audit-',suffix='.zip');os.close(fd)
-    manifest={'format':'poly-edge-diagnostics-v14.1','exportedAt':time.time(),'paperOnly':True,
-              'coverage':'Accepted CLOB messages, one-second stale-message samples and rejection counts, accepted asset RTDS, quote/print decisions, engine events, one-second state. Not an exchange execution ledger.',
+    manifest={'format':'poly-edge-diagnostics-v16.0','exportedAt':time.time(),'paperOnly':True,
+              'coverage':'Accepted CLOB messages, one-second stale-message samples and rejection counts, accepted asset RTDS, quote/print decisions, engine events, one-second state. V16 RESEARCH.ndjson contains causal shadow samples, fills, outcomes and model evaluations. Not an exchange execution ledger.',
               'limitations':['Per asset: 100000 raw messages, 20000 state observations and 20000 critical events retained separately; older rows may be pruned.','Ephemeral disk: restart/deploy can erase journals.','Feed gaps and unknown queue depth prevent exact execution reconstruction.','Maker fills require sell-aggressor volume during the quote lifetime; no partial fills are assumed.'], 'assets':{}}
     try:
         with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED,compresslevel=1) as z:
@@ -61,7 +67,7 @@ class DiagnosticDownloads:
                     if item.get('path'):Path(item['path']).unlink(missing_ok=True)
                     del self.jobs[key]
             snapshot=json.dumps(engine.snapshot(include_assets=True),allow_nan=False,indent=2)
-            journals=[(asset,lane.diagnostics,lane.diagnostics.capture()) for asset,lane in engine.engines.items()]
+            journals=capture_journals(engine)
             item={'job':uuid.uuid4().hex,'state':'preparing','startedAt':now,'path':None}
             self.current=item;self.jobs[item['job']]=item
             self.task=asyncio.create_task(self._prepare(item,snapshot,journals))

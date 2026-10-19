@@ -1,6 +1,6 @@
 """Parallel, isolated crypto paper lanes. No signing keys or real order submission."""
 from __future__ import annotations
-import asyncio,time,json,copy
+import asyncio,time,json,copy,os
 from pathlib import Path
 import httpx
 from poly_server_demo import PolyServerDemo,ENGINE_REVISION
@@ -12,7 +12,7 @@ PORTFOLIO_LOSS_LIMIT=6.0
 
 def merge_release_recovery(checkpoint,live):
     """A later wall clock cannot roll a known session's ledger backwards."""
-    if not str(live.get('revision','')).startswith(('14.','15.')) or not live.get('assets'):return checkpoint
+    if not str(live.get('revision','')).startswith(('14.','15.','16.')) or not live.get('assets'):return checkpoint
     if float(live.get('serverTime') or 0)<float(checkpoint.get('serverTime') or 0):return checkpoint
     merged=copy.deepcopy(live)
     for asset,saved in (checkpoint.get('assets') or {}).items():
@@ -29,9 +29,10 @@ def merge_release_recovery(checkpoint,live):
 
 class PaperPortfolio:
     def __init__(self):
-        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False
+        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False;self.research=None;self.ledger_history={a:{} for a in ASSETS}
+        self.data_root=Path(os.environ.get('POLY_DATA_DIR','/tmp'));self.data_root.mkdir(parents=True,exist_ok=True)
         self.engines={asset:PolyServerDemo(asset=asset,balance=ALLOCATIONS[asset],
-            state_file=f'/tmp/poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
+            state_file=self.data_root/f'poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
             risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
                 'stopLoss':min(.40,ALLOCATIONS[asset]*.005),'sessionLossLimit':ALLOCATIONS[asset]*.05}) for asset in ASSETS}
     def entry_allowed(self):
@@ -45,11 +46,19 @@ class PaperPortfolio:
     async def start(self):
         if self.started:return
         self.started=True
+        parents={e.state_file.parent for e in self.engines.values()}
+        if len(parents)==1:self.data_root=next(iter(parents))
+        try:
+            saved_history=json.loads((self.data_root/'poly_recorded_history.json').read_text())
+            for asset,history in saved_history.items():
+                if asset in self.ledger_history:self.ledger_history[asset].update(history)
+        except (OSError,ValueError,TypeError):pass
         # Preserve the paper ledger across this release on ephemeral hosting.
         # Existing local state always wins; a prior live instance is preferred to the checkpoint.
         recovery={}
         try:recovery=json.loads(Path(__file__).with_name('paper_recovery.json').read_text())
         except Exception:pass
+        checkpoint=copy.deepcopy(recovery)
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 response=await client.get('https://poly-edge-paper-engine.onrender.com/api/poly/demo/server',params={'all_assets':'true'})
@@ -60,15 +69,46 @@ class PaperPortfolio:
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
         for asset,e in self.engines.items():
             saved=(recovery.get('assets') or {}).get(asset);p=(saved or {}).get('paper') or {}
-            if not e.state_file.exists() and p.get('version')==14 and p.get('startingBalance')==e.balance and float(p.get('endsAt') or 0)>time.time():
+            if not e.state_file.exists() and p.get('version')==14 and p.get('startingBalance')==e.balance:
                 e.state_file.write_text(json.dumps(saved))
         await asyncio.gather(*(e.start() for e in self.engines.values()))
+        for source in (checkpoint,recovery):
+            for asset,history in (source.get('ledgerHistory') or {}).items():
+                if asset in self.ledger_history:self.ledger_history[asset].update(copy.deepcopy(history))
+            for asset,saved in (source.get('assets') or {}).items():
+                if asset in self.engines:
+                    prior=saved.get('paper') or {};current=self.engines[asset].paper or {}
+                    if prior.get('sessionId')!=current.get('sessionId'):self._archive(asset,prior)
+        for asset,e in self.engines.items():self.ledger_history[asset].pop((e.paper or {}).get('sessionId'),None)
+        self._save_history()
+
+    def _save_history(self):
+        if not self.started:return
+        target=self.data_root/'poly_recorded_history.json';temporary=target.with_suffix('.tmp')
+        temporary.write_text(json.dumps(self.ledger_history,separators=(',',':')));temporary.replace(target)
+
+    def _archive(self,asset,paper):
+        if not paper.get('sessionId') or not (paper.get('trades') or paper.get('fees') or paper.get('realizedPnl')):return
+        self.ledger_history[asset][paper['sessionId']]={k:copy.deepcopy(paper.get(k)) for k in ('sessionId','startedAt','endsAt','startingBalance','realizedPnl','fees','trades','wins','losses','events')}
+
+    def start_research(self):
+        if self.research is None:
+            from poly_shadow import ResearchHub
+            self.research=ResearchHub(self.engines,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
+
+    async def close(self):
+        if self.research is not None:await self.research.close();self.research=None
+        for e in self.engines.values():
+            for task in e.tasks:task.cancel()
+            await asyncio.gather(*e.tasks,return_exceptions=True);e.close()
+
     async def reset(self):
         # Do not erase unresolved or pending simulated exposure.
         if any(e.pending or (e.paper and (e.paper.get('position') or e._inventory_has_residual())) for e in self.engines.values()):
             return {'status':'blocked','detail':'Resolve open paper exposure before resetting.'}
         self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.
-        for e in self.engines.values():e._new_session()
+        for asset,e in self.engines.items():self._archive(asset,e.paper or {});e._new_session()
+        self._save_history()
         return self.snapshot()
     def snapshot(self,asset='BTC',include_assets=False):
         if asset not in self.engines:raise ValueError('unsupported asset')
@@ -87,9 +127,14 @@ class PaperPortfolio:
                 'pairTarget':self.engines[a].pair_target,'residual':self.engines[a]._inventory_has_residual()})
         equity=sum(l['equity'] for l in lanes)
         selected=snaps[asset]
+        prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values())
+        prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values())
+        selected['ledgerHistory']=copy.deepcopy(self.ledger_history)
+        selected['research']=self.research.snapshot() if self.research else {'mode':'SHADOW_ONLY','executionEnabled':False,'training':{'state':'starting'}}
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
+            'priorSessionRealizedPnl':prior_pnl,'lifetimeRealizedPnl':prior_pnl+sum(l['realizedPnl'] for l in lanes),'lifetimeTrades':prior_trades+sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
             'maxDrawdownUsd':self.max_drawdown,'allocations':dict(ALLOCATIONS),
             'assets':lanes,'scope':'crypto-updown-5m','strategy':'marketable fee-aware momentum paper experiment and executable complete sets; one entry per asset per round'}
