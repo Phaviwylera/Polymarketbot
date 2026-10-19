@@ -84,7 +84,7 @@ class ResearchHub:
     def context(e):
         depth={s:{key:[{'price':p,'size':q} for p,q in sorted(levels.items(),reverse=key=='bids')[:8]] for key,levels in book.items()} for s,book in e._book_levels.items()}
         return {'market':e.market,'bbo':e.bbo,'depth':depth,'bookObservedAt':e.book_observed,'bookEventLagSec':e.book_event_lag,
-            'spotTs':e.spot_ts,'twapTs':e.twap_ts,'feed':e.feed,'model':e.latest_model,'tradePrints':list(e.trade_prints),'stopLossUsd':e.inventory_stop}
+            'spotTs':e.spot_ts,'twapTs':e.twap_ts,'feed':e.feed,'model':e._model() if e.open_trusted else None,'tradePrints':list(e.trade_prints),'stopLossUsd':e.inventory_stop}
     def step(self,now):
         for asset,e in self.engines.items():
             obs,reason=observe(asset,self.context(e),self.external.data.get(asset,{}),now)

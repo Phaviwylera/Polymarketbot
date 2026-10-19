@@ -1,4 +1,4 @@
-import copy,json,tempfile,time,unittest
+import copy,json,tempfile,time,unittest,base64,gzip,os
 from pathlib import Path
 from unittest.mock import AsyncMock,patch
 import httpx
@@ -37,12 +37,32 @@ class ReleaseRecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_newer_response_cannot_roll_same_session_ledger_backwards(self):
         checkpoint=json.loads(Path(__file__).with_name('paper_recovery.json').read_text())
         live=copy.deepcopy(checkpoint);live['serverTime']+=60
-        live['assets']['XRP']['paper'].update(trades=0,momentumFills=0,fees=0,cash=30,realizedPnl=0,status='running')
+        asset=max(checkpoint['assets'],key=lambda a:checkpoint['assets'][a]['paper'].get('trades',0))
+        live['assets'][asset]['paper'].update(trades=0,momentumFills=0,fees=0,cash=30,realizedPnl=0,status='running')
         merged=merge_release_recovery(checkpoint,live)
-        self.assertEqual(merged['assets']['XRP']['paper'],checkpoint['assets']['XRP']['paper'])
+        self.assertEqual(merged['assets'][asset]['paper'],checkpoint['assets'][asset]['paper'])
         # A subsequent actual close remains eligible even if it is profitable.
         live=copy.deepcopy(checkpoint);live['serverTime']+=60
         p=live['assets']['BTC']['paper'];p['trades']+=1;p['momentumFills']+=1;p['fees']+=.1;p['realizedPnl']+=.5
         self.assertEqual(merge_release_recovery(checkpoint,live)['assets']['BTC']['paper'],p)
+
+    async def test_private_service_checkpoint_recovers_without_public_file_changes(self):
+        private=json.loads(Path(__file__).with_name('paper_recovery.json').read_text());private['serverTime']+=60
+        for snapshot in private['assets'].values():snapshot['paper']['endsAt']=time.time()+600
+        private['assets']['BTC']['paper'].update(cash=57.75,realizedPnl=-2.25,trades=3)
+        encoded=base64.b64encode(gzip.compress(json.dumps(private).encode())).decode()
+        with tempfile.TemporaryDirectory() as tmp:
+            portfolio=PaperPortfolio()
+            for a,e in portfolio.engines.items():
+                e.state_file=Path(tmp)/(a+'.json')
+                async def restore(e=e):self.assertTrue(e._restore_saved())
+                e.start=restore
+            client=AsyncMock();client.get.side_effect=httpx.ConnectError('test handover unavailable');context=AsyncMock();context.__aenter__.return_value=client
+            try:
+                with patch.dict(os.environ,{'POLY_PAPER_CHECKPOINT_B64':encoded}),patch('poly_portfolio.httpx.AsyncClient',return_value=context):await portfolio.start()
+                self.assertAlmostEqual(portfolio.engines['BTC'].paper['cash'],57.75)
+                self.assertAlmostEqual(portfolio.engines['BTC'].paper['realizedPnl'],-2.25)
+            finally:
+                for e in portfolio.engines.values():e.close()
 
 if __name__=='__main__':unittest.main()

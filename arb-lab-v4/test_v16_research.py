@@ -174,4 +174,47 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
                 s=(await c.get('/api/poly/research/v16')).json();self.assertFalse(s['executionEnabled'])
                 model=(await c.get('/api/poly/research/v16/model')).json();self.assertIsNone(model['model'])
 
+    async def test_background_collection_and_native_download_leave_paper_unchanged(self):
+        import poly_audit_export as audit
+        import poly_engine_service as service
+        from poly_semantic import SemanticResearch
+        async def parked(*args):await asyncio.Event().wait()
+        with tempfile.TemporaryDirectory() as tmp:
+            p=PaperPortfolio();p.data_root=Path(tmp)
+            now=time.time()
+            for asset,e in p.engines.items():
+                e.state_file=Path(tmp)/(asset+'.json');e._save=lambda:None;e._new_session();c=context(now)
+                e.market={**c['market'],'slug':asset+'-test','startTs':now-60,'endTs':now+240};e.feed=c['feed'];e.spot=e.twap=100.;e.spot_ts=e.twap_ts=now
+                for side in ('up','down'):e._ingest_book(side,c['depth'][side])
+            before={a:copy.deepcopy(e.paper) for a,e in p.engines.items()};manager=audit.DiagnosticDownloads()
+            try:
+                with patch.object(ExchangeFeeds,'worker',parked),patch.object(SemanticResearch,'worker',parked):
+                    p.start_research();await asyncio.sleep(1.8)
+                    self.assertGreater(p.research.snapshot()['labelledSamples'],0)
+                    for a,e in p.engines.items():self.assertEqual(e.paper,before[a])
+                    with patch.object(service,'engine',p),patch.object(audit,'downloads',manager):
+                        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service.app),base_url='https://test') as c:
+                            snap=(await c.get('/api/poly/demo/server?all_assets=true')).json();self.assertEqual(snap['research']['mode'],'SHADOW_ONLY')
+                            first=(await c.get('/api/poly/demo/diagnostics/status?prepare=true')).json();await manager.task
+                            ready=(await c.get('/api/poly/demo/diagnostics/status',params={'job':first['job']})).json()
+                            response=await c.get(ready['downloadUrl']);self.assertEqual(response.status_code,200)
+                            with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                                records=[json.loads(line) for line in z.read('RESEARCH.ndjson').splitlines()]
+                                self.assertTrue(any(r['kind']=='SHADOW_OUTCOME' for r in records))
+            finally:
+                if manager.task:await manager.task
+                for item in manager.jobs.values():
+                    if item.get('path'):Path(item['path']).unlink(missing_ok=True)
+                await p.shutdown()
+
+    async def test_research_history_restores_true_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=str(Path(tmp)/'research.db');hub=ResearchHub({},path)
+            hub.emit('SHADOW_OUTCOME',dataset(1)[0]);hub.journal.close()
+            restored=ResearchHub({},path)
+            try:
+                rows,model=restored._load_history();self.assertEqual(len(rows),1);self.assertIsNone(model)
+                self.assertEqual(rows[0]['id'],dataset(1)[0]['id'])
+            finally:restored.journal.close()
+
 if __name__=='__main__':unittest.main()

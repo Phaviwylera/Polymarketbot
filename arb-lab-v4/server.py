@@ -698,7 +698,7 @@ async def get_research_summary():
 
 @app.on_event("shutdown")
 async def close_poly_research():
-    await poly_server_engine.close()
+    await poly_server_engine.shutdown()
 
 @app.get("/api/poly/research/v16")
 async def poly_v16_research():

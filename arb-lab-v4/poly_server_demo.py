@@ -205,7 +205,7 @@ class PolyServerDemo:
             for row in (data.get('history') or [])[-900:]:
                 if isinstance(row,dict): self.visual_history.append(row)
             m=data.get('market')
-            if isinstance(m,dict) and (float(m.get('startTs') or 0)<=now<float(m.get('endTs') or 0) or (p.get('position') or {}).get('marketSlug')==m.get('slug')):
+            if isinstance(m,dict) and (float(m.get('startTs') or 0)<=now<float(m.get('endTs') or 0) or (p.get('position') or {}).get('marketSlug')==m.get('slug') or ((p.get('inventory') or {}).get('marketSlug')==m.get('slug') and ((p.get('inventory') or {}).get('upLots') or (p.get('inventory') or {}).get('downLots')))):
                 self.market=m
                 b=data.get('bbo')
                 if isinstance(b,dict): self.bbo=b

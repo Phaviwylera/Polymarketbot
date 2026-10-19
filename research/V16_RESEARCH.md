@@ -11,7 +11,7 @@ V16 adds a shadow research pipeline alongside the existing funded-paper strategy
 - Automatic baseline training runs in a separate low-priority process every three minutes after 120 labels, with a 60-second timeout. A research candidate requires at least five rounds and ten rows in each partition. The stronger evidence screen requires 20 training, ten validation and ten final-test rounds, at least twenty selected filled test orders, positive net test P&L and a positive round-mean-minus-two-standard-errors screen. Passing this screen still cannot enable execution.
 - Evaluation permits one hypothetical selected order per asset per round, respects the funded notional cap including entry fees, and rejects entries with insufficient stop headroom after friction. It does not sum every overlapping probe into a fictitious funded portfolio. It is an offline policy screen, not a full joint-bankroll simulator.
 
-The target is the bounded scalp policy's executable return per share after entry and exit fees, not a five-minute win probability. The existing resolution probability remains a separate, uncalibrated model. Shadow probes continue when paper lanes are loss-locked or the paper session has ended.
+The target is the bounded scalp policy's executable return per share after entry and exit fees, not a five-minute win probability. The existing resolution probability remains a separate, uncalibrated model. Shadow probes continue when paper lanes are loss-locked or the paper session has ended. Oracle-derived model features are recomputed independently and masked until the opening reference is trusted.
 
 ## Optional semantic research
 
@@ -39,7 +39,7 @@ Read-only endpoints:
 
 Current-session P&L and recorded realized P&L across retained sessions are separate. Known prior losses are archived by session ID; a new session is not a recovered loss. Expired saved sessions retain cash, closed trades and identity instead of automatically being recapitalized at startup.
 
-`POLY_DATA_DIR` selects the directory for paper snapshots, recorded-session history, research journal and model files. Defaults to `/tmp`. Research labels are restored from the journal and models from portable JSON when the directory survives restart. The research journal retains 100,000 critical records; raw lane journals retain their existing independent limits. Render's current filesystem is ephemeral: persistence across replacement instances requires a mounted persistent directory or external storage. The bundled checkpoint and live-instance handover preserve known captured history, not unknown events lost before capture. Download development evidence before a deploy.
+`POLY_DATA_DIR` selects the directory for paper snapshots, recorded-session history, research journal and model files. Defaults to `/tmp`. Research labels are restored from the journal and models from portable JSON when the directory survives restart. The research journal retains 100,000 critical records; raw lane journals retain their existing independent limits. Render's current filesystem is ephemeral: persistence across replacement instances requires a mounted persistent directory or external storage. A compressed private release checkpoint can be supplied through the service-owned `POLY_PAPER_CHECKPOINT_B64` environment variable. It is not committed to GitHub. The existing legacy checkpoint, private release checkpoint and live-instance handover preserve known captured history, not unknown events lost before capture. Download development evidence before a deploy.
 
 ## Validation
 

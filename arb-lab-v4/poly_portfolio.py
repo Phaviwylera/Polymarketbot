@@ -1,6 +1,6 @@
 """Parallel, isolated crypto paper lanes. No signing keys or real order submission."""
 from __future__ import annotations
-import asyncio,time,json,copy,os
+import asyncio,time,json,copy,os,base64,gzip
 from pathlib import Path
 import httpx
 from poly_server_demo import PolyServerDemo,ENGINE_REVISION
@@ -58,6 +58,15 @@ class PaperPortfolio:
         recovery={}
         try:recovery=json.loads(Path(__file__).with_name('paper_recovery.json').read_text())
         except Exception:pass
+        # Private release recovery belongs in the owner's service configuration,
+        # never in a newly published source-code checkpoint.
+        encoded=os.environ.get('POLY_PAPER_CHECKPOINT_B64','')
+        if encoded:
+            try:
+                private=json.loads(gzip.decompress(base64.b64decode(encoded,validate=True)))
+                recovery=merge_release_recovery(recovery,private)
+            except Exception:
+                raise ValueError('Private paper recovery checkpoint is invalid; refusing to reset the ledger') from None
         checkpoint=copy.deepcopy(recovery)
         try:
             async with httpx.AsyncClient(timeout=5) as client:
@@ -96,7 +105,7 @@ class PaperPortfolio:
             from poly_shadow import ResearchHub
             self.research=ResearchHub(self.engines,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
 
-    async def close(self):
+    async def shutdown(self):
         if self.research is not None:await self.research.close();self.research=None
         for e in self.engines.values():
             for task in e.tasks:task.cancel()
