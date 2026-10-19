@@ -388,7 +388,13 @@ async def poly_demo_server(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_asse
 
 @app.post('/api/poly/demo/server/reset')
 async def poly_demo_server_reset():
-    return await poly_server_engine.reset()
+    if POLY_ENGINE_ROLE=='frontend':
+        return JSONResponse({'status':'blocked','detail':'Restart the dedicated paper engine, not the frontend service.'},status_code=409)
+    if poly_storage.url and not poly_storage.entry_allowed():
+        return JSONResponse({'status':'blocked','detail':'Engine is in storage recovery or handover.'},status_code=409)
+    result=await poly_server_engine.reset()
+    if result.get('status')=='blocked':return JSONResponse(result,status_code=409)
+    return poly_storage.snapshot(include_assets=True)
 
 @app.get('/api/poly/demo/latest')
 async def poly_demo_latest_report():

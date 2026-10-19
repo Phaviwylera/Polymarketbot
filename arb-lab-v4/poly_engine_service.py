@@ -57,6 +57,14 @@ async def health():
 async def snapshot(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=False):
     return storage.snapshot(asset,include_assets=all_assets)
 
+@app.post('/api/poly/demo/server/reset')
+async def restart_paper_session():
+    if storage.url and not storage.entry_allowed():
+        return JSONResponse({'status':'blocked','detail':'Engine is in storage recovery or handover. Retry when storage is healthy.'},status_code=409)
+    result=await engine.reset()
+    if result.get('status')=='blocked':return JSONResponse(result,status_code=409)
+    return storage.snapshot(include_assets=True)
+
 @app.get("/api/poly/demo/diagnostics/status")
 async def diagnostic_status(prepare:bool=False,job:str|None=None):
     from poly_audit_export import downloads
