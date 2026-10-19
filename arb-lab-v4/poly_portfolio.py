@@ -135,7 +135,7 @@ class PaperPortfolio:
                 'inventoryFills':p.get('inventoryFills',0),'matchedSets':p.get('matchedSets',0),
                 'pairTarget':self.engines[a].pair_target,'residual':self.engines[a]._inventory_has_residual()})
         equity=sum(l['equity'] for l in lanes)
-        selected=snaps[asset]
+        selected=dict(snaps[asset])
         prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values())
         prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values())
         selected['ledgerHistory']=copy.deepcopy(self.ledger_history)

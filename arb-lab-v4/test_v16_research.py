@@ -142,6 +142,16 @@ class ExternalSemanticTests(unittest.TestCase):
         self.assertFalse(parse_rss(rss,'https://example.test/rss',NOW+301))
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_portfolio_summary_keeps_selected_asset_research_separate(self):
+        p=PaperPortfolio()
+        try:
+            for e in p.engines.values():e.research_state={'counts':{'completed':7}}
+            p.research=SimpleNamespace(snapshot=lambda:{'labelledSamples':28})
+            result=p.snapshot(include_assets=True)
+            self.assertEqual(result['research']['labelledSamples'],28)
+            self.assertEqual(result['assets']['BTC']['research']['counts']['completed'],7)
+        finally:
+            for e in p.engines.values():e.close()
     async def test_expired_paper_restore_keeps_losses_and_does_not_recapitalize(self):
         with tempfile.TemporaryDirectory() as tmp:
             e=PolyServerDemo('BTC',60,state_file=Path(tmp)/'state.json');e._new_session();e.paper.update(cash=58.,realizedPnl=-2.,trades=2,endsAt=time.time()-1)
