@@ -4,6 +4,9 @@ import math
 # 43 closed paper trades (Oct 18-23): estimated edge below 0.05 lost money in both
 # chronological halves; edge correlated with net P&L (r=0.36). Raised from 0.02.
 MIN_EDGE=.05
+# Entries at 55c or more: 7 lifetime trades, all net losses (-$3.88). Payoff is asymmetric (at 63c the
+# upside is 37c, the downside 63c) and late flips gap through stops. Ceiling lowered from 0.65.
+MAX_ENTRY_PRICE=.55
 
 def fee(price):return round(.07*price*(1-price),5)
 
@@ -23,7 +26,7 @@ def signal(context,history,allow_weak_impulse=False):
     if ask is None or bid is None:return reject('bid or ask missing')
     ask=float(ask);bid=float(bid);shares=max(5.,float(market.get('minOrderSize') or 0))
     if not all(math.isfinite(x) for x in (ask,bid,shares)):return reject('nonfinite book value')
-    if not .08<=ask<=.65 or bid<=0 or bid>=ask:return reject('entry price outside liquid price band')
+    if not .08<=ask<MAX_ENTRY_PRICE or bid<=0 or bid>=ask:return reject('entry price outside 8c-55c band')
     if ask-bid>.020001:return reject('spread exceeds 2 cents')
     if min(float(b.get('askSize') or 0),float(b.get('bidSize') or 0))<shares:return reject('insufficient confirmed entry or exit depth')
     cap=min(3.25,float(c['startingBalance'])*.10,float(c['cash']))

@@ -84,3 +84,40 @@ class FundedMakerTests(unittest.TestCase):
         self.assertEqual(rows[0]['strategy'],'PAIR_INVENTORY');self.assertAlmostEqual(att.summary()['total']['netPnlUsd'],.12)
 
 if __name__=='__main__':unittest.main()
+
+class HardeningTests(unittest.IsolatedAsyncioTestCase):
+    async def test_momentum_rejects_entries_at_or_above_55c(self):
+        import poly_momentum
+        self.assertEqual(poly_momentum.MAX_ENTRY_PRICE,.55)
+        d=tempfile.TemporaryDirectory();self.addCleanup(d.cleanup)
+        e=mod.PolyServerDemo('ETH',80,state_file=Path(d.name)/'s.json',risk_profile={'momentumEnabled':True,'stopLoss':.40,'sessionLossLimit':4})
+        e._save=lambda:None;e._new_session();self.addCleanup(e.close);now=time.time()
+        e.market={'slug':'eth-t','upToken':'u','downToken':'d','startTs':now-60,'endTs':now+240,'acceptingOrders':True,'minOrderSize':5,'minTickSize':.01}
+        e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.open_trusted=True;e.spot_ts=e.twap_ts=now
+        e._ingest_book('up',{'bids':[{'price':'.56','size':'60'}],'asks':[{'price':'.57','size':'60'}]})
+        e._ingest_book('down',{'bids':[{'price':'.42','size':'60'}],'asks':[{'price':'.43','size':'60'}]})
+        e.book_history.append({'t':now-3,'marketSlug':'eth-t','up':.545,'down':.44,'upBid':.55})
+        c,reason=e._momentum_signal({'fairUp':.80,'fairDown':.20,'leadBps':1.,'impulse5Bps':.5})
+        self.assertIsNone(c);self.assertIn('55c',reason)
+    async def test_yield_stops_entries_and_engines(self):
+        import poly_portfolio
+        with tempfile.TemporaryDirectory() as d,patch.dict('os.environ',{'POLY_DATA_DIR':d}):
+            pf=poly_portfolio.PaperPortfolio()
+            for e in pf.engines.values():e._save=lambda:None;e._new_session()
+            self.assertTrue(pf.entry_allowed())
+            await pf.yield_to('newer-boot')
+            self.assertTrue(pf.yielded);self.assertFalse(pf.entry_allowed())
+            for e in pf.engines.values():self.assertEqual(e.tasks,[]);e.close()
+    async def test_research_rows_handed_over_without_duplicates(self):
+        import poly_portfolio,asyncio
+        from poly_external import ExchangeFeeds
+        from poly_semantic import SemanticResearch
+        async def parked(*a):await asyncio.Event().wait()
+        with tempfile.TemporaryDirectory() as d,patch.dict('os.environ',{'POLY_DATA_DIR':d}):
+            pf=poly_portfolio.PaperPortfolio()
+            pf.handover_rows=[{'id':'a','x':1},{'id':'b','x':2},{'id':'a','x':1},'junk']
+            with patch.object(ExchangeFeeds,'worker',parked),patch.object(SemanticResearch,'worker',parked):
+                pf.start_research()
+                self.assertEqual(sorted(r['id'] for r in pf.research.rows),['a','b'])
+                await pf.research.close()
+            for e in pf.engines.values():e.close()

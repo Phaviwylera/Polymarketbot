@@ -48,7 +48,9 @@ class PaperPortfolio:
             risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,alloc*.025),'firstPriceCap':.60,
                 'stopLoss':max(LANE_STOP_FLOOR,min(.40,alloc*.005)),'sessionLossLimit':max(1.5,alloc*.05)}) for lane,(coin,iv,alloc) in LANES.items()}
         from poly_edge import EdgeLab
-        self.edge=EdgeLab(self.engines);self.handover=None;self.handover_edge=None
+        import uuid
+        self.edge=EdgeLab(self.engines);self.handover=None;self.handover_edge=None;self.handover_rows=None
+        self.boot_id=uuid.uuid4().hex;self.boot_at=time.time();self.yielded=False
         self.lock_seen={};self.cycle_task=None;self.cycles=[]
         for lane in self.engines.values():
             lane.trade_observer=self._observe_trade;lane.edge=self.edge;lane.loss_budget=self.loss_budget
@@ -83,7 +85,10 @@ class PaperPortfolio:
                 try:
                     r=await client.get(handover+'/api/poly/edge/state');r.raise_for_status();self.handover_edge=r.json()
                 except Exception:pass
-            print('POLY_HANDOVER_PREFETCHED',bool(self.handover),bool(self.handover_edge),flush=True)
+                try:
+                    r=await client.get(handover+'/api/poly/research/rows',timeout=25);r.raise_for_status();self.handover_rows=r.json().get('rows')
+                except Exception:pass
+            print('POLY_HANDOVER_PREFETCHED',bool(self.handover),bool(self.handover_edge),len(self.handover_rows or []),flush=True)
         except Exception as exc:print('POLY_HANDOVER_UNAVAILABLE',type(exc).__name__,flush=True)
     def _seed_trade_record(self):
         """The session ledgers are the complete closed-trade history; rebuild the scorecard record from them."""
@@ -94,6 +99,13 @@ class PaperPortfolio:
                 self.edge.trades.clear()
                 self.edge.trades.extend({'pnl':float(r['pnl']),'at':float(r['exitAt'] or 0),'strategy':r['mode'],'asset':r['asset']} for r in rows if r['pnl'] is not None)
         except Exception as exc:print('POLY_TRADE_SEED_ERROR',type(exc).__name__,flush=True)
+    async def yield_to(self,successor):
+        """A newer instance now serves this URL: stop all trading and research here so the two never
+        manage the same handed-over positions. Without a database lock this is the only ownership signal."""
+        if self.yielded:return
+        self.yielded=True
+        print('POLY_YIELDED_TO_SUCCESSOR',successor,flush=True)
+        await self.suspend()
     # ---- autonomous session rollover: losses stay in the lifetime ledger ----
     def _exposed(self,e):
         return bool(e.pending or (e.paper and (e.paper.get('position') or e._inventory_has_residual())))
@@ -129,6 +141,7 @@ class PaperPortfolio:
             except asyncio.CancelledError:raise
             except Exception as exc:print('POLY_AUTO_CYCLE_ERROR',type(exc).__name__,flush=True)
     def entry_allowed(self):
+        if self.yielded:return False
         equity=sum(e._equity() if e.paper else e.balance for e in self.engines.values())
         realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
         self.peak=max(self.peak,equity);self.max_drawdown=max(self.max_drawdown,self.peak-equity)
@@ -225,7 +238,12 @@ class PaperPortfolio:
             # The V16 research schema and labels are defined on 5-minute rounds only.
             five={k:e for k,e in self.engines.items() if e.interval==300}
             self.research=ResearchHub(five,str(self.data_root/'poly_v16_research.sqlite3'))
-            self.research.on_pair_outcome=self.edge.on_pair_outcome;self.research.start()
+            self.research.on_pair_outcome=self.edge.on_pair_outcome
+            if self.handover_rows:
+                known={r.get('id') for r in self.research.rows}
+                for r in self.handover_rows:
+                    if isinstance(r,dict) and r.get('id') and r['id'] not in known:known.add(r['id']);self.research.rows.append(r)
+            self.research.start()
 
     async def _stop_aux(self):
         if self.cycle_task:self.cycle_task.cancel();await asyncio.gather(self.cycle_task,return_exceptions=True);self.cycle_task=None

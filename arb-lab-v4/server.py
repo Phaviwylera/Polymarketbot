@@ -150,6 +150,32 @@ async def _keepalive(url):
             try:await client.get(url+'/health')
             except Exception as exc:print('POLY_KEEPALIVE_FAILED',type(exc).__name__,flush=True)
 
+async def _successor_watch(url):
+    # During a zero-downtime deploy the old instance keeps running for a while. Once the public URL
+    # answers with a newer engine, this instance stops trading (without a DB lock to arbitrate).
+    async with httpx.AsyncClient(timeout=8) as client:
+        while not poly_server_engine.yielded:
+            await asyncio.sleep(5)
+            if poly_storage.url:return   # the Postgres advisory lock already arbitrates ownership
+            try:
+                h=(await client.get(url+'/health',headers={'Cache-Control':'no-store'})).json()
+                other,at=h.get('paperBootId'),float(h.get('paperBootAt') or 0)
+                if other and other!=poly_server_engine.boot_id and at>poly_server_engine.boot_at:
+                    await poly_server_engine.yield_to(other);return
+            except Exception:pass
+
+@app.on_event('startup')
+async def start_successor_watch():
+    url=(os.environ.get('POLY_KEEPALIVE_URL') or os.environ.get('POLY_HANDOVER_URL') or '').strip().rstrip('/')
+    if url and POLY_ENGINE_ROLE!='frontend':asyncio.create_task(_successor_watch(url))
+
+@app.get('/api/poly/research/rows')
+async def research_rows(limit:int=4000):
+    # Paper research labels for deploy handover; no credentials or account data.
+    r=poly_server_engine.research
+    rows=list(r.rows)[-max(1,min(12000,limit)):] if r else []
+    return JSONResponse({'rows':rows,'count':len(rows)},headers={'Cache-Control':'no-store'})
+
 @app.on_event('startup')
 async def start_keepalive():
     url=os.environ.get('POLY_KEEPALIVE_URL','').strip().rstrip('/')
@@ -157,7 +183,7 @@ async def start_keepalive():
         asyncio.create_task(_keepalive(url));print('POLY_KEEPALIVE_ENABLED',flush=True)
 
 @app.get('/health')
-async def health():return {'status':'online','chain':'solana-mainnet','wallet_private_keys_on_server':False,'jupiter_key_configured':bool(os.environ.get('JUPITER_API_KEY')),'jupiter_provider_selftest':jupiter_provider_selftest,'market_scan_selftest':market_scan_selftest,'market_live_status':market_live_status,'market_seq':market_seq,'jito_selftest':jito_selftest,'poly_selftest':poly_selftest,'poly_server_demo':poly_server_engine.feed,'poly_engine_role':POLY_ENGINE_ROLE,'atomic_bundle_execution':True}
+async def health():return {'status':'online','chain':'solana-mainnet','wallet_private_keys_on_server':False,'jupiter_key_configured':bool(os.environ.get('JUPITER_API_KEY')),'jupiter_provider_selftest':jupiter_provider_selftest,'market_scan_selftest':market_scan_selftest,'market_live_status':market_live_status,'market_seq':market_seq,'jito_selftest':jito_selftest,'poly_selftest':poly_selftest,'poly_server_demo':poly_server_engine.feed,'poly_engine_role':POLY_ENGINE_ROLE,'atomic_bundle_execution':True,'paperBootId':poly_server_engine.boot_id,'paperBootAt':poly_server_engine.boot_at,'paperYielded':poly_server_engine.yielded}
 
 async def external_call(method:str,url:str,*,headers=None,json_data=None,params=None):
     try:
