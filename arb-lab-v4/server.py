@@ -764,6 +764,10 @@ async def dev_report(format:str='text'):
     if format=='json':return JSONResponse(rep,headers={'Cache-Control':'no-store'})
     return PlainTextResponse(poly_devlog.text(rep),headers={'Cache-Control':'no-store'})
 
+@app.get('/api/poly/scout')
+async def poly_scout():
+    return JSONResponse(poly_server_engine.scout_snapshot(),headers={'Cache-Control':'no-store'})
+
 @app.get('/api/poly/dev/report.txt')
 async def dev_report_download():
     import poly_devlog

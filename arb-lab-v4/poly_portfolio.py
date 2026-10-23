@@ -69,6 +69,8 @@ class PaperPortfolio:
         for lane in self.engines.values():
             lane.trade_observer=self._observe_trade;lane.edge=self.edge;lane.loss_budget=self.loss_budget;lane.entry_pause=self.pause_reason
         self._restore_edge_file()
+        from poly_scout import AssetScout
+        self.scout=AssetScout(self.engines,ledger=self._lane_results)   # read-only market-finding agent
     def _observe_trade(self,row):
         self.attribution.add(row);self.edge.on_trade(row)
         try:
@@ -268,6 +270,8 @@ class PaperPortfolio:
         self.import_edge_archive()
         await asyncio.gather(*(e.start() for e in self.engines.values()))
         self.edge.start()
+        try:self.scout.start()          # isolated: a scout failure can never stop trading
+        except Exception as exc:print('POLY_SCOUT_START_ERROR',type(exc).__name__,flush=True)
         if self.cycle_task is None:self.cycle_task=asyncio.create_task(self.cycle_worker(),name='auto-cycle')
         for source in (checkpoint,recovery):
             for asset,history in (source.get('ledgerHistory') or {}).items():
@@ -309,7 +313,24 @@ class PaperPortfolio:
                     if isinstance(r,dict) and r.get('id') and r['id'] not in known:known.add(r['id']);self.research.rows.append(r)
             self.research.start()
 
+    def _lane_results(self):
+        """Closed-trade results per traded market since the fresh start, keyed like the scout ('btc-5m')."""
+        import poly_devlog
+        out={}
+        for r in poly_devlog.trade_rows(self):
+            if float(r.get('entryAt') or 0)<self.epoch or r.get('pnl') is None:continue
+            e=self.engines.get(r['asset']);k=f'{e.asset.lower()}-{e.tag}' if e else r['asset']
+            d=out.setdefault(k,{'trades':0,'netPnlUsd':0.});d['trades']+=1;d['netPnlUsd']=round(d['netPnlUsd']+float(r['pnl']),4)
+        return out
+    def scout_snapshot(self):
+        now=time.time();c=getattr(self,'_scout_cache',None)
+        if c is None or now-c[0]>30:
+            try:c=self._scout_cache=(now,self.scout.snapshot())
+            except Exception as exc:c=(now,{'mode':'READ_ONLY','error':type(exc).__name__})
+        return c[1]
     async def _stop_aux(self):
+        try:await self.scout.close()
+        except Exception:pass
         if self.cycle_task:self.cycle_task.cancel();await asyncio.gather(self.cycle_task,return_exceptions=True);self.cycle_task=None
         await self.edge.close()
     async def suspend(self):
@@ -368,6 +389,7 @@ class PaperPortfolio:
             try:cache=self._rules_cache=(now,poly_devlog.rules_scorecard(self))
             except Exception:cache=(now,None)
         selected['rulesScorecard']=cache[1]
+        selected['scout']=self.scout_snapshot()
         selected['edge']={**self.edge.snapshot(TOTAL_BALANCE),'autoCycle':{'enabled':AUTO_CYCLE,'laneLockCooldownSec':LANE_LOCK_COOLDOWN_SEC,'portfolioLockCooldownSec':PORTFOLIO_LOCK_COOLDOWN_SEC,'recent':self.cycles[-10:]}}
         selected['research']=self.research.snapshot() if self.research else {'mode':'SHADOW_ONLY','executionEnabled':False,'training':{'state':'starting'}}
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,

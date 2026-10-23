@@ -34,3 +34,12 @@ Momentum (the only strategy with positive out-of-sample evidence) is unchanged.
 The V17.1 resting maker sell is now off by default (`POLY_MAKER_EXIT=1` turns it back on). A resting
 order fills only at its own price, so it capped wins at the target (~$0.31), while taker target exits
 had averaged +$0.87 by selling into price jumps; the fee saved (~$0.08 per exit) did not cover that.
+
+## V17.3 — asset scout (read-only market-finding agent)
+
+`poly_scout.py` watches BTC/ETH/SOL/XRP/DOGE/BNB/HYPE up/down markets on 5m and 15m. It never trades.
+For each market it measures spread, depth, round-trip friction for a 5-share scalp, and how often the
+price moves enough in 30 s to cover friction plus the profit target. It compares that rate with the BTC/ETH 5m
+lanes already traded and marks a market CANDIDATE after 6+ rounds when it is at least 0.8× as lively,
+spread ≤ 2¢ and depth ≥ 5 shares. Results: `/api/poly/scout`, the ASSET SCOUT section of the developer
+report, and a `POLY_SCOUT` log line every 10 minutes. A lane is only added by a reviewed code change.

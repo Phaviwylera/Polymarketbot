@@ -50,7 +50,7 @@ def report(engine,now=None):
         'researchModel':{'state':training.get('state'),'samples':training.get('samples') or research.get('labelledSamples'),'rounds':research.get('independentRounds'),
                          'selectedModel':training.get('selectedModel'),'evidenceGatePassed':training.get('evidenceGatePassed'),'reason':training.get('reason')},
         'closedTrades':{'total':(att.get('total') or {}),'recent':[{k:t.get(k) for k in ('asset','strategy','side','entryPrice','exitPrice','netPnlUsd','holdSec','exitReason')} for t in (att.get('recent') or [])[:10]]},
-        'lanes':lanes,'rulesScorecard':snap.get('rulesScorecard') or rules_scorecard(engine)}
+        'lanes':lanes,'rulesScorecard':snap.get('rulesScorecard') or rules_scorecard(engine),'scout':snap.get('scout')}
 
 def _line(label,value):return f'{label:<22}{value}'
 
@@ -73,6 +73,12 @@ def text(rep):
         for k,label in (('sinceRulesLive','  since live'),('matchingCurrentRules','  backtest'),('allHistory','  all history')):
             v=rs[k];out.append(_line(label,f"trades {v['trades']}  win {v['winRatePct']}%  net ${v['netPnlUsd']}  avg {v['avgPnlUsd']}  avg win {v['avgWinUsd']}  avg loss {v['avgLossUsd']}  PF {v['profitFactor']}  mean-2SE {v['meanMinus2SE']}  maxDD ${v['maxDrawdownUsd']}"))
     for t in rep['closedTrades']['recent']:out.append('  '+json.dumps(t))
+    sc=rep.get('scout') or {}
+    if sc.get('markets'):
+        out+=['',f"ASSET SCOUT (read-only) · candidates {sc.get('candidates')} · benchmark 30s opportunity rate {sc.get('benchmarkOpportunityRate')} · errors {sc.get('errors')}",'  '+str(sc.get('rule'))]
+        for k,r in sorted(sc['markets'].items(),key=lambda kv:(kv[1].get('verdict')!='CANDIDATE',kv[1].get('verdict')!='ACTIVE',kv[0])):
+            extra=f"  trades {r.get('tradesSinceFreshStart')} net {r.get('netSinceFreshStart')}" if r.get('verdict')=='ACTIVE' else ''
+            out.append(f"  {k:<9} {str(r.get('verdict')):<11} opp {r.get('opportunityRate')}  x{r.get('vsBenchmark')}  spread {r.get('medianSpread')}  depth {r.get('medianDepth')}  friction {r.get('frictionPerShare')}  rounds {r.get('rounds')}{extra}")
     for asset,l in rep['lanes'].items():
         out+=['',f"--- {asset} · {l['status']} · {l['mode']} · {l['market']} ({l['secondsLeft']}s left) · equity ${l['equity']} realized {l['realizedPnl']} trades {l['trades']} ({l['wins']}W/{l['losses']}L)",
               _line('  decision',l['decision']),_line('  edge',json.dumps(l['edge'])),_line('  strategies',json.dumps(l['strategyDecisions'])),
