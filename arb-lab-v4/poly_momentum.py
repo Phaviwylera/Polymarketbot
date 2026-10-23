@@ -9,7 +9,10 @@ import math
 MIN_EDGE=.12
 # Entries at 55c or more: 7 lifetime trades, all net losses (-$3.88). Payoff is asymmetric (at 63c the
 # upside is 37c, the downside 63c) and late flips gap through stops. Ceiling lowered from 0.65.
-MAX_ENTRY_PRICE=.55
+# V17.1: lowered to 45c. Over 78 closed trades on active lanes, entries below 45c made money in both
+# chronological halves (older n=18 +$0.50/trade, newer n=13 +$0.52) while 45-55c lost in both
+# (older n=23 -$0.08, newer n=29 -$0.09): fees and spread consume the target near 50c.
+MAX_ENTRY_PRICE=.45
 
 def fee(price):return round(.07*price*(1-price),5)
 
@@ -29,7 +32,7 @@ def signal(context,history,allow_weak_impulse=False):
     if ask is None or bid is None:return reject('bid or ask missing')
     ask=float(ask);bid=float(bid);shares=max(5.,float(market.get('minOrderSize') or 0))
     if not all(math.isfinite(x) for x in (ask,bid,shares)):return reject('nonfinite book value')
-    if not .08<=ask<MAX_ENTRY_PRICE or bid<=0 or bid>=ask:return reject('entry price outside 8c-55c band')
+    if not .08<=ask<MAX_ENTRY_PRICE or bid<=0 or bid>=ask:return reject('entry price outside 8c-45c band')
     if ask-bid>.020001:return reject('spread exceeds 2 cents')
     if min(float(b.get('askSize') or 0),float(b.get('bidSize') or 0))<shares:return reject('insufficient confirmed entry or exit depth')
     cap=min(3.25,float(c['startingBalance'])*.10,float(c['cash']))

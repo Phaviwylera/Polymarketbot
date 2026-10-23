@@ -245,13 +245,11 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         import poly_momentum
         self.assertEqual(poly_momentum.MIN_EDGE,.12)
         e=self.e;now=time.time()
-        e._ingest_book('up',{'bids':[{'price':'.47','size':'60'}],'asks':[{'price':'.48','size':'60'}]})
-        e.book_history.clear();e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.455,'down':.53,'upBid':.46})
-        self.m['fairUp']=.55;self.m['fairDown']=.45   # edge = .55-.48-fees-.01 = 2.5c: passed the old 2c floor
+        e._ingest_book('up',{'bids':[{'price':'.40','size':'60'}],'asks':[{'price':'.41','size':'60'}]})
+        e.book_history.clear();e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.385,'down':.60,'upBid':.39})
+        self.m['fairUp']=.55;self.m['fairDown']=.45   # edge = .55-.41-fee-.01 = 11.3c: just under the 12c floor
         c,reason=e._momentum_signal(self.m);self.assertIsNone(c);self.assertIn('12-cent',reason)
-        self.m['fairUp']=.60;self.m['fairDown']=.40   # 7.6c: passed the 5c floor, fails the 12c floor
-        self.assertIsNone(e._momentum_signal(self.m)[0])
-        self.m['fairUp']=.70;self.m['fairDown']=.30
+        self.m['fairUp']=.60;self.m['fairDown']=.40   # 16.3c
         self.assertIsNotNone(e._momentum_signal(self.m)[0])
     async def test_unearned_record_keeps_minimum_size(self):
         self.record([.5,-.6]*15)
@@ -421,3 +419,31 @@ class PromoteRetryTests(unittest.IsolatedAsyncioTestCase):
         e=Eng();st=poly_storage.DurableStore.__new__(poly_storage.DurableStore);st.engine=e;st.conn=Conn(True)
         with self.assertRaises(asyncio.TimeoutError):await st.promote()
         self.assertEqual(e.starts,0)   # nothing started before every read succeeded
+
+class MakerExitTests(unittest.IsolatedAsyncioTestCase):
+    setUp=MomentumTuningTests.setUp
+    async def _open(self):
+        c,_=self.e._momentum_signal(self.m);self.assertIsNotNone(c)
+        self.assertTrue(await self.e._momentum_enter(self.e._momentum_size(c)))
+        return self.e.paper['position']
+    def _book(self,bid):
+        self.e._ingest_book('up',{'bids':[{'price':f'{bid:.2f}','size':'60'}],'asks':[{'price':f'{bid+.01:.2f}','size':'60'}]})
+    async def test_profit_target_fills_as_zero_fee_maker_only_on_trade_through(self):
+        pos=await self._open();e=self.e
+        price=e._maker_exit_price(pos)
+        self.assertGreaterEqual(pos['shares']*price-pos['entryTotalCost'],pos['takeProfitUsd']-1e-9)
+        await e._momentum_manage(self.m);self.assertIn('makerExit',pos)       # posted
+        pos['makerExit']['postedAt']-=1
+        self._book(price);await e._momentum_manage(self.m)                    # bid AT our price: no fill (queue)
+        self.assertIsNotNone(e.paper['position'])
+        fees=e.paper['fees'];self._book(price+.01);await e._momentum_manage(self.m)   # traded through
+        self.assertIsNone(e.paper['position']);self.assertEqual(e.paper['fees'],fees)
+        self.assertAlmostEqual(e.paper['realizedPnl'],pos['shares']*price-pos['entryTotalCost'],places=6)
+        self.assertIn('maker profit target',e.paper['events'][0]['detail'])
+    async def test_stop_still_exits_as_taker(self):
+        pos=await self._open();e=self.e
+        await e._momentum_manage(self.m);self._book(.20);await e._momentum_manage(self.m)
+        self.assertIsNone(e.paper['position']);self.assertIn('loss stop',e.paper['events'][0]['detail'])
+    async def test_switch_off_restores_taker_target(self):
+        with patch.object(mod,'MAKER_EXIT',False):
+            pos=await self._open();await self.e._momentum_manage(self.m);self.assertNotIn('makerExit',pos)

@@ -86,19 +86,19 @@ class FundedMakerTests(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 class HardeningTests(unittest.IsolatedAsyncioTestCase):
-    async def test_momentum_rejects_entries_at_or_above_55c(self):
+    async def test_momentum_rejects_entries_at_or_above_45c(self):
         import poly_momentum
-        self.assertEqual(poly_momentum.MAX_ENTRY_PRICE,.55)
+        self.assertEqual(poly_momentum.MAX_ENTRY_PRICE,.45)
         d=tempfile.TemporaryDirectory();self.addCleanup(d.cleanup)
         e=mod.PolyServerDemo('ETH',80,state_file=Path(d.name)/'s.json',risk_profile={'momentumEnabled':True,'stopLoss':.40,'sessionLossLimit':4})
         e._save=lambda:None;e._new_session();self.addCleanup(e.close);now=time.time()
         e.market={'slug':'eth-t','upToken':'u','downToken':'d','startTs':now-60,'endTs':now+240,'acceptingOrders':True,'minOrderSize':5,'minTickSize':.01}
         e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.open_trusted=True;e.spot_ts=e.twap_ts=now
-        e._ingest_book('up',{'bids':[{'price':'.56','size':'60'}],'asks':[{'price':'.57','size':'60'}]})
-        e._ingest_book('down',{'bids':[{'price':'.42','size':'60'}],'asks':[{'price':'.43','size':'60'}]})
-        e.book_history.append({'t':now-3,'marketSlug':'eth-t','up':.545,'down':.44,'upBid':.55})
+        e._ingest_book('up',{'bids':[{'price':'.46','size':'60'}],'asks':[{'price':'.47','size':'60'}]})
+        e._ingest_book('down',{'bids':[{'price':'.52','size':'60'}],'asks':[{'price':'.53','size':'60'}]})
+        e.book_history.append({'t':now-3,'marketSlug':'eth-t','up':.445,'down':.54,'upBid':.45})
         c,reason=e._momentum_signal({'fairUp':.80,'fairDown':.20,'leadBps':1.,'impulse5Bps':.5})
-        self.assertIsNone(c);self.assertIn('55c',reason)
+        self.assertIsNone(c);self.assertIn('45c',reason)
     async def test_yield_stops_entries_and_engines(self):
         import poly_portfolio
         with tempfile.TemporaryDirectory() as d,patch.dict('os.environ',{'POLY_DATA_DIR':d}):

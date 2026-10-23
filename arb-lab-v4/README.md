@@ -20,3 +20,11 @@ variant uses `p = price + trust × (model − price)`, with `trust` learned onli
 (ridge-shrunk toward 0 and cut by one standard error). It starts with an empty record and must pass the
 normal promotion gate on future bets. `modelTrust` is shown in `/api/poly/dev/report.txt`.
 Momentum (the only strategy with positive out-of-sample evidence) is unchanged.
+
+## V17.1 — 45¢ entry ceiling and maker profit-target exits
+
+* Momentum entries are capped at 45¢ (was 55¢). On 78 closed trades, sub-45¢ entries made money in both
+  chronological halves (+$0.50 and +$0.52 per trade) while 45–55¢ lost in both (−$0.08, −$0.09).
+* The profit target now rests as a paper maker sell (zero fee) at the lowest tick that meets the target.
+  Paper fills only when the best bid trades through that price (bid ≥ price + 1 tick, book ≤ 3 s old).
+  Stops, direction-reversal and time exits still sell as takers. Set `POLY_MAKER_EXIT=0` to switch off.

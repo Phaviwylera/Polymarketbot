@@ -38,8 +38,13 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="17.0-trust"
+ENGINE_REVISION="17.1-maker-exit"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
+import os as _os
+# V17.1: the profit target rests as a paper maker sell (zero fee) instead of a taker exit.
+# Paper fill rule is conservative: only when the best bid trades THROUGH the resting price
+# (bid >= price + 1 tick) on a book no older than 3s, at least one latency after posting.
+MAKER_EXIT=_os.getenv("POLY_MAKER_EXIT","1")!="0"
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
 INVENTORY_MAX_INITIAL_GAP=0.0
@@ -1626,6 +1631,7 @@ class PolyServerDemo:
         if not pos or pos.get('mode') not in SCALP_MODES or self.pending:return
         if not self.market or pos['marketSlug']!=self.market['slug']:return
         side=pos['side'].lower();bid=self.bbo[side].get('bid');now=time.time();age=now-pos['entryAt']
+        if self._maker_exit_step(pos,now):return
         reason=pos.get('exitRequestedReason')
         if p.get('status')!='running' or now>=p['endsAt']:reason='momentum risk/session exit'
         elif age>=pos['maxHoldSec']:reason='momentum maximum hold'
@@ -1876,20 +1882,47 @@ class PolyServerDemo:
             if not fill:
                 p['nofills']+=1;self._record('NOFILL',side=pos['side'],detail='exit depth moved during latency');return False
             self._diagnostic('EXIT_ATTEMPT',filled=True,reason=reason,elapsedSec=time.time()-submitted,requestedAt=pos.get('exitRequestedAt'),context=self._diagnostic_context())
-            fee=pos['shares']*fill['feePerShare'];proceeds=pos['shares']*fill['vwap']-fee;pnl=proceeds-pos['entryTotalCost']
-            p['cash']+=proceeds;p['fees']+=fee;p['realizedPnl']+=pnl;p['trades']+=1
-            if pnl>=0:p['wins']+=1;p['consecutiveLosses']=0
-            else:
-                p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
-                p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
-            if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
-                p['status']='risk_locked';p['riskLockReason']='session risk lock after losses'
-            p['position']=None
-            self._record('SELL',side=pos['side'],price=fill['vwap'],pnl=pnl,detail=reason+f'; VWAP {fill["vwap"]:.3f}; fee USD {fee:.5f}')
-            self._attribute_close(pos,fill['vwap'],fee,reason,(time.time()-submitted)*1000)
-            if pos.get('mode')=='MOMENTUM_SCALP':p['momentumCloses']=int(p.get('momentumCloses',0))+1
+            fee=pos['shares']*fill['feePerShare']
+            self._close_scalp(pos,fill['vwap'],fee,reason+f'; VWAP {fill["vwap"]:.3f}; fee USD {fee:.5f}',reason,(time.time()-submitted)*1000)
             return True
         finally:self.pending=False
+
+    def _close_scalp(self,pos,price,fee,detail,reason,latency_ms):
+        p=self.paper;proceeds=pos['shares']*price-fee;pnl=proceeds-pos['entryTotalCost']
+        p['cash']+=proceeds;p['fees']+=fee;p['realizedPnl']+=pnl;p['trades']+=1
+        if pnl>=0:p['wins']+=1;p['consecutiveLosses']=0
+        else:
+            p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
+            p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
+        if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
+            p['status']='risk_locked';p['riskLockReason']='session risk lock after losses'
+        p['position']=None
+        self._record('SELL',side=pos['side'],price=price,pnl=pnl,detail=detail)
+        self._attribute_close(pos,price,fee,reason,latency_ms)
+        if pos.get('mode')=='MOMENTUM_SCALP':p['momentumCloses']=int(p.get('momentumCloses',0))+1
+        return pnl
+
+    def _maker_exit_price(self,pos):
+        """Lowest tick price at which a zero-fee sell of the whole position meets the profit target."""
+        tick=max(.001,float((self.market or {}).get('minTickSize') or .01))
+        need=(pos['entryTotalCost']+pos['takeProfitUsd'])/pos['shares']
+        return round(min(.99,math.ceil(need/tick-1e-9)*tick),6)
+
+    def _maker_exit_step(self,pos,now):
+        """Post / fill the resting profit-target sell. Returns True when the position closed."""
+        if not MAKER_EXIT or not pos.get('takeProfitUsd') or pos.get('exitRequestedReason'):return False
+        key=pos['side'].lower();tick=max(.001,float((self.market or {}).get('minTickSize') or .01))
+        order=pos.get('makerExit')
+        if order is None:
+            order=pos['makerExit']={'price':self._maker_exit_price(pos),'postedAt':now}
+            self._record('ORDER',side=pos['side'],price=order['price'],detail=f'paper maker sell (profit target) {pos["shares"]:.2f} @ {order["price"]:.3f}')
+            return False
+        bid=self.bbo[key].get('bid')
+        if bid is None or now-order['postedAt']<EXECUTION_LATENCY_SEC or now-self.book_observed.get(key,0)>3:return False
+        if float(bid)<order['price']+tick-1e-9:return False
+        self._close_scalp(pos,order['price'],0.,f'momentum maker profit target; price {order["price"]:.3f}; maker fee USD 0',
+                          'momentum maker profit target',(now-order['postedAt'])*1000)
+        return True
 
     async def _enter(self,best,m,confidence):
         if not self._operational_entry_allowed():return False
