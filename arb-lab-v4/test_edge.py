@@ -315,3 +315,38 @@ class FifteenMinuteLaneTests(unittest.IsolatedAsyncioTestCase):
             for e in pf.engines.values():self.assertGreaterEqual(e.inventory_stop,.30)   # stop leaves room for fees and spread
             self.assertIn('SOL',pf.ledger_history);self.assertIn('XRP',pf.ledger_history)
             for e in pf.engines.values():e.close()
+
+class ResolutionLookupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resolved_winner_requests_closed_markets(self):
+        with tempfile.TemporaryDirectory() as d:
+            e=mod.PolyServerDemo('BTC',60,state_file=Path(d)/'s.json');self.addCleanup(e.close);calls=[]
+            async def get(url,params=None,headers=None):
+                calls.append(dict(params))
+                if params.get('closed')!='true':return []          # Gamma hides closed markets by default
+                return [{'closed':True,'umaResolutionStatus':'resolved','outcomes':'["Up", "Down"]','outcomePrices':'["0", "1"]'}]
+            e._get=get
+            self.assertEqual(await e._resolved_winner('btc-updown-5m-1'),'down')
+            self.assertEqual(calls[0]['closed'],'true')
+    async def test_unresolved_market_returns_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            e=mod.PolyServerDemo('BTC',60,state_file=Path(d)/'s.json');self.addCleanup(e.close)
+            async def get(url,params=None,headers=None):
+                return [{'closed':False,'umaResolutionStatus':None,'outcomes':'["Up","Down"]','outcomePrices':'["0.5","0.5"]'}]
+            e._get=get;self.assertIsNone(await e._resolved_winner('x'))
+
+class LedgerArchiveTests(unittest.IsolatedAsyncioTestCase):
+    async def test_archive_env_adds_missing_sessions_without_overwriting(self):
+        import poly_portfolio,base64,gzip,json
+        archive={'ETH':{'old1':{'sessionId':'old1','realizedPnl':1.5,'trades':2,'events':[]},'keep':{'sessionId':'keep','realizedPnl':99}},'SOL':{'s':{'sessionId':'s','realizedPnl':-.5,'trades':1,'events':[]}}}
+        enc=base64.b64encode(gzip.compress(json.dumps(archive).encode())).decode()
+        with tempfile.TemporaryDirectory() as d,patch.dict('os.environ',{'POLY_DATA_DIR':d,'POLY_LEDGER_ARCHIVE_B64':enc}):
+            pf=poly_portfolio.PaperPortfolio();pf.ledger_history['ETH']['keep']={'sessionId':'keep','realizedPnl':1.0}
+            for e in pf.engines.values():
+                async def start(e=e):e._new_session()
+                e.start=start
+            with patch.object(pf.edge,'start',lambda:None):await pf.start()
+            self.assertEqual(pf.ledger_history['ETH']['old1']['realizedPnl'],1.5);self.assertEqual(pf.ledger_history['ETH']['keep']['realizedPnl'],1.0)
+            expected=sum(float(x.get('realizedPnl') or 0) for h in pf.ledger_history.values() for x in h.values())
+            self.assertAlmostEqual(pf.snapshot()['portfolio']['priorSessionRealizedPnl'],expected);self.assertIn('s',pf.ledger_history['SOL'])
+            if pf.cycle_task:pf.cycle_task.cancel()
+            for e in pf.engines.values():e.close()

@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.4-lanes"
+ENGINE_REVISION="16.5-resolution"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
@@ -1123,7 +1123,10 @@ class PolyServerDemo:
 
     async def _resolved_winner(self,slug):
         try:
-            data=await self._get(POLY_GAMMA+'/markets',{'slug':slug})
+            # Gamma omits closed markets from slug lookups unless closed=true is requested;
+            # without it every finished round looked unresolved (fixed V16.5).
+            data=await self._get(POLY_GAMMA+'/markets',{'slug':slug,'closed':'true'})
+            if not (isinstance(data,list) and data):data=await self._get(POLY_GAMMA+'/markets',{'slug':slug})
             row=data[0] if isinstance(data,list) and data else None
             if not row or not row.get('closed') or row.get('umaResolutionStatus') not in ('resolved','finalized'):return None
             outs=_jsonish(row.get('outcomes'));prices=_jsonish(row.get('outcomePrices'))

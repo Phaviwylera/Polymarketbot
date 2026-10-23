@@ -146,6 +146,19 @@ class PaperPortfolio:
             for asset,history in saved_history.items():
                 if asset in self.ledger_history:self.ledger_history[asset].update(history)
         except (OSError,ValueError,TypeError):pass
+        # Owner-supplied archive of closed sessions (service env, never the public repo). Adds sessions
+        # missing after an ephemeral-disk loss; never overwrites a session already present.
+        encoded=os.environ.get('POLY_LEDGER_ARCHIVE_B64','')
+        if encoded:
+            try:
+                archive=json.loads(gzip.decompress(base64.b64decode(encoded,validate=True)))
+                added=0
+                for lane,sessions in archive.items():
+                    if lane in self.ledger_history and isinstance(sessions,dict):
+                        for sid,session in sessions.items():
+                            if sid not in self.ledger_history[lane]:self.ledger_history[lane][sid]=session;added+=1
+                print('POLY_LEDGER_ARCHIVE_RESTORED',added,flush=True)
+            except Exception as exc:print('POLY_LEDGER_ARCHIVE_INVALID',type(exc).__name__,flush=True)
         # Preserve the paper ledger across this release on ephemeral hosting.
         # Existing local state always wins; a prior live instance is preferred to the checkpoint.
         recovery={}
