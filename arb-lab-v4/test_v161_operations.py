@@ -38,7 +38,7 @@ class StorageTests(unittest.IsolatedAsyncioTestCase):
     async def test_required_database_blocks_entries_until_fresh_commit(self):
         s=DurableStore(SimpleNamespace(engines={}),url='postgresql://unused')
         self.assertFalse(s.entry_allowed());s.owner=s.active=s.ready=True;s.last_commit=time.time()
-        self.assertTrue(s.entry_allowed());s.last_commit-=11;self.assertFalse(s.entry_allowed())
+        self.assertTrue(s.entry_allowed());s.last_commit-=11;self.assertTrue(s.entry_allowed());s.last_commit-=10;self.assertFalse(s.entry_allowed())
         s.last_commit=time.time();s.dropped=1;self.assertFalse(s.entry_allowed())
         self.assertNotIn('postgresql://unused',json.dumps(s.status()))
     async def test_local_mode_has_explicit_non_durable_status(self):

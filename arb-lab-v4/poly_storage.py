@@ -7,6 +7,7 @@ import asyncio,copy,json,os,time,base64,gzip
 from collections import deque
 
 LOCK_ID=161000702
+HEALTH_WINDOW_SEC=20.0   # entries pause when the last durable commit is older than this
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS poly_v161_state (
   name text PRIMARY KEY, updated_at double precision NOT NULL, payload jsonb NOT NULL);
@@ -38,13 +39,13 @@ class DurableStore:
         return {'configured':bool(self.url),'backend':'postgresql' if self.url else 'local_only',
                 'state':('local_only' if not self.url else 'healthy' if self.entry_allowed() else 'standby' if self.ready and not self.owner else 'recovering'),
                 'writer':self.owner,'active':self.active,'checkpointAt':self.last_commit or None,'checkpointAgeSec':age,
-                'queuedEvents':len(self.queue),'eventsSavedThisBoot':self.saved,'errors':self.errors,
+                'queuedEvents':len(self.queue),'lastFlushSec':round(getattr(self,'last_flush_sec',0.) or 0.,3),'eventsSavedThisBoot':self.saved,'errors':self.errors,
                 'lastError':self.last_error,'droppedEvents':self.dropped,
                 'databaseExpiresAt':os.getenv('POLY_DATABASE_EXPIRES_AT') or None,
                 'coverage':'Paper checkpoints, research labels, model artifact, attribution, sampled decisions and EdgeLab learning (calibration, strategy record, wallet study); raw feed spool stays local.',
                 'checkpointTargetSec':2,'rawFeedDurable':False}
     def entry_allowed(self):
-        return not self.url or bool(self.owner and self.active and self.ready and not self.dropped and time.time()-self.last_commit<10)
+        return not self.url or bool(self.owner and self.active and self.ready and not self.dropped and time.time()-self.last_commit<HEALTH_WINDOW_SEC)
     def enqueue(self,event):
         if not self.url or event.get('kind') not in KINDS:return
         if len(self.queue)>=20000:self.dropped+=1;return
@@ -122,6 +123,9 @@ class DurableStore:
             if batch:await self.conn.executemany('INSERT INTO poly_v161_events(id,t,asset,kind,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING',batch,timeout=30)
             await self.conn.execute("INSERT INTO poly_v161_state VALUES('paper',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(snap,separators=(',',':'),allow_nan=False),timeout=30)
             artifact=self.engine.research.artifact if self.engine.research else None
+            # The model artifact changes only when the research model retrains; rewriting it every
+            # 2s checkpoint made commits slow enough to trip the 10s health window and pause entries.
+            if artifact is not None and artifact is getattr(self,'_saved_artifact',None):artifact=None
             if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False),timeout=30)
             edge=getattr(self.engine,'edge',None)
             if edge is not None and self.commits%15==0:
@@ -130,7 +134,9 @@ class DurableStore:
                 for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000)):
                     await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit,timeout=60)
         for _ in batch:self.queue.popleft()
+        if artifact:self._saved_artifact=artifact
         self.saved+=len(batch);self.last_commit=now;self.last_error=None;self.commits+=1
+        self.last_flush_sec=time.time()-now
     async def worker(self):
         while not self.closed:
             try:

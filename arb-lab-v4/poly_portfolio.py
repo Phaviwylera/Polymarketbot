@@ -43,7 +43,9 @@ def merge_release_recovery(checkpoint,live):
         regressed=same_session and any(float(incoming.get(k) or 0)+1e-8<float(prior.get(k) or 0) for k in ('trades','momentumFills','inventoryFills','fees'))
         if not incoming or regressed:
             merged['assets'][asset]=copy.deepcopy(saved)
-            print('POLY_RECOVERY_LEDGER_REGRESSION',asset,flush=True)
+            # A lane missing from the live snapshot (retired SOL/XRP) is carried over silently;
+            # only a same-session ledger going backwards is a real regression.
+            if regressed:print('POLY_RECOVERY_LEDGER_REGRESSION',asset,flush=True)
     cp=checkpoint.get('portfolio') or {};mp=merged.setdefault('portfolio',{})
     mp['riskLocked']=bool(mp.get('riskLocked') or cp.get('riskLocked'))
     mp['maxDrawdownUsd']=max(float(mp.get('maxDrawdownUsd') or 0),float(cp.get('maxDrawdownUsd') or 0))
