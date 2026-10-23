@@ -83,7 +83,13 @@ async def market_js():return FileResponse(ROOT/'market.js',media_type='text/java
 async def style():return FileResponse(ROOT/'style.css',media_type='text/css',headers={'Cache-Control':'no-store'})
 
 @app.get('/poly')
-async def poly_home():return FileResponse(ROOT/'poly.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+async def poly_home():return FileResponse(ROOT/'poly-terminal.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+@app.get('/poly/classic')
+async def poly_classic():return FileResponse(ROOT/'poly.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+@app.get('/poly-terminal.js')
+async def poly_terminal_js():return FileResponse(ROOT/'poly-terminal.js',media_type='text/javascript',headers={'Cache-Control':'no-store'})
 
 @app.get('/poly.js')
 async def poly_js():return FileResponse(ROOT/'poly.js',media_type='text/javascript',headers={'Cache-Control':'no-store'})

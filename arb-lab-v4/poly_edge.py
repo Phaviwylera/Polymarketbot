@@ -202,6 +202,8 @@ class EdgeLab:
         self.trades=deque(maxlen=5000)   # funded paper closes for the readiness scorecard
         self.tasks=[];self.client=None;self.errors=0;self.restored=False
         self._pending_study=deque(maxlen=400)   # (conditionId, winner, roundStart, asset)
+        # Dashboard history: model-vs-market samples per lane, recent verified resolutions.
+        self.samples=defaultdict(lambda:deque(maxlen=360));self.resolutions=deque(maxlen=96);self._last_sample={}
     # ---------- live decision -------------------------------------------------
     def _round(self,asset,market):
         slug=market['slug']
@@ -248,6 +250,12 @@ class EdgeLab:
             else:info['reason']='MISPRICED'
             sides.append(info)
         best=max(sides,key=lambda s:s.get('conservativeEdge',-9))
+        if now-self._last_sample.get(asset,0)>=5:
+            self._last_sample[asset]=now;up=e.bbo['up']
+            mid=(float(up['bid'])+float(up['ask']))/2 if up.get('bid') is not None and up.get('ask') is not None else None
+            self.samples[asset].append({'t':round(now,1),'pUp':round(est['pUp'],4),'heuristic':round(number(m.get('fairUp'),.5),4),'upMid':mid,
+                'edge':round(best.get('conservativeEdge',0) or 0,4),'side':best.get('side'),'remaining':round(remaining)})
+            r['lastSample']=self.samples[asset][-1]
         window=elapsed>=MIN_ELAPSED and remaining>=MIN_REMAINING and elapsed<=interval-MIN_REMAINING
         candidate=None
         if window and best.get('reason')=='MISPRICED':
@@ -282,6 +290,9 @@ class EdgeLab:
         r=self.rounds.pop(slug,None)
         if not r or winner not in ('up','down'):return
         up=winner=='up'
+        last=r.get('lastSample') or {}
+        self.resolutions.append({'lane':r['asset'],'slug':slug,'start':r['start'],'end':r['end'],'winner':winner,
+            'lastPUp':last.get('pUp'),'lastUpMid':last.get('upMid'),'settledAt':time.time()})
         self.cal.update(list(r['samples'].values()),up)
         for v,b in r['bets'].items():
             won=b['side'].lower()==winner
@@ -361,10 +372,19 @@ class EdgeLab:
                 {'check':'A strategy currently passes its promotion gate','value':self.promoted(),'pass':self.promoted() is not None}]
         return {'readyForRealMoney':all(c['pass'] for c in checks),'checks':checks,'liveTradingEnabled':False,
                 'note':'Paper-only build. A live order adapter is not installed; switching to real money stays a deliberate owner decision.'}
+    def flows(self):
+        out={}
+        for t in self.trades:
+            k=(t.get('asset') or '?',t.get('strategy') or '?');f=out.setdefault(k,{'lane':k[0],'strategy':k[1],'trades':0,'wins':0,'losses':0,'pnl':0.,'won':0.,'lost':0.})
+            f['trades']+=1;f['pnl']+=t['pnl']
+            if t['pnl']>=0:f['wins']+=1;f['won']+=t['pnl']
+            else:f['losses']+=1;f['lost']+=-t['pnl']
+        return [{**v,'pnl':round(v['pnl'],4),'won':round(v['won'],4),'lost':round(v['lost'],4)} for v in out.values()]
     def snapshot(self,capital=200.):
         return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),
                 'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'calibration':self.cal.summary(),
                 'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),
+                'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],'flows':self.flows(),
                 'readiness':self.readiness(capital),'errors':self.errors,
                 'sizing':{'kellyFraction':KELLY_FRACTION,'maxAllocationFraction':MAX_ALLOCATION_FRACTION,
                           'rule':'quarter-Kelly on conservative probability, capped at 15% of the asset budget and the remaining loss budget'}}

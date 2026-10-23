@@ -350,3 +350,16 @@ class LedgerArchiveTests(unittest.IsolatedAsyncioTestCase):
             self.assertAlmostEqual(pf.snapshot()['portfolio']['priorSessionRealizedPnl'],expected);self.assertIn('s',pf.ledger_history['SOL'])
             if pf.cycle_task:pf.cycle_task.cancel()
             for e in pf.engines.values():e.close()
+
+class DashboardDataTests(unittest.TestCase):
+    def test_samples_resolutions_and_flows(self):
+        lab=EdgeLab({});now=time.time();e=FakeEngine(now)
+        m={'rawFairUp':.6,'fairUp':.58}
+        lab.evaluate('BTC',e,m,now);lab.evaluate('BTC',e,m,now+1)
+        e.spot_ts=e.twap_ts=now+6;e.book_observed={'up':now+6,'down':now+6};lab.evaluate('BTC',e,m,now+6)
+        self.assertEqual(len(lab.samples['BTC']),2);self.assertAlmostEqual(lab.samples['BTC'][0]['upMid'],.395)
+        lab.settle('btc-updown-5m-1','up')
+        r=lab.resolutions[-1];self.assertEqual(r['winner'],'up');self.assertEqual(r['lane'],'BTC');self.assertIsNotNone(r['lastPUp'])
+        lab.on_trade({'netPnlUsd':.5,'closedAt':1,'strategy':'MOMENTUM_SCALP','asset':'ETH'});lab.on_trade({'netPnlUsd':-.2,'closedAt':2,'strategy':'MOMENTUM_SCALP','asset':'ETH'})
+        f=lab.flows()[0];self.assertEqual((f['trades'],f['wins'],f['losses']),(2,1,1));self.assertAlmostEqual(f['pnl'],.3)
+        snap=lab.snapshot();self.assertIn('samples',snap);self.assertIn('flows',snap);self.assertEqual(len(snap['resolutions']),1)
