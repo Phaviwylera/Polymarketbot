@@ -65,17 +65,17 @@ class DurableStore:
         self.task=asyncio.create_task(self.worker(),name='v161-durable-owner')
     async def connect(self):
         import asyncpg
-        self.conn=await asyncpg.connect(self.url,timeout=8,command_timeout=8)
-        await self.conn.execute(SCHEMA)
+        self.step='connect';self.conn=await asyncpg.connect(self.url,timeout=15,command_timeout=8)
+        await self.conn.execute(SCHEMA,timeout=30)
         self.ready=True
     async def load(self):
-        raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='paper'")
+        self.step='standby-load';raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='paper'",timeout=30)
         return json.loads(raw) if isinstance(raw,str) else raw
     async def promote(self):
         """Read everything durable first (generous timeouts), then start trading once.
         Starting engines before the heavy reads meant a slow read could time out,
         suspend freshly started engines and repeat the whole start-up."""
-        T=60
+        T=60;self.step='promote'
         row=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='paper'",timeout=T)
         recovery=json.loads(row) if isinstance(row,str) else row
         edge_raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='edge'",timeout=T)
@@ -114,18 +114,18 @@ class DurableStore:
         if bootstrap:await self.flush()
     async def flush(self):
         if not self.owner or not self.conn:return
-        batch=list(self.queue);now=time.time()
+        self.step='flush';batch=list(self.queue);now=time.time()
         snap=checkpoint(self.engine.snapshot(include_assets=True))
         research=self.engine.research
         if research and hasattr(research,'pair_checkpoint'):snap['pairResearchCheckpoint']=research.pair_checkpoint()
         async with self.conn.transaction():
             if batch:await self.conn.executemany('INSERT INTO poly_v161_events(id,t,asset,kind,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING',batch,timeout=30)
-            await self.conn.execute("INSERT INTO poly_v161_state VALUES('paper',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(snap,separators=(',',':'),allow_nan=False))
+            await self.conn.execute("INSERT INTO poly_v161_state VALUES('paper',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(snap,separators=(',',':'),allow_nan=False),timeout=30)
             artifact=self.engine.research.artifact if self.engine.research else None
-            if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False))
+            if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False),timeout=30)
             edge=getattr(self.engine,'edge',None)
             if edge is not None and self.commits%15==0:
-                await self.conn.execute("INSERT INTO poly_v161_state VALUES('edge',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(edge.export(),separators=(',',':'),allow_nan=False))
+                await self.conn.execute("INSERT INTO poly_v161_state VALUES('edge',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(edge.export(),separators=(',',':'),allow_nan=False),timeout=30)
             if self.commits and self.commits%300==0:
                 for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000)):
                     await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit,timeout=60)
@@ -141,7 +141,7 @@ class DurableStore:
                         await self.engine.suspend();self.active=False
                     self.owner=False;self.ready=False;await self.connect()
                 if not self.owner:
-                    self.owner=await self.conn.fetchval('SELECT pg_try_advisory_lock($1)',LOCK_ID)
+                    self.step='lock';self.owner=await self.conn.fetchval('SELECT pg_try_advisory_lock($1)',LOCK_ID,timeout=15)
                     if self.owner:await self.promote()
                     else:self.standby=await self.load()
                 elif self.active:await self.flush()
@@ -149,7 +149,7 @@ class DurableStore:
             except Exception as exc:
                 self.errors+=1;self.ready=False;self.last_error=type(exc).__name__
                 # Never print a connection exception containing the database URL.
-                print('POLY_STORAGE_ERROR',self.last_error,flush=True)
+                print('POLY_STORAGE_ERROR',self.last_error,'step='+str(getattr(self,'step','?')),flush=True)
                 if self.active:
                     await self.engine.suspend();self.active=False
                 self.owner=False
