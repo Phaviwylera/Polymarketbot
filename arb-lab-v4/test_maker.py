@@ -97,7 +97,7 @@ class HardeningTests(unittest.IsolatedAsyncioTestCase):
         e._ingest_book('up',{'bids':[{'price':'.46','size':'60'}],'asks':[{'price':'.47','size':'60'}]})
         e._ingest_book('down',{'bids':[{'price':'.52','size':'60'}],'asks':[{'price':'.53','size':'60'}]})
         e.book_history.append({'t':now-3,'marketSlug':'eth-t','up':.445,'down':.54,'upBid':.45})
-        c,reason=e._momentum_signal({'fairUp':.80,'fairDown':.20,'leadBps':1.,'impulse5Bps':.5})
+        c,reason=e._momentum_signal({'fairUp':.80,'fairDown':.20,'leadBps':1.,'impulse5Bps':1.5})
         self.assertIsNone(c);self.assertIn('45c',reason)
     async def test_yield_stops_entries_and_engines(self):
         import poly_portfolio
@@ -124,7 +124,7 @@ class HardeningTests(unittest.IsolatedAsyncioTestCase):
 
 class PairAttemptTests(unittest.TestCase):
     def c(self,t):
-        c=context(t);c['market']['slug']='btc-pair';c['model']={**c['model'],'impulse5Bps':.3};c['fast']={}
+        c=context(t);c['market']['slug']='btc-pair';c['model']={**c['model'],'impulse5Bps':1.5};c['fast']={}
         for s,(bid,ask) in zip(('up','down'),((.4,.42),(.54,.55))):
             c['bbo'][s]={'bid':bid,'ask':ask};c['depth'][s]={'bids':[{'price':bid,'size':10}],'asks':[{'price':ask,'size':100}]}
         return c

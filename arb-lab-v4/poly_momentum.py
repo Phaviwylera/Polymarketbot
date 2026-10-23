@@ -13,6 +13,11 @@ MIN_EDGE=.12
 # chronological halves (older n=18 +$0.50/trade, newer n=13 +$0.52) while 45-55c lost in both
 # (older n=23 -$0.08, newer n=29 -$0.09): fees and spread consume the target near 50c.
 MAX_ENTRY_PRICE=.45
+# V17.4: the oracle's 5-second impulse in the trade direction must be at least 1.0 bps (was 0.05).
+# 65 closed trades with logged features, split by time: impulse below 1 bps averaged -$0.01/trade on the
+# older 32 (n=11) and -$0.46 on the newer 33 (n=11, 9% wins), while 1 bps+ made +$0.30 and +$0.28.
+# Within the current price/edge rules: below 1 bps n=7, 14% wins, -$0.37; 1 bps+ n=23, 83% wins, +$0.59.
+MIN_IMPULSE_BPS=1.0
 # When the current rule set (12c edge floor + 45c ceiling) went live: V17.1 deploy, 2026-10-23 15:38 UTC.
 RULES_LIVE_AT=1792769880.0
 
@@ -29,6 +34,7 @@ def signal(context,history,allow_weak_impulse=False):
     side='up' if m.get('leadBps',0)>=0 else 'down';direction=1 if side=='up' else -1
     if m.get('leadBps',0)*direction<.2:return reject('oracle lead below 0.20 bps')
     if m.get('impulse5Bps',0)*direction<(-.05 if allow_weak_impulse else .05):return reject('oracle impulse does not confirm direction')
+    if not allow_weak_impulse and m.get('impulse5Bps',0)*direction<MIN_IMPULSE_BPS:return reject('oracle impulse below 1.0 bps')
     if c.get('bookAges',{}).get(side,1e9)>3:return reject('executable book older than 3 seconds')
     b=c['bbo'][side];ask=b.get('ask');bid=b.get('bid');tick=max(.001,float(market.get('minTickSize') or .01))
     if ask is None or bid is None:return reject('bid or ask missing')

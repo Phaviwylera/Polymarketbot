@@ -13,7 +13,7 @@ class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
         e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.open_trusted=True;e.spot_ts=e.twap_ts=now
         e._ingest_book('up',{'bids':[{'price':'.39','size':'40'}],'asks':[{'price':'.40','size':'50'}]})
         e._ingest_book('down',{'bids':[{'price':'.59','size':'40'}],'asks':[{'price':'.60','size':'50'}]})
-        self.m={'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':.3}
+        self.m={'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':1.5}
         e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.375,'down':.615})
         e._model=lambda:self.m
         self.latency=patch.object(mod,'EXECUTION_LATENCY_SEC',0);self.latency.start();self.addCleanup(self.latency.stop)

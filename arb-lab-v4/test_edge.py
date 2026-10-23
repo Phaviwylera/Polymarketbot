@@ -233,7 +233,7 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.open_trusted=True;e.spot_ts=e.twap_ts=now
         e._ingest_book('up',{'bids':[{'price':'.39','size':'60'}],'asks':[{'price':'.40','size':'60'}]})
         e._ingest_book('down',{'bids':[{'price':'.59','size':'60'}],'asks':[{'price':'.60','size':'60'}]})
-        self.m={'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':.3}
+        self.m={'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':1.5}
         e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.375,'down':.615,'upBid':.38})
         e._model=lambda:self.m
         e.edge=EdgeLab({'ETH':e})
@@ -251,6 +251,12 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         c,reason=e._momentum_signal(self.m);self.assertIsNone(c);self.assertIn('12-cent',reason)
         self.m['fairUp']=.60;self.m['fairDown']=.40   # 16.3c
         self.assertIsNotNone(e._momentum_signal(self.m)[0])
+    def test_weak_impulse_is_rejected(self):
+        import poly_momentum
+        self.assertEqual(poly_momentum.MIN_IMPULSE_BPS,1.0)
+        self.m['impulse5Bps']=.5;c,reason=self.e._momentum_signal(self.m)
+        self.assertIsNone(c);self.assertIn('1.0 bps',reason)
+        self.m['impulse5Bps']=1.2;self.assertIsNotNone(self.e._momentum_signal(self.m)[0])
     async def test_unearned_record_keeps_minimum_size(self):
         self.record([.5,-.6]*15)
         c,_=self.e._momentum_signal(self.m);c=self.e._momentum_size(c)

@@ -19,7 +19,7 @@ def context(now=NOW,bid=.39,ask=.4):
         'bbo':{s:{'bid':bid,'ask':ask,'bidSize':100,'askSize':100} for s in ('up','down')},
         'depth':{s:{'bids':[{'price':bid,'size':100}],'asks':[{'price':ask,'size':100}]} for s in ('up','down')},
         'bookObservedAt':dict.fromkeys(('up','down'),now),'bookEventLagSec':dict.fromkeys(('up','down'),0.),
-        'model':{'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':.3},'stopLossUsd':.3,'tradePrints':[]}
+        'model':{'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':1.5},'stopLossUsd':.3,'tradePrints':[]}
 def observations(now=NOW,bid=.39,ask=.4):return observe('BTC',context(now,bid,ask),{},now)[0]
 def dataset(rounds=10):
     rows=[]
