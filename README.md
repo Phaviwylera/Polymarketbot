@@ -1,3 +1,21 @@
+# POLY / EDGE V16.2 — calibrated mispricing, skilled-wallet study and earned promotion
+
+V16.2 adds `arb-lab-v4/poly_edge.py` (EdgeLab). Strategies now *earn* the right to trade paper money:
+
+- **Calibrated fair value.** Every round, the heuristic oracle model's raw Up probability is recorded per time-left bucket. After Polymarket resolves the round (verified via Gamma), EdgeLab learns the empirical Up rate for that probability/time cell, shrunk toward the heuristic with 10 pseudo-rounds. Brier scores for both are tracked, each scored before its round is learned from.
+- **Mispricing detector.** A price is called wrong only when the conservative calibrated probability (mean − 1 SE) exceeds the all-in cost (ask + taker fee) by a 2-cent buffer, with a fresh book, spread ≤ 3c and depth for the minimum order.
+- **Skilled-wallet study.** Public trades for every resolved round are pulled from the Polymarket data API. Wallets with ≥ 6 studied rounds, positive total P&L and mean round P&L − 1 SE > 0 are ranked as skilled. Their entry profile and live net order flow in the current round are exposed. The `edge_smart` variant only takes mispricings that skilled flow agrees with.
+- **Shadow first, then promotion.** Both variants place one virtual hold-to-resolution bet per asset per round. A variant is promoted to funded paper execution only while its last 200 bets show ≥ 40 bets over ≥ 20 rounds with mean return − 2 SE > 0, and is demoted automatically if that stops holding. The V16 research model likewise trades (as `MODEL_SCALP`) only when its existing out-of-sample evidence gate passes.
+- **Sizing.** Quarter-Kelly on the conservative probability, capped at 15% of the asset's allocation and at the remaining lane/portfolio loss budget. The exchange minimum is used only when it does not exceed the full-Kelly stake. Larger orders and exits walk the book within one/two ticks.
+- **Exits.** Mispricing positions (`EDGE_HOLD`) are held to verified resolution unless the market bid, after fees, exceeds the calibrated fair value by 1c. Model scalps keep the 30-second stop/target rules with stops scaled to size.
+- **Autonomy.** Completed sessions roll over immediately; risk-locked lanes after 30 minutes; a portfolio lock after 60 minutes — never with open exposure. All losses stay in the lifetime ledger (`POLY_AUTO_CYCLE=0` disables this).
+- **Readiness scorecard** (`GET /api/poly/readiness`): ≥ 300 funded paper trades, positive net P&L, mean − 2 SE > 0, max drawdown < 10% of capital, ≥ 14 days, and a currently promoted strategy. No live order adapter is installed.
+- **Orb.** Region glow = conservative edge after fees, pulsing seed rings = a detected mispricing, bursts = paper fills, core = shadow/promoted status.
+
+Persistence: EdgeLab state is saved to Postgres (`POLY_DATABASE_URL`) or `POLY_DATA_DIR/poly_edge_state.json`, and handed over between deploys through `POLY_HANDOVER_URL`, which is read before the new instance binds its port. `POLY_KEEPALIVE_URL` makes the service ping itself so a free instance does not sleep. Endpoints: `/api/poly/edge`, `/api/poly/edge/state`, `/api/poly/readiness`.
+
+These are paper results on live markets. No strategy is asserted to be profitable.
+
 # POLY / EDGE V15.1 — confirmed-trend paper execution
 
 V15 placed and filled two live paper entries (SOL and XRP) and closed them at a combined -$0.81860. V15.1 rejects those cheap countertrend rebounds: estimated round direction must agree (fair probability at least 0.55), and the actual best bid must have advanced a full tick. An ask-only midpoint change cannot confirm a buy. These changes do not establish profitability. The prior closed paper ledger is checkpointed and the previous live instance is queried during this release startup so known losses are carried rather than presented as recovered. Existing local state takes precedence; hosting storage remains ephemeral.

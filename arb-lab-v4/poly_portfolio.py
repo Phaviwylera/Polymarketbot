@@ -9,6 +9,9 @@ ASSETS=('BTC','ETH','SOL','XRP')
 ALLOCATIONS={'BTC':60.0,'ETH':80.0,'SOL':30.0,'XRP':30.0}
 TOTAL_BALANCE=sum(ALLOCATIONS.values())
 PORTFOLIO_LOSS_LIMIT=6.0
+AUTO_CYCLE=os.environ.get('POLY_AUTO_CYCLE','1').strip()!='0'
+LANE_LOCK_COOLDOWN_SEC=1800.
+PORTFOLIO_LOCK_COOLDOWN_SEC=3600.
 
 def merge_release_recovery(checkpoint,live):
     """A later wall clock cannot roll a known session's ledger backwards."""
@@ -37,7 +40,74 @@ class PaperPortfolio:
             state_file=self.data_root/f'poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
             risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
                 'stopLoss':min(.40,ALLOCATIONS[asset]*.005),'sessionLossLimit':ALLOCATIONS[asset]*.05}) for asset in ASSETS}
-        for lane in self.engines.values():lane.trade_observer=self.attribution.add
+        from poly_edge import EdgeLab
+        self.edge=EdgeLab(self.engines);self.handover=None;self.handover_edge=None
+        self.lock_seen={};self.cycle_task=None;self.cycles=[]
+        for lane in self.engines.values():
+            lane.trade_observer=self._observe_trade;lane.edge=self.edge;lane.loss_budget=self.loss_budget
+        self._restore_edge_file()
+    def _observe_trade(self,row):
+        self.attribution.add(row);self.edge.on_trade(row)
+    def loss_budget(self):
+        equity=sum(e._equity() if e.paper else e.balance for e in self.engines.values())
+        realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
+        return max(0.,PORTFOLIO_LOSS_LIMIT+min(0.,realized,equity-TOTAL_BALANCE))
+    # ---- EdgeLab persistence without a database (local file + live handover) ----
+    def _edge_file(self):return self.data_root/'poly_edge_state.json'
+    def _restore_edge_file(self):
+        try:self.edge.restore(json.loads(self._edge_file().read_text()))
+        except (OSError,ValueError,TypeError):pass
+    def save_edge_file(self):
+        try:
+            target=self._edge_file();tmp=target.with_suffix('.tmp')
+            tmp.write_text(json.dumps(self.edge.export(),separators=(',',':')));tmp.replace(target)
+        except (OSError,ValueError,TypeError):pass
+    async def prefetch_handover(self):
+        """Read the previous instance's ledger before this instance accepts traffic."""
+        handover=os.environ.get('POLY_HANDOVER_URL','').strip().rstrip('/')
+        if not handover:return
+        try:
+            async with httpx.AsyncClient(timeout=6) as client:
+                r=await client.get(handover+'/api/poly/demo/server',params={'all_assets':'true'});r.raise_for_status();self.handover=r.json()
+                try:
+                    r=await client.get(handover+'/api/poly/edge/state');r.raise_for_status();self.handover_edge=r.json()
+                except Exception:pass
+            print('POLY_HANDOVER_PREFETCHED',bool(self.handover),bool(self.handover_edge),flush=True)
+        except Exception as exc:print('POLY_HANDOVER_UNAVAILABLE',type(exc).__name__,flush=True)
+    # ---- autonomous session rollover: losses stay in the lifetime ledger ----
+    def _exposed(self,e):
+        return bool(e.pending or (e.paper and (e.paper.get('position') or e._inventory_has_residual())))
+    def auto_cycle(self,now=None):
+        now=time.time() if now is None else now;actions=[]
+        if not AUTO_CYCLE:return actions
+        if self.locked:
+            self.lock_seen.setdefault('portfolio',now)
+            if now-self.lock_seen['portfolio']>=PORTFOLIO_LOCK_COOLDOWN_SEC and not any(self._exposed(e) for e in self.engines.values()):
+                self.locked=False;self.peak=sum(e._equity() if e.paper else e.balance for e in self.engines.values());self.max_drawdown=0.
+                for asset,e in self.engines.items():self._archive(asset,e.paper or {});e._new_session()
+                self.lock_seen.clear();actions.append('portfolio');self._save_history()
+            return actions
+        self.lock_seen.pop('portfolio',None)
+        for asset,e in self.engines.items():
+            p=e.paper or {};status=p.get('status')
+            if status=='risk_locked':self.lock_seen.setdefault(asset,now)
+            else:self.lock_seen.pop(asset,None)
+            due=status=='complete' or (status=='risk_locked' and now-self.lock_seen.get(asset,now)>=LANE_LOCK_COOLDOWN_SEC)
+            if due and not self._exposed(e):
+                self._archive(asset,p);e._new_session();self.lock_seen.pop(asset,None);actions.append(asset)
+        if actions:self._save_history()
+        return actions
+    async def cycle_worker(self):
+        while True:
+            await asyncio.sleep(30)
+            try:
+                done=self.auto_cycle()
+                if done:
+                    self.cycles=(self.cycles+[{'at':time.time(),'lanes':done}])[-50:]
+                    print('POLY_AUTO_CYCLE',done,flush=True)
+                if not (self.storage and self.storage.url):self.save_edge_file()
+            except asyncio.CancelledError:raise
+            except Exception as exc:print('POLY_AUTO_CYCLE_ERROR',type(exc).__name__,flush=True)
     def entry_allowed(self):
         equity=sum(e._equity() if e.paper else e.balance for e in self.engines.values())
         realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
@@ -74,13 +144,9 @@ class PaperPortfolio:
         checkpoint=copy.deepcopy(recovery)
         try:
             if self.durable_recovery:raise RuntimeError('durable recovery is authoritative')
-            async with httpx.AsyncClient(timeout=5) as client:
-                # Optional live handover from a previous engine instance (e.g. during a migration).
-                handover=os.environ.get('POLY_HANDOVER_URL','').strip().rstrip('/')
-                if not handover:raise RuntimeError('no handover source configured')
-                response=await client.get(handover+'/api/poly/demo/server',params={'all_assets':'true'})
-                response.raise_for_status();live=response.json()
-                recovery=merge_release_recovery(recovery,live)
+            # Prefetched before this instance opened its port (see prefetch_handover).
+            if not self.handover:raise RuntimeError('no handover snapshot')
+            recovery=merge_release_recovery(recovery,self.handover)
         except Exception:pass
         self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
@@ -94,7 +160,10 @@ class PaperPortfolio:
                 except (ValueError,OSError):use_saved=True
             if use_saved and p.get('version')==14 and p.get('startingBalance')==e.balance:
                 e.state_file.write_text(json.dumps(saved))
+        if self.handover_edge and not self.durable_recovery and not self.edge.restored:self.edge.restore(self.handover_edge)
         await asyncio.gather(*(e.start() for e in self.engines.values()))
+        self.edge.start()
+        if self.cycle_task is None:self.cycle_task=asyncio.create_task(self.cycle_worker(),name='auto-cycle')
         for source in (checkpoint,recovery):
             for asset,history in (source.get('ledgerHistory') or {}).items():
                 if asset in self.ledger_history:self.ledger_history[asset].update(copy.deepcopy(history))
@@ -119,7 +188,11 @@ class PaperPortfolio:
             from poly_shadow import ResearchHub
             self.research=ResearchHub(self.engines,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
 
+    async def _stop_aux(self):
+        if self.cycle_task:self.cycle_task.cancel();await asyncio.gather(self.cycle_task,return_exceptions=True);self.cycle_task=None
+        await self.edge.close()
     async def suspend(self):
+        await self._stop_aux()
         if self.research is not None:await self.research.close();self.research=None
         for e in self.engines.values():
             for task in e.tasks:task.cancel()
@@ -128,6 +201,8 @@ class PaperPortfolio:
         self.started=False
 
     async def shutdown(self):
+        await self._stop_aux()
+        if not (self.storage and self.storage.url):self.save_edge_file()
         if self.research is not None:await self.research.close();self.research=None
         for e in self.engines.values():
             for task in e.tasks:task.cancel()
@@ -164,6 +239,7 @@ class PaperPortfolio:
         selected['strategyConfig']=self.get_config()
         selected['infrastructure']=self.storage.status() if self.storage else {'backend':'local_only','configured':False}
         selected['attribution']=self.attribution.summary()
+        selected['edge']={**self.edge.snapshot(TOTAL_BALANCE),'autoCycle':{'enabled':AUTO_CYCLE,'laneLockCooldownSec':LANE_LOCK_COOLDOWN_SEC,'portfolioLockCooldownSec':PORTFOLIO_LOCK_COOLDOWN_SEC,'recent':self.cycles[-10:]}}
         selected['research']=self.research.snapshot() if self.research else {'mode':'SHADOW_ONLY','executionEnabled':False,'training':{'state':'starting'}}
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
@@ -171,7 +247,7 @@ class PaperPortfolio:
             'priorSessionRealizedPnl':prior_pnl,'lifetimeRealizedPnl':prior_pnl+sum(l['realizedPnl'] for l in lanes),'lifetimeTrades':prior_trades+sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
             'maxDrawdownUsd':self.max_drawdown,'peakEquity':self.peak,'allocations':dict(ALLOCATIONS),
-            'assets':lanes,'scope':'crypto-updown-5m','strategy':'marketable fee-aware momentum paper experiment and executable complete sets; one entry per asset per round'}
+            'assets':lanes,'scope':'crypto-updown-5m','strategy':'promoted calibrated-mispricing and research-model strategies first, then fee-aware momentum and executable complete sets; one entry per asset per round'}
         if include_assets:return {**selected,'assets':{a:{k:v for k,v in s.items() if k!='portfolio'} for a,s in snaps.items()}}
         return selected
 
@@ -191,6 +267,7 @@ class PaperPortfolio:
                     'firstPriceCap': self.engines[asset].first_price_cap,
                     'momentumEnabled':self.engines[asset].momentum_enabled,
                     'momentumNotionalCap':min(3.25,self.engines[asset].balance*.1),
+                    'strategyMaxStakeUsd':round(self.engines[asset].balance*.15,2),'strategySizing':'quarter-Kelly, max 15% of allocation',
                     'momentumLossStopUsd':self.engines[asset].inventory_stop,'momentumTakeProfitUsd':max(.18,self.engines[asset].inventory_stop),'momentumMaxHoldSec':30,
                 }
                 for asset in ASSETS

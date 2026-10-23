@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio, json, math, time, uuid
 from poly_diagnostics import DiagnosticLog
 from poly_momentum import signal as momentum_signal
+from poly_features import walk as _walk_book
 from collections import deque, defaultdict
 from pathlib import Path
 import httpx
@@ -37,7 +38,10 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.1-session-restart"
+ENGINE_REVISION="16.2-edge"
+SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
+SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
+MODEL_MIN_CONSERVATIVE_RETURN=0.005
 INVENTORY_MAX_INITIAL_GAP=0.0
 INVENTORY_OPEN_AFTER_SEC=20.0
 INVENTORY_STOP_NEW_REMAINING_SEC=75.0
@@ -106,6 +110,8 @@ class PolyServerDemo:
         self.momentum_enabled=bool(profile.get('momentumEnabled',False))
         self.momentum_decision='warming momentum data'
         self.momentum_candidate=None
+        self.edge=None;self.edge_decision='waiting for market data';self.model_decision='waiting for research model'
+        self.loss_budget=None  # portfolio-provided callable: remaining portfolio loss budget
         self.book_history=deque(maxlen=160)
         self.book_observed={'up':0.,'down':0.}
         self.book_event_lag={'up':None,'down':None}
@@ -290,7 +296,7 @@ class PolyServerDemo:
             'minTickSize':float(m.get('orderPriceMinTickSize') or .01),
             'volume':float(m.get('volumeNum') or m.get('volume') or 0),
             'liquidity':float(m.get('liquidityNum') or m.get('liquidity') or 0),
-            'upToken':up,'downToken':down,
+            'upToken':up,'downToken':down,'conditionId':m.get('conditionId'),
             'up':{'bid':_best(ub,'bids'),'ask':_best(ub,'asks')},
             'down':{'bid':_best(db,'bids'),'ask':_best(db,'asks')}
         }
@@ -1600,7 +1606,9 @@ class PolyServerDemo:
 
     async def _momentum_manage(self,m):
         p=self.paper;pos=p.get('position') if p else None
-        if not pos or pos.get('mode')!='MOMENTUM_SCALP' or self.pending:return
+        if pos and pos.get('mode')=='EDGE_HOLD' and not self.pending:
+            await self._edge_manage(pos);return
+        if not pos or pos.get('mode') not in SCALP_MODES or self.pending:return
         if not self.market or pos['marketSlug']!=self.market['slug']:return
         side=pos['side'].lower();bid=self.bbo[side].get('bid');now=time.time();age=now-pos['entryAt']
         reason=pos.get('exitRequestedReason')
@@ -1628,6 +1636,7 @@ class PolyServerDemo:
                 b=self.bbo[side];row[side+'Bid']=b['bid']
                 row[side]=(b['bid']+b['ask'])/2 if b['bid'] is not None and b['ask'] is not None and now-self.book_observed.get(side,0)<=3 else None
             self.book_history.append(row)
+        edge_candidate=self.edge.evaluate(self.asset,self,m) if self.edge else None
         await self._momentum_manage(m)
         p=self.paper;self._update_risk()
         if p.get('position'):self.momentum_decision='managing live paper position';return
@@ -1637,10 +1646,179 @@ class PolyServerDemo:
         if now<p.get('cooldownUntil',0):self.momentum_decision='cooldown after loss';return
         if now>=p['endsAt']:self.momentum_decision='paper session ended';return
         if self.market['slug'] in p.get('tradedMarkets',[]):self.momentum_decision='one momentum entry per asset per 5-minute round';return
+        if await self._strategy_step(m,edge_candidate):return
         candidate,reason=self._momentum_signal(m);self.momentum_candidate=candidate;self.momentum_decision=reason
         if candidate:
             p['signals']+=1
             await self._momentum_enter(candidate)
+
+    # ---------------- promoted strategies (EdgeLab mispricing, research model) ----------------
+    def _loss_budget(self):
+        p=self.paper or {}
+        lane=self.session_loss_limit+min(0.,float(p.get('realizedPnl') or 0))
+        portfolio=self.loss_budget() if callable(self.loss_budget) else lane
+        return max(0.,min(lane,portfolio))
+
+    def _ask_levels(self,side):
+        return [{'price':px,'size':q} for px,q in sorted(self._book_levels[side]['asks'].items())]
+
+    def _bid_levels(self,side):
+        return [{'price':px,'size':q} for px,q in sorted(self._book_levels[side]['bids'].items(),reverse=True)]
+
+    def _edge_candidate(self,c):
+        from poly_edge import size_stake
+        variant=self.edge.tradable(c) if self.edge else None
+        if not variant:return None,'mispricing strategy not promoted (shadow test running)'
+        key=c['side'].lower();min_sh=max(5.,float(self.market.get('minOrderSize') or 0))
+        equity=self._equity()
+        shares=size_stake(kelly_full=c['kellyFull'],equity=equity,allocation=self.balance,loss_budget=self._loss_budget(),
+                          unit_cost=c['cost'],min_shares=min_sh,max_loss_per_dollar=1.)
+        tick=max(.001,float(self.market.get('minTickSize') or .01))
+        avail=sum(q for px,q in self._book_levels[key]['asks'].items() if px<=c['ask']+tick+1e-9)
+        shares=min(shares,math.floor(avail*100)/100)
+        if shares<min_sh:return None,'Kelly stake or visible depth below exchange minimum'
+        return {**c,'shares':shares,'strategy':variant,'stopLossUsd':None,'takeProfitUsd':None,'maxHoldSec':None},'OPPORTUNITY_EDGE'
+
+    def _model_candidate(self):
+        from poly_edge import size_stake
+        rs=getattr(self,'research_state',None) or {};now=time.time();best=None
+        for side,d in (rs.get('sides') or {}).items():
+            pr=(d or {}).get('prediction') or {};c=pr.get('conservativeNetReturnPerShare')
+            if not pr.get('evidenceGatePassed') or c is None or now-float(d.get('at') or 0)>1.0:continue
+            if c>MODEL_MIN_CONSERVATIVE_RETURN and (best is None or c>best[1]):best=(side,c,pr)
+        if not best:return None,'research model has not passed its evidence gate'
+        side,mu,pr=best;b=self.bbo[side];ask=b.get('ask');bid=b.get('bid')
+        if ask is None or bid is None:return None,'model side has no book'
+        ask=float(ask);bid=float(bid);tick=max(.001,float(self.market.get('minTickSize') or .01))
+        min_sh=max(5.,float(self.market.get('minOrderSize') or 0))
+        if now-self.book_observed.get(side,0)>3:return None,'model side book older than 3s'
+        if not .08<=ask<=.92 or ask-bid>.020001:return None,'model side price or spread outside band'
+        cost=ask+_fee_per_share(ask);stop_ps=self.inventory_stop/min_sh
+        friction=ask-bid+_fee_per_share(ask)+_fee_per_share(bid)
+        if friction+max(tick,stop_ps*.25)>stop_ps+1e-9:return None,'fees and spread leave no room inside the loss stop'
+        sigma=max(.02,float(pr.get('empiricalErrorHaircut') or .05)/1.2816)
+        kelly=min(1.,mu*cost/(sigma*sigma))
+        shares=size_stake(kelly_full=kelly,equity=self._equity(),allocation=self.balance,loss_budget=self._loss_budget(),
+                          unit_cost=cost,min_shares=min_sh,max_loss_per_dollar=stop_ps/cost)
+        bid_depth=sum(q for px,q in self._book_levels[side]['bids'].items() if px>=bid-tick-1e-9)
+        shares=min(shares,math.floor(min(bid_depth,sum(q for px,q in self._book_levels[side]['asks'].items() if px<=ask+tick+1e-9))*100)/100)
+        if shares<min_sh:return None,'Kelly stake or two-sided depth below exchange minimum'
+        scale=shares/min_sh
+        return {'side':side.upper(),'ask':ask,'bid':bid,'shares':shares,'cost':cost,'expectedNetReturnPerShare':pr.get('expectedNetReturnPerShare'),
+                'conservativeNetReturnPerShare':mu,'kellyFull':kelly,'model':pr.get('model'),'modelVersion':pr.get('modelVersion'),
+                'stopLossUsd':round(self.inventory_stop*scale,4),'takeProfitUsd':round(max(.18,self.inventory_stop)*scale,4),'maxHoldSec':30,
+                'marketSlug':self.market['slug'],'strategy':'model'},'OPPORTUNITY_MODEL'
+
+    async def _strategy_step(self,m,edge_candidate):
+        """Promoted strategies trade before the baseline momentum rule. Returns True when it acted."""
+        if edge_candidate:
+            c,reason=self._edge_candidate(edge_candidate);self.edge_decision=reason
+            if c:
+                self.momentum_candidate=c;self.momentum_decision='EDGE: '+reason;p=self.paper;p['signals']+=1
+                def again():
+                    fresh=self.edge.evaluate(self.asset,self,self._model())
+                    return fresh if fresh and fresh['side']==c['side'] and self.edge.tradable(fresh) else None
+                await self._strategy_buy(c,'EDGE_HOLD',again);return True
+        else:self.edge_decision=(self.edge.signals.get(self.asset) or {}).get('decision','no signal') if self.edge else 'edge lab not attached'
+        c,reason=self._model_candidate();self.model_decision=reason
+        if c:
+            self.momentum_candidate=c;self.momentum_decision='MODEL: '+reason;self.paper['signals']+=1
+            def again():
+                fresh,_=self._model_candidate()
+                return fresh if fresh and fresh['side']==c['side'] else None
+            await self._strategy_buy(c,'MODEL_SCALP',again);return True
+        return False
+
+    async def _strategy_buy(self,candidate,mode,revalidate):
+        if not self._operational_entry_allowed():return False
+        p=self.paper;version=self.market_version;market=self.market
+        if not p or self.pending or p.get('position') or self._inventory_has_residual():return False
+        self._update_risk()
+        if p['status']!='running' or time.time()<p.get('cooldownUntil',0) or time.time()>=p['endsAt']:return False
+        if market['slug'] in p.get('tradedMarkets',[]):return False
+        inv=p.get('inventory')
+        if inv and inv.get('quote'):self._inventory_cancel_quote(inv,mode+' entry takes priority')
+        side=candidate['side'];key=side.lower();shares=float(candidate['shares']);tick=float(market.get('minTickSize') or .01)
+        max_price=candidate['ask']+tick;submitted=time.time()
+        self.pending=True;p['executionAttempts']+=1
+        counts=p.setdefault('strategyOrders',{});counts[mode]=int(counts.get(mode,0))+1
+        self._record('ORDER',side=side,price=candidate['ask'],detail=f'{mode} marketable paper order; {shares:.2f} shares; max {max_price:.3f}')
+        self._diagnostic('MOMENTUM_ORDER',signal={**{k:v for k,v in candidate.items() if not isinstance(v,(dict,list))},'strategyMode':mode},context=self._diagnostic_context())
+        await asyncio.sleep(EXECUTION_LATENCY_SEC)
+        try:
+            if self.paper is not p or self.market_version!=version or not self.market or self.market.get('slug')!=market['slug']:return False
+            if not self._operational_entry_allowed():return False
+            self._update_risk()
+            if time.time()-submitted>1.0:
+                p['nofills']+=1;p['postLatencyRejects']+=1
+                self._record('NOFILL',side=side,detail='entry execution deadline exceeded 1 second');return False
+            if p['status']!='running' or time.time()>=p['endsAt']:return False
+            fresh=revalidate()
+            if not fresh:
+                p['nofills']+=1;p['postLatencyRejects']+=1
+                self._record('NOFILL',side=side,detail=mode+' post-latency rejection: signal no longer valid');return False
+            fill=_walk_book(self._ask_levels(key),shares,True,max_price)
+            if not fill:
+                p['nofills']+=1;p['postLatencyRejects']+=1
+                self._record('NOFILL',side=side,detail=mode+' post-latency rejection: depth within one tick moved');return False
+            fee=shares*fill['feePerShare'];cost=shares*fill['vwap']+fee
+            if cost>float(p['cash'])+1e-9:return False
+            p['cash']-=cost;p['fees']+=fee
+            fills=p.setdefault('strategyFills',{});fills[mode]=int(fills.get(mode,0))+1
+            p.setdefault('tradedMarkets',[]).append(market['slug']);p['tradedMarkets']=p['tradedMarkets'][-32:]
+            p['position']={'marketSlug':market['slug'],'side':side,'entryPrice':fill['vwap'],'shares':shares,'entryFee':fee,
+                'entryNotional':shares*fill['vwap'],'entryTotalCost':cost,'entryAt':time.time(),'mode':mode,'strategy':candidate.get('strategy'),
+                'requestedAsk':candidate['ask'],'entryLatencyMs':(time.time()-submitted)*1000,
+                'entryFeatures':{k:candidate[k] for k in ('p','pConservative','edge','conservativeEdge','smartFlow','cellRounds','kellyFull',
+                                 'expectedNetReturnPerShare','conservativeNetReturnPerShare','modelVersion') if k in candidate},
+                'modelFair':candidate.get('p'),'stopLossUsd':candidate.get('stopLossUsd'),'takeProfitUsd':candidate.get('takeProfitUsd'),
+                'maxHoldSec':candidate.get('maxHoldSec')}
+            self._record('BUY',side=side,price=fill['vwap'],detail=f'{mode} ({candidate.get("strategy")}); {shares:.2f} shares; VWAP {fill["vwap"]:.3f}; fee {fee:.5f}')
+            return True
+        finally:self.pending=False
+
+    async def _edge_manage(self,pos):
+        if not self.market or pos['marketSlug']!=self.market['slug']:return  # settles at verified resolution
+        side=pos['side'];key=side.lower();bid=self.bbo[key].get('bid')
+        if self.market['endTs']-time.time()<=4:return
+        reason=self.edge.hold_exit(self.asset,side,bid) if self.edge else None
+        if reason and time.time()-self.book_observed.get(key,0)<=3:await self._try_sell(reason)
+
+    async def _sell_walk(self,reason):
+        p=self.paper;pos=p['position'];version=self.market_version;key='up' if pos['side']=='UP' else 'down'
+        bid0=self.bbo[key].get('bid')
+        if bid0 is None:return False
+        tick=max(.001,float(self.market.get('minTickSize') or .01));min_price=max(.01,float(bid0)-2*tick)
+        if not _walk_book(self._bid_levels(key),pos['shares'],False,min_price):
+            if time.time()-pos.get('exitWaitLoggedAt',0)>=3:
+                pos['exitWaitLoggedAt']=time.time()
+                self._diagnostic('EXIT_WAIT',reason='insufficient bid depth within two ticks',exitReason=reason,context=self._diagnostic_context())
+            return False
+        submitted=time.time();self.pending=True
+        self._record('ORDER',side=pos['side'],price=float(bid0),detail=f'paper FAK sell (depth walk); {reason}')
+        await asyncio.sleep(EXECUTION_LATENCY_SEC)
+        try:
+            if self.paper is not p or self.market_version!=version or p.get('position') is not pos:return False
+            if not self.market or self.market.get('slug')!=pos.get('marketSlug'):return False
+            if time.time()-self.book_observed.get(key,0)>3:
+                p['nofills']+=1;self._record('NOFILL',side=pos['side'],detail='exit rejected: book older than 3 seconds after latency');return False
+            fill=_walk_book(self._bid_levels(key),pos['shares'],False,min_price)
+            if not fill:
+                p['nofills']+=1;self._record('NOFILL',side=pos['side'],detail='exit depth moved during latency');return False
+            self._diagnostic('EXIT_ATTEMPT',filled=True,reason=reason,elapsedSec=time.time()-submitted,requestedAt=pos.get('exitRequestedAt'),context=self._diagnostic_context())
+            fee=pos['shares']*fill['feePerShare'];proceeds=pos['shares']*fill['vwap']-fee;pnl=proceeds-pos['entryTotalCost']
+            p['cash']+=proceeds;p['fees']+=fee;p['realizedPnl']+=pnl;p['trades']+=1
+            if pnl>=0:p['wins']+=1;p['consecutiveLosses']=0
+            else:
+                p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
+                p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
+            if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
+                p['status']='risk_locked';p['riskLockReason']='session risk lock after losses'
+            p['position']=None
+            self._record('SELL',side=pos['side'],price=fill['vwap'],pnl=pnl,detail=reason+f'; VWAP {fill["vwap"]:.3f}; fee USD {fee:.5f}')
+            self._attribute_close(pos,fill['vwap'],fee,reason,(time.time()-submitted)*1000)
+            return True
+        finally:self.pending=False
 
     async def _enter(self,best,m,confidence):
         if not self._operational_entry_allowed():return False
@@ -1751,6 +1929,8 @@ class PolyServerDemo:
         min_sh=float(self.market.get('minOrderSize') or 0) if self.market else 0
         if pos['shares']<min_sh:return False
         bid0=self.bbo[key].get('bid');size0=float(self.bbo[key].get('bidSize') or 0)
+        if pos.get('mode') in ('EDGE_HOLD','MODEL_SCALP'):
+            return await self._sell_walk(reason)
         if bid0 is None or size0<pos['shares']:
             if time.time()-pos.get('exitWaitLoggedAt',0)>=3:
                 pos['exitWaitLoggedAt']=time.time()
@@ -1763,7 +1943,7 @@ class PolyServerDemo:
         try:
             if self.paper is not p or self.market_version!=version or p.get('position') is not pos:return False
             if not self.market or self.market.get('slug')!=pos.get('marketSlug'):return False
-            if pos.get('mode')=='MOMENTUM_SCALP' and time.time()-self.book_observed.get(key,0)>3:
+            if pos.get('mode') in SELF_MANAGED_MODES and time.time()-self.book_observed.get(key,0)>3:
                 p['nofills']+=1
                 self._record('NOFILL',side=pos['side'],detail='exit rejected: book older than 3 seconds after latency')
                 self._diagnostic('EXIT_ATTEMPT',filled=False,reason='stale post-latency book',elapsedSec=time.time()-submitted,context=self._diagnostic_context())
@@ -1799,8 +1979,12 @@ class PolyServerDemo:
         payout=pos['shares'] if pos['side']==winner else 0.0
         pnl=payout-pos['entryTotalCost']
         p['cash']+=payout;p['realizedPnl']+=pnl;p['trades']+=1
-        if pnl>=0:p['wins']+=1
-        else:p['losses']+=1
+        if pnl>=0:p['wins']+=1;p['consecutiveLosses']=0
+        else:
+            p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
+            p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
+        if p['realizedPnl']<=-self.session_loss_limit or int(p.get('consecutiveLosses') or 0)>=2:
+            p['status']='risk_locked';p['riskLockReason']='session risk lock after losses'
         p['position']=None
         self._record('SETTLE',side=pos['side'],price=1.0 if pos['side']==winner else 0.0,pnl=pnl,
                      detail=f'verified market resolution winner {winner}')
@@ -1887,7 +2071,7 @@ class PolyServerDemo:
                     p['lastOpportunityAt']=now
                     await self._enter(best,m,confidence)
             pos=p.get('position')
-            if pos and pos.get('mode')!='MOMENTUM_SCALP' and self.market and pos.get('marketSlug')==self.market.get('slug') and not self.pending:
+            if pos and pos.get('mode') not in SELF_MANAGED_MODES and self.market and pos.get('marketSlug')==self.market.get('slug') and not self.pending:
                 fresh_pair=self._pair_state();self.latest_pair=fresh_pair
                 if fresh_pair.get('hedge',{}).get('eligible'):
                     if await self._try_hedge_pair(fresh_pair):
@@ -1929,6 +2113,7 @@ class PolyServerDemo:
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
+            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'edgeSignal':(self.edge.signals.get(self.asset) if self.edge else None)},
             'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
             'bookHealth':{'observedAt':dict(self.book_observed),'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
             'research':getattr(self,'research_state',{'mode':'SHADOW_ONLY','executionEnabled':False,'reason':'research starting'}),

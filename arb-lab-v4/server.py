@@ -129,8 +129,26 @@ async def start_poly_server_demo():
     if POLY_ENGINE_ROLE=='frontend':
         print('POLY_SERVER_DEMO_DISABLED role=frontend',flush=True)
         return
+    # Runs inside startup, before uvicorn binds the port, so the URL still routes
+    # to the previous instance during a zero-downtime deploy.
+    await poly_server_engine.prefetch_handover()
     await poly_storage.start()
     print(f'POLY_SERVER_DEMO_STARTED role={POLY_ENGINE_ROLE}',flush=True)
+
+async def _keepalive(url):
+    # Free Render instances sleep after ~15 idle minutes, which stops the paper
+    # engine. A periodic external request keeps it awake while enabled.
+    async with httpx.AsyncClient(timeout=20) as client:
+        while True:
+            await asyncio.sleep(600)
+            try:await client.get(url+'/health')
+            except Exception as exc:print('POLY_KEEPALIVE_FAILED',type(exc).__name__,flush=True)
+
+@app.on_event('startup')
+async def start_keepalive():
+    url=os.environ.get('POLY_KEEPALIVE_URL','').strip().rstrip('/')
+    if url and POLY_ENGINE_ROLE!='frontend':
+        asyncio.create_task(_keepalive(url));print('POLY_KEEPALIVE_ENABLED',flush=True)
 
 @app.get('/health')
 async def health():return {'status':'online','chain':'solana-mainnet','wallet_private_keys_on_server':False,'jupiter_key_configured':bool(os.environ.get('JUPITER_API_KEY')),'jupiter_provider_selftest':jupiter_provider_selftest,'market_scan_selftest':market_scan_selftest,'market_live_status':market_live_status,'market_seq':market_seq,'jito_selftest':jito_selftest,'poly_selftest':poly_selftest,'poly_server_demo':poly_server_engine.feed,'poly_engine_role':POLY_ENGINE_ROLE,'atomic_bundle_execution':True}
@@ -705,6 +723,19 @@ async def poly_operations():
 async def poly_v16_research():
     return poly_server_engine.research.snapshot() if poly_server_engine.research else {"mode":"SHADOW_ONLY","executionEnabled":False,"state":"starting"}
 
+
+@app.get("/api/poly/edge")
+async def poly_edge():
+    return poly_server_engine.edge.snapshot(200.)
+
+@app.get("/api/poly/edge/state")
+async def poly_edge_state():
+    # Paper research state used for live handover between deploys; contains no credentials.
+    return JSONResponse(poly_server_engine.edge.export(),headers={'Cache-Control':'no-store'})
+
+@app.get("/api/poly/readiness")
+async def poly_readiness():
+    return poly_server_engine.edge.readiness(200.)
 
 @app.get("/api/poly/research/v16/model")
 async def poly_v16_model():

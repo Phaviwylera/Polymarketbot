@@ -41,7 +41,7 @@ class DurableStore:
                 'queuedEvents':len(self.queue),'eventsSavedThisBoot':self.saved,'errors':self.errors,
                 'lastError':self.last_error,'droppedEvents':self.dropped,
                 'databaseExpiresAt':os.getenv('POLY_DATABASE_EXPIRES_AT') or None,
-                'coverage':'Paper checkpoints, research labels, model artifact, attribution and sampled decisions; raw feed spool stays local.',
+                'coverage':'Paper checkpoints, research labels, model artifact, attribution, sampled decisions and EdgeLab learning (calibration, strategy record, wallet study); raw feed spool stays local.',
                 'checkpointTargetSec':2,'rawFeedDurable':False}
     def entry_allowed(self):
         return not self.url or bool(self.owner and self.active and self.ready and not self.dropped and time.time()-self.last_commit<10)
@@ -73,6 +73,9 @@ class DurableStore:
         return json.loads(raw) if isinstance(raw,str) else raw
     async def promote(self):
         self.engine.durable_recovery=await self.load()
+        edge=getattr(self.engine,'edge',None)
+        raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='edge'")
+        if edge is not None and raw:edge.restore(json.loads(raw) if isinstance(raw,str) else raw)
         bootstrap=[]
         encoded=os.getenv('POLY_RESEARCH_BOOTSTRAP_B64','') or ''.join(os.getenv('POLY_RESEARCH_BOOTSTRAP_'+str(i),'') for i in range(1,9))
         if not self.engine.durable_recovery and encoded:
@@ -112,6 +115,9 @@ class DurableStore:
             await self.conn.execute("INSERT INTO poly_v161_state VALUES('paper',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(snap,separators=(',',':'),allow_nan=False))
             artifact=self.engine.research.artifact if self.engine.research else None
             if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False))
+            edge=getattr(self.engine,'edge',None)
+            if edge is not None and self.commits%15==0:
+                await self.conn.execute("INSERT INTO poly_v161_state VALUES('edge',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(edge.export(),separators=(',',':'),allow_nan=False))
             if self.commits and self.commits%300==0:
                 for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000)):
                     await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit)
