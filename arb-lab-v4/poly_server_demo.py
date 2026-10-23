@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.2-edge"
+ENGINE_REVISION="16.3-tuned"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
@@ -112,6 +112,7 @@ class PolyServerDemo:
         self.momentum_candidate=None
         self.edge=None;self.edge_decision='waiting for market data';self.model_decision='waiting for research model'
         self.loss_budget=None  # portfolio-provided callable: remaining portfolio loss budget
+        self.momentum_sizing={'earned':False,'reason':'no record yet'}
         self.book_history=deque(maxlen=160)
         self.book_observed={'up':0.,'down':0.}
         self.book_event_lag={'up':None,'down':None}
@@ -1590,7 +1591,10 @@ class PolyServerDemo:
                 self._record('NOFILL',side=side,detail='momentum post-latency rejection: '+(reason if not fresh else 'direction or one-tick price limit changed'))
                 return False
             ask=fresh['ask'];fee=shares*_fee_per_share(ask);cost=shares*ask+fee
-            if shares!=fresh['shares'] or cost>min(float(p['cash']),fresh['notionalCap'])+1e-9:return False
+            if candidate.get('baseShares',shares)!=fresh['shares'] or cost>min(float(p['cash']),candidate.get('notionalCap',fresh['notionalCap']))+1e-9:return False
+            if shares>fresh['shares'] and min(float(self.bbo[key].get('askSize') or 0),float(self.bbo[key].get('bidSize') or 0))<shares:
+                p['nofills']+=1;p['postLatencyRejects']+=1
+                self._record('NOFILL',side=side,detail='sized momentum entry: depth fell below order size');return False
             p['cash']-=cost;p['fees']+=fee;p['momentumFills']=int(p.get('momentumFills',0))+1
             p.setdefault('tradedMarkets',[]).append(market['slug']);p['tradedMarkets']=p['tradedMarkets'][-32:]
             p['position']={'marketSlug':market['slug'],'side':side,'entryPrice':ask,'shares':shares,'entryFee':fee,
@@ -1599,7 +1603,8 @@ class PolyServerDemo:
                            'entryFeatures':{k:fresh[k] for k in ('leadBps','impulse5Bps','bookMove','modelEdgeEstimate','entryFrictionUsd') if k in fresh},
                            'modelFair':fresh['fair'],'entryNetEdge':fresh['modelEdgeEstimate'],
                            'entryFrictionUsd':fresh['entryFrictionUsd'],'adverseMoveBudgetUsd':fresh['adverseMoveBudgetUsd'],
-                           'stopLossUsd':fresh['stopLossUsd'],'takeProfitUsd':fresh['takeProfitUsd'],'maxHoldSec':fresh['maxHoldSec']}
+                           'stopLossUsd':candidate.get('stopLossUsd',fresh['stopLossUsd']),'takeProfitUsd':candidate.get('takeProfitUsd',fresh['takeProfitUsd']),'maxHoldSec':fresh['maxHoldSec'],
+                           'sizeMultiplier':candidate.get('sizeMultiplier',1.)}
             self._record('BUY',side=side,price=ask,detail=f'MOMENTUM_SCALP; {shares:.2f} shares; confirmed depth; fee {fee:.5f}; estimated edge {fresh["modelEdgeEstimate"]:.4f}')
             return True
         finally:self.pending=False
@@ -1650,6 +1655,7 @@ class PolyServerDemo:
         candidate,reason=self._momentum_signal(m);self.momentum_candidate=candidate;self.momentum_decision=reason
         if candidate:
             p['signals']+=1
+            candidate=self._momentum_size(candidate);self.momentum_candidate=candidate
             await self._momentum_enter(candidate)
 
     # ---------------- promoted strategies (EdgeLab mispricing, research model) ----------------
@@ -1660,10 +1666,41 @@ class PolyServerDemo:
         return max(0.,min(lane,portfolio))
 
     def _ask_levels(self,side):
-        return [{'price':px,'size':q} for px,q in sorted(self._book_levels[side]['asks'].items())]
+        best=self.bbo[side].get('ask');levels=dict(self._book_levels[side]['asks'])
+        if best is not None:
+            levels={px:q for px,q in levels.items() if px>=float(best)-1e-9};levels.setdefault(float(best),float(self.bbo[side].get('askSize') or 0))
+        return [{'price':px,'size':q} for px,q in sorted(levels.items())]
 
     def _bid_levels(self,side):
-        return [{'price':px,'size':q} for px,q in sorted(self._book_levels[side]['bids'].items(),reverse=True)]
+        best=self.bbo[side].get('bid');levels=dict(self._book_levels[side]['bids'])
+        if best is not None:
+            levels={px:q for px,q in levels.items() if px<=float(best)+1e-9};levels.setdefault(float(best),float(self.bbo[side].get('bidSize') or 0))
+        return [{'price':px,'size':q} for px,q in sorted(levels.items(),reverse=True)]
+
+    def _momentum_record(self):
+        rows=[t['pnl'] for t in (getattr(self.edge,'trades',None) or []) if t.get('strategy')=='MOMENTUM_SCALP'][-30:]
+        n=len(rows)
+        if n<20:return {'earned':False,'trades':n,'reason':'needs 20 closed momentum trades'}
+        mean=sum(rows)/n;se=(sum((x-mean)**2 for x in rows)/(n-1))**.5/n**.5
+        return {'earned':mean-se>0,'trades':n,'meanPnl':round(mean,4),'meanMinusSE':round(mean-se,4)}
+
+    def _momentum_size(self,c):
+        """Earned confidence sizing: 1x-2x the minimum, linear in model edge (2x at 10c), only while the
+        last 30 momentum trades have mean - 1 SE > 0. Capped by 15% of allocation, the remaining loss
+        budget and visible two-sided depth; stop and target scale with size."""
+        rec=self._momentum_record();self.momentum_sizing=rec;base=float(c['shares'])
+        mult=max(1.,min(2.,float(c.get('modelEdgeEstimate') or 0)/.10)) if rec['earned'] else 1.
+        cost=c['ask']+_fee_per_share(c['ask']);stop_ps=float(c['stopLossUsd'])/base
+        cap=min(self.balance*.15,float((self.paper or {}).get('cash') or 0))
+        budget=self._loss_budget()
+        shares=math.floor(min(base*mult,cap/cost,budget/max(stop_ps,1e-9) if budget>0 else base,
+                              float(self.bbo[c['side'].lower()].get('askSize') or 0),float(self.bbo[c['side'].lower()].get('bidSize') or 0))*100)/100
+        shares=max(base,shares) if mult>1 else base
+        if shares<=base+1e-9:return c
+        scale=shares/base
+        return {**c,'baseShares':base,'shares':shares,'sizeMultiplier':round(scale,3),'entryTotalCost':shares*cost,
+                'stopLossUsd':round(c['stopLossUsd']*scale,4),'takeProfitUsd':round(c['takeProfitUsd']*scale,4),
+                'notionalCap':max(float(c.get('notionalCap') or 0),shares*cost+1e-6)}
 
     def _edge_candidate(self,c):
         from poly_edge import size_stake
@@ -1817,6 +1854,7 @@ class PolyServerDemo:
             p['position']=None
             self._record('SELL',side=pos['side'],price=fill['vwap'],pnl=pnl,detail=reason+f'; VWAP {fill["vwap"]:.3f}; fee USD {fee:.5f}')
             self._attribute_close(pos,fill['vwap'],fee,reason,(time.time()-submitted)*1000)
+            if pos.get('mode')=='MOMENTUM_SCALP':p['momentumCloses']=int(p.get('momentumCloses',0))+1
             return True
         finally:self.pending=False
 
@@ -1929,7 +1967,7 @@ class PolyServerDemo:
         min_sh=float(self.market.get('minOrderSize') or 0) if self.market else 0
         if pos['shares']<min_sh:return False
         bid0=self.bbo[key].get('bid');size0=float(self.bbo[key].get('bidSize') or 0)
-        if pos.get('mode') in ('EDGE_HOLD','MODEL_SCALP'):
+        if pos.get('mode') in SELF_MANAGED_MODES:
             return await self._sell_walk(reason)
         if bid0 is None or size0<pos['shares']:
             if time.time()-pos.get('exitWaitLoggedAt',0)>=3:
@@ -2113,7 +2151,7 @@ class PolyServerDemo:
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
-            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'edgeSignal':(self.edge.signals.get(self.asset) if self.edge else None)},
+            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'momentumSizing':self.momentum_sizing,'edgeSignal':(self.edge.signals.get(self.asset) if self.edge else None)},
             'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
             'bookHealth':{'observedAt':dict(self.book_observed),'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
             'research':getattr(self,'research_state',{'mode':'SHADOW_ONLY','executionEnabled':False,'reason':'research starting'}),

@@ -223,3 +223,51 @@ class AutoCycleTests(unittest.TestCase):
             for e in pf.engines.values():e.close()
 
 if __name__=='__main__':unittest.main()
+
+class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        e=self.e=mod.PolyServerDemo('ETH',80,state_file=Path(self.tmp.name)/'s.json',risk_profile={'momentumEnabled':True,'sessionLossLimit':4,'stopLoss':.40})
+        e._save=lambda:None;e._new_session();self.addCleanup(e.close);now=time.time()
+        e.market={'slug':'eth-test','upToken':'u','downToken':'d','startTs':now-60,'endTs':now+240,'acceptingOrders':True,'minOrderSize':5,'minTickSize':.01}
+        e.feed=dict.fromkeys(('market','clob','rtds'),'live');e.open_trusted=True;e.spot_ts=e.twap_ts=now
+        e._ingest_book('up',{'bids':[{'price':'.39','size':'60'}],'asks':[{'price':'.40','size':'60'}]})
+        e._ingest_book('down',{'bids':[{'price':'.59','size':'60'}],'asks':[{'price':'.60','size':'60'}]})
+        self.m={'fairUp':.6,'fairDown':.4,'leadBps':1.,'impulse5Bps':.3}
+        e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.375,'down':.615,'upBid':.38})
+        e._model=lambda:self.m
+        e.edge=EdgeLab({'ETH':e})
+        self.latency=patch.object(mod,'EXECUTION_LATENCY_SEC',0);self.latency.start();self.addCleanup(self.latency.stop)
+    def record(self,pnls):
+        self.e.edge.trades.clear()
+        for x in pnls:self.e.edge.trades.append({'pnl':x,'at':0,'strategy':'MOMENTUM_SCALP'})
+    def test_minimum_edge_is_five_cents(self):
+        import poly_momentum
+        self.assertEqual(poly_momentum.MIN_EDGE,.05)
+        e=self.e;now=time.time()
+        e._ingest_book('up',{'bids':[{'price':'.47','size':'60'}],'asks':[{'price':'.48','size':'60'}]})
+        e.book_history.clear();e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.455,'down':.53,'upBid':.46})
+        self.m['fairUp']=.55;self.m['fairDown']=.45   # edge = .55-.48-fees-.01 = 2.5c: passed the old 2c floor
+        c,reason=e._momentum_signal(self.m);self.assertIsNone(c);self.assertIn('5-cent',reason)
+        self.m['fairUp']=.60;self.m['fairDown']=.40
+        self.assertIsNotNone(e._momentum_signal(self.m)[0])
+    async def test_unearned_record_keeps_minimum_size(self):
+        self.record([.5,-.6]*15)
+        c,_=self.e._momentum_signal(self.m);c=self.e._momentum_size(c)
+        self.assertEqual(c['shares'],5);self.assertFalse(self.e.momentum_sizing['earned'])
+    async def test_earned_record_scales_size_stop_and_target_within_caps(self):
+        self.record([.8,-.4]*15)
+        c,_=self.e._momentum_signal(self.m);base=dict(c);c=self.e._momentum_size(c)
+        self.assertTrue(self.e.momentum_sizing['earned']);self.assertGreater(c['shares'],5);self.assertLessEqual(c['shares'],10)
+        self.assertLessEqual(c['entryTotalCost'],80*.15+1e-6)
+        self.assertAlmostEqual(c['stopLossUsd'],base['stopLossUsd']*c['shares']/5,places=3)
+        self.assertTrue(await self.e._momentum_enter(c))
+        pos=self.e.paper['position'];self.assertEqual(pos['shares'],c['shares']);self.assertAlmostEqual(pos['stopLossUsd'],c['stopLossUsd'])
+    async def test_momentum_exit_walks_depth_when_best_bid_is_thin(self):
+        self.record([])
+        c,_=self.e._momentum_signal(self.m);await self.e._momentum_enter(c)
+        # Only 2 shares at the best bid, the rest one tick lower: the old exit waited; the walk fills.
+        self.e._ingest_book('up',{'bids':[{'price':'.30','size':'2'},{'price':'.29','size':'50'}],'asks':[{'price':'.31','size':'50'}]})
+        await self.e._momentum_manage(self.m)
+        self.assertIsNone(self.e.paper['position']);self.assertEqual(self.e.paper['momentumCloses'],1)
+        self.assertLess(self.e.paper['realizedPnl'],0)

@@ -1,6 +1,10 @@
 """Executable paper momentum experiment. Model edge is an estimate, not a calibrated return."""
 import math
 
+# 43 closed paper trades (Oct 18-23): estimated edge below 0.05 lost money in both
+# chronological halves; edge correlated with net P&L (r=0.36). Raised from 0.02.
+MIN_EDGE=.05
+
 def fee(price):return round(.07*price*(1-price),5)
 
 def signal(context,history,allow_weak_impulse=False):
@@ -34,7 +38,7 @@ def signal(context,history,allow_weak_impulse=False):
     prior_bid=prior[-1].get(side+'Bid',float(prior[-1][side])-tick/2)
     if prior_bid is None or bid-float(prior_bid)<tick-1e-9:return reject('best bid has not risen a full tick')
     edge=fair-ask-fee(ask)-fee(fair)-.01
-    if not math.isfinite(edge) or edge<.02:return reject('model advantage below fees plus 2-cent buffer')
+    if not math.isfinite(edge) or edge<MIN_EDGE:return reject('model advantage below fees plus 5-cent buffer')
     # A net stop includes crossing the spread and both taker fees. Reserve at
     # least one tick and 25% of the stop for adverse movement after entry.
     stop=float(c.get('stopLossUsd',.30))

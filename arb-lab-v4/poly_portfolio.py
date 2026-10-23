@@ -78,6 +78,15 @@ class PaperPortfolio:
                 except Exception:pass
             print('POLY_HANDOVER_PREFETCHED',bool(self.handover),bool(self.handover_edge),flush=True)
         except Exception as exc:print('POLY_HANDOVER_UNAVAILABLE',type(exc).__name__,flush=True)
+    def _seed_trade_record(self):
+        """The session ledgers are the complete closed-trade history; rebuild the scorecard record from them."""
+        try:
+            import poly_devlog
+            rows=poly_devlog.trade_rows(self)
+            if len(rows)>=len(self.edge.trades):
+                self.edge.trades.clear()
+                self.edge.trades.extend({'pnl':float(r['pnl']),'at':float(r['exitAt'] or 0),'strategy':r['mode'],'asset':r['asset']} for r in rows if r['pnl'] is not None)
+        except Exception as exc:print('POLY_TRADE_SEED_ERROR',type(exc).__name__,flush=True)
     # ---- autonomous session rollover: losses stay in the lifetime ledger ----
     def _exposed(self,e):
         return bool(e.pending or (e.paper and (e.paper.get('position') or e._inventory_has_residual())))
@@ -166,6 +175,7 @@ class PaperPortfolio:
                 e.state_file.write_text(json.dumps(saved))
         if self.handover_edge and not self.durable_recovery and not self.edge.restored:self.edge.restore(self.handover_edge)
         await asyncio.gather(*(e.start() for e in self.engines.values()))
+        self._seed_trade_record()
         self.edge.start()
         if self.cycle_task is None:self.cycle_task=asyncio.create_task(self.cycle_worker(),name='auto-cycle')
         for source in (checkpoint,recovery):
