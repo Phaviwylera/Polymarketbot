@@ -94,3 +94,30 @@ def compact_lines(rep):
     for asset,l in rep['lanes'].items():
         out.append('POLY_DEV_LANE '+json.dumps({'asset':asset,**{k:l[k] for k in ('status','lock','decision','market','secondsLeft','realizedPnl','trades','position','edge','strategyDecisions','fills')}},separators=(',',':'),default=str))
     return out
+
+import re
+_EDGE=re.compile(r'(?:estimated edge|edge)\s+(-?[0-9.]+)')
+def trade_rows(engine):
+    """Closed trades rebuilt from every retained session ledger (archived + current), oldest first."""
+    rows=[]
+    for asset,lane in engine.engines.items():
+        sessions=list((getattr(engine,'ledger_history',{}) or {}).get(asset,{}).values())
+        if lane.paper:sessions.append(lane.paper)
+        for s in sessions:
+            buy=None
+            for ev in reversed(s.get('events') or []):
+                a=ev.get('action')
+                if a=='BUY':buy=ev
+                elif a in ('SELL','SETTLE') and ev.get('pnl') is not None:
+                    d=str((buy or {}).get('detail',''));m=_EDGE.search(d)
+                    rows.append({'asset':asset,'session':s.get('sessionId'),'entryAt':_r((buy or {}).get('t'),1),'exitAt':_r(ev.get('t'),1),
+                        'mode':d.split(';')[0].split(' ')[0] if buy else None,'side':ev.get('side'),'entry':(buy or {}).get('price'),'exit':ev.get('price'),
+                        'pnl':_r(ev.get('pnl'),5),'holdSec':_r(float(ev['t'])-float(buy['t']),1) if buy else None,
+                        'estEdge':float(m.group(1)) if m else None,'reason':str(ev.get('detail','')).split(';')[0][:60]})
+                    buy=None
+    rows.sort(key=lambda r:r['exitAt'] or 0)
+    return rows
+
+def trades_csv(rows):
+    cols=['asset','session','entryAt','exitAt','mode','side','entry','exit','pnl','holdSec','estEdge','reason']
+    return ','.join(cols)+'\n'+''.join(','.join('' if r.get(c) is None else str(r[c]).replace(',',' ') for c in cols)+'\n' for r in rows)
