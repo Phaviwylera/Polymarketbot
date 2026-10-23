@@ -30,7 +30,7 @@ def report(engine,now=None):
             'orders':p.get('strategyOrders'),'fills':p.get('strategyFills'),
             'edge':{'decision':sig.get('decision'),'pUp':_r(sig.get('pUp')),'heuristicFairUp':_r(sig.get('heuristicFairUp')),'cellRounds':sig.get('cellRounds'),
                     'bestSide':best.get('side'),'ask':best.get('ask'),'conservativeEdge':_r(best.get('conservativeEdge')),'smartFlow':_r(best.get('smartFlow'),2)},
-            'strategyDecisions':{'edge':st.get('edge'),'model':st.get('model')},
+            'strategyDecisions':{'edge':st.get('edge'),'model':st.get('model'),'momentumSizing':st.get('momentumSizing')},
             'recentEvents':[{'ago':_age(e.get('t'),now),'action':e.get('action'),'side':e.get('side'),'price':e.get('price'),'pnl':_r(e.get('pnl')),'detail':str(e.get('detail',''))[:140]}
                             for e in (p.get('events') or [])[:8]]}
     strategies={k:{x:v.get(x) for x in ('bets','rounds','wins','winRatePct','meanReturnPerDollar','meanMinus2SE','gatePassed')}
