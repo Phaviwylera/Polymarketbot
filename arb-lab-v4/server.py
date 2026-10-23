@@ -86,16 +86,12 @@ async def style():return FileResponse(ROOT/'style.css',media_type='text/css',hea
 async def poly_home():return FileResponse(ROOT/'poly-terminal.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
 
 @app.get('/poly/classic')
-async def poly_classic():return FileResponse(ROOT/'poly.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+async def poly_classic():   # classic view retired; old bookmarks land on the terminal dashboard
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse('/poly',status_code=301)
 
 @app.get('/poly-terminal.js')
 async def poly_terminal_js():return FileResponse(ROOT/'poly-terminal.js',media_type='text/javascript',headers={'Cache-Control':'no-store'})
-
-@app.get('/poly.js')
-async def poly_js():return FileResponse(ROOT/'poly.js',media_type='text/javascript',headers={'Cache-Control':'no-store'})
-
-@app.get('/poly-orb.js')
-async def poly_orb_js():return FileResponse(ROOT/'poly-orb.js',media_type='text/javascript',headers={'Cache-Control':'no-store'})
 
 @app.get('/poly-demo.js')
 async def poly_demo_js():return FileResponse(ROOT/'poly-demo.js',media_type='text/javascript',headers={'Cache-Control':'no-store'})
