@@ -72,11 +72,21 @@ class DurableStore:
         raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='paper'")
         return json.loads(raw) if isinstance(raw,str) else raw
     async def promote(self):
-        self.engine.durable_recovery=await self.load()
+        """Read everything durable first (generous timeouts), then start trading once.
+        Starting engines before the heavy reads meant a slow read could time out,
+        suspend freshly started engines and repeat the whole start-up."""
+        T=60
+        row=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='paper'",timeout=T)
+        recovery=json.loads(row) if isinstance(row,str) else row
+        edge_raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='edge'",timeout=T)
+        labels=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' ORDER BY t DESC LIMIT 12000",timeout=T)
+        model_raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='model'",timeout=T)
+        records=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='TRADE_ATTRIBUTION' ORDER BY t DESC LIMIT 5000",timeout=T)
+        self.engine.durable_recovery=recovery
         edge=getattr(self.engine,'edge',None)
-        raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='edge'")
-        if edge is not None and raw:edge.restore(json.loads(raw) if isinstance(raw,str) else raw)
+        if edge is not None and edge_raw:edge.restore(json.loads(edge_raw) if isinstance(edge_raw,str) else edge_raw)
         if hasattr(self.engine,'import_edge_archive'):self.engine.import_edge_archive()  # DB row may predate the archive
+        if getattr(self.engine,'started',False) and hasattr(self.engine,'_seed_trade_record'):self.engine._seed_trade_record()  # a retried promote must not leave a stale scorecard
         bootstrap=[]
         encoded=os.getenv('POLY_RESEARCH_BOOTSTRAP_B64','') or ''.join(os.getenv('POLY_RESEARCH_BOOTSTRAP_'+str(i),'') for i in range(1,9))
         if not self.engine.durable_recovery and encoded:
@@ -87,17 +97,14 @@ class DurableStore:
         self.engine.start_research()
         self.attach()  # Recovery cancellations and bounds also need durable evidence.
         self.engine.research.restore_pairs((self.engine.durable_recovery or {}).get('pairResearchCheckpoint'))
-        labels=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' ORDER BY t DESC LIMIT 12000")
         rows=[(json.loads(r['payload']) if isinstance(r['payload'],str) else r['payload'])['row'] for r in reversed(labels)]
         known={r['id'] for r in self.engine.research.rows}
         self.engine.research.rows.extend(r for r in rows if r['id'] not in known)
-        raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='model'")
-        if raw:
+        if model_raw:
             from poly_features import SCHEMA as fs,POLICY,NAMES
-            model=json.loads(raw) if isinstance(raw,str) else raw
+            model=json.loads(model_raw) if isinstance(model_raw,str) else model_raw
             if model.get('report',{}).get('schema')==fs and model.get('report',{}).get('policy')==POLICY and model.get('featureNames')==list(NAMES):
                 self.engine.research.artifact=model;self.engine.research.training=model['report']
-        records=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='TRADE_ATTRIBUTION' ORDER BY t DESC LIMIT 5000")
         for r in reversed(records):self.engine.attribution.add((json.loads(r['payload']) if isinstance(r['payload'],str) else r['payload'])['trade'])
         self.active=True;self.attach();await self.flush()
         for r in bootstrap:
@@ -112,7 +119,7 @@ class DurableStore:
         research=self.engine.research
         if research and hasattr(research,'pair_checkpoint'):snap['pairResearchCheckpoint']=research.pair_checkpoint()
         async with self.conn.transaction():
-            if batch:await self.conn.executemany('INSERT INTO poly_v161_events(id,t,asset,kind,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING',batch)
+            if batch:await self.conn.executemany('INSERT INTO poly_v161_events(id,t,asset,kind,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING',batch,timeout=30)
             await self.conn.execute("INSERT INTO poly_v161_state VALUES('paper',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(snap,separators=(',',':'),allow_nan=False))
             artifact=self.engine.research.artifact if self.engine.research else None
             if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False))
@@ -121,7 +128,7 @@ class DurableStore:
                 await self.conn.execute("INSERT INTO poly_v161_state VALUES('edge',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(edge.export(),separators=(',',':'),allow_nan=False))
             if self.commits and self.commits%300==0:
                 for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000)):
-                    await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit)
+                    await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit,timeout=60)
         for _ in batch:self.queue.popleft()
         self.saved+=len(batch);self.last_commit=now;self.last_error=None;self.commits+=1
     async def worker(self):

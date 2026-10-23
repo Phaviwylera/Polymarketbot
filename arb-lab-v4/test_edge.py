@@ -405,3 +405,19 @@ class RecoveryCompatibilityTests(unittest.TestCase):
         lab=EdgeLab({});b={'marketSlug':'s1','side':'UP','t':10.,'returnPerDollar':1.,'won':True,'roundStart':1}
         self.assertEqual(lab.import_bets({'edge':[b,{**b,'marketSlug':'s2'}]}),2)
         self.assertEqual(lab.import_bets({'edge':[b]}),0);self.assertEqual(lab.strategies['edge'].stats()['bets'],2)
+
+class PromoteRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_slow_read_does_not_start_engines_or_clobber_state(self):
+        import asyncio,poly_storage
+        class Conn:
+            def __init__(s,fail):s.fail=fail
+            async def fetchval(s,q,timeout=None):return None
+            async def fetch(s,q,timeout=None):
+                if s.fail:raise asyncio.TimeoutError()
+                return []
+        class Eng:
+            def __init__(s):s.engines={};s.started=False;s.starts=0;s.edge=EdgeLab({});s.research=None
+            async def start(s):s.started=True;s.starts+=1
+        e=Eng();st=poly_storage.DurableStore.__new__(poly_storage.DurableStore);st.engine=e;st.conn=Conn(True)
+        with self.assertRaises(asyncio.TimeoutError):await st.promote()
+        self.assertEqual(e.starts,0)   # nothing started before every read succeeded
