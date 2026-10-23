@@ -4,7 +4,8 @@
    edge after fees, pulsing seed rings = a detected mispricing, bursts = paper fills.
    It is a telemetry visualization, never a visualization of real order routing. */
 (() => {
- const TAU=2*Math.PI,N=192,LOOP=60000,ASSETS=['BTC','ETH','SOL','XRP'];
+ const TAU=2*Math.PI,N=192,LOOP=60000,ASSETS=['BTC','ETH','BTC15','ETH15'];
+ const LABEL={BTC:'BTC 5m',ETH:'ETH 5m',BTC15:'BTC 15m',ETH15:'ETH 15m'};
  const colors=['#ffc45a','#65d5ff','#bdabff','#67f3a2'];
  const nodes=Array.from({length:N},(_,i)=>{const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),a=i*Math.PI*(3-Math.sqrt(5));return {x:Math.cos(a)*r,y,z:Math.sin(a)*r};});
  const links=[],neighbors=nodes.map(()=>[]),used=new Set();
@@ -56,9 +57,9 @@
   ctx.font='500 '+(compact?9:11)+'px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';ctx.fillStyle='#879b9f';ctx.fillText('MARKET INPUTS',left,top-14);
   ASSETS.forEach((asset,i)=>{const a=state.assets?.[asset],live=fresh(a),path=paths[i],y=top+i*step;
    ctx.fillStyle='#0a1114';ctx.strokeStyle=live?colors[i]+'45':'#233136';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(left,y,cardW,cardH,9);ctx.fill();ctx.stroke();
-   ctx.fillStyle=live?colors[i]:'#879b9f';ctx.font='600 '+(compact?11:13)+'px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';ctx.fillText(asset,left+10,y+cardH*.38);
+   ctx.fillStyle=live?colors[i]:'#879b9f';ctx.font='600 '+(compact?11:13)+'px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';ctx.fillText(LABEL[asset]||asset,left+10,y+cardH*.38);
    ctx.fillStyle='#e4edef';ctx.font=(compact?10:14)+'px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
-   const price=finite(a?.spot)?'$'+Number(a.spot).toLocaleString('en-US',{maximumFractionDigits:asset==='XRP'?4:2}):'Awaiting feed';ctx.fillText(price,left+10,y+cardH*.74);
+   const price=finite(a?.spot)?'$'+Number(a.spot).toLocaleString('en-US',{maximumFractionDigits:2}):'Awaiting feed';ctx.fillText(price,left+10,y+cardH*.74);
    const st=sig[i];
    if(!compact){ctx.textAlign='right';ctx.font='500 9px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';ctx.fillStyle=st.position?'#ffc45a':live?'#67f3a2':'#879b9f';ctx.fillText(st.position?(st.position==='EDGE_HOLD'?'HOLDING':'IN TRADE'):live?'LIVE':'WAIT',left+cardW-9,y+cardH*.38);
     if(st.p!==null){ctx.font='500 9px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';ctx.fillStyle=st.mispriced?'#67f3a2':'#879b9f';

@@ -16,6 +16,7 @@ VERSION='edge-1.0'
 # Remaining-seconds buckets (one calibration sample per bucket per round keeps
 # a single round from dominating a cell) and raw-probability bins.
 TIME_EDGES=(30,60,120,180,240,301)
+TIME_EDGES_15=(60,120,240,480,720,901)   # 15-minute rounds use separate cells (bucket index + 10)
 PROB_BINS=10
 PRIOR_WEIGHT=10.0          # pseudo-rounds given to the heuristic model in each cell
 EDGE_BUFFER=0.02           # extra margin above fees before calling a price a mistake
@@ -35,10 +36,11 @@ VARIANTS=('edge','edge_smart')
 
 def fee(p):return round(.07*p*(1-p),5)
 
-def time_bucket(remaining):
-    for i,edge in enumerate(TIME_EDGES):
-        if remaining<edge:return i
-    return len(TIME_EDGES)-1
+def time_bucket(remaining,interval=300):
+    edges,offset=(TIME_EDGES_15,10) if interval==900 else (TIME_EDGES,0)
+    for i,edge in enumerate(edges):
+        if remaining<edge:return offset+i
+    return offset+len(edges)-1
 
 def prob_bin(p):return max(0,min(PROB_BINS-1,int(float(p)*PROB_BINS)))
 
@@ -52,8 +54,8 @@ class Calibrator:
     def __init__(self):
         self.cells=defaultdict(lambda:[0.,0.])   # (tb,pb) -> [rounds, up wins]
         self.brier={'heuristic':[0.,0],'calibrated':[0.,0]}
-    def estimate(self,raw_up,fair_up,remaining):
-        n,w=self.cells[(time_bucket(remaining),prob_bin(raw_up))]
+    def estimate(self,raw_up,fair_up,remaining,interval=300):
+        n,w=self.cells[(time_bucket(remaining,interval),prob_bin(raw_up))]
         prior=max(.02,min(.98,number(fair_up,.5)))
         p=(w+PRIOR_WEIGHT*prior)/(n+PRIOR_WEIGHT)
         se=math.sqrt(max(p*(1-p),1e-4)/(n+PRIOR_WEIGHT))
@@ -220,8 +222,9 @@ class EdgeLab:
         if max(now-e.spot_ts,now-e.twap_ts)>=5:return out('oracle stale')
         remaining=number(market.get('endTs'))-now;elapsed=now-number(market.get('startTs'))
         r=self._round(asset,market)
-        est=self.cal.estimate(m.get('rawFairUp',m.get('fairUp',.5)),m.get('fairUp',.5),remaining)
-        tb=time_bucket(remaining)
+        interval=int(getattr(e,'interval',300) or 300)
+        est=self.cal.estimate(m.get('rawFairUp',m.get('fairUp',.5)),m.get('fairUp',.5),remaining,interval)
+        tb=time_bucket(remaining,interval)
         if elapsed>=MIN_ELAPSED and tb not in r['samples']:
             r['samples'][tb]={'tb':tb,'pb':prob_bin(m.get('rawFairUp',.5)),'fairUp':number(m.get('fairUp'),.5),'pUp':est['pUp'],'t':now}
         smart=self.intel.live.get(asset) or {}
@@ -245,7 +248,7 @@ class EdgeLab:
             else:info['reason']='MISPRICED'
             sides.append(info)
         best=max(sides,key=lambda s:s.get('conservativeEdge',-9))
-        window=elapsed>=MIN_ELAPSED and remaining>=MIN_REMAINING and elapsed<=MAX_ELAPSED_FOR_ENTRY
+        window=elapsed>=MIN_ELAPSED and remaining>=MIN_REMAINING and elapsed<=interval-MIN_REMAINING
         candidate=None
         if window and best.get('reason')=='MISPRICED':
             candidate={**best,'remaining':remaining,'cellRounds':est['cellRounds'],'se':est['se'],'marketSlug':market['slug'],

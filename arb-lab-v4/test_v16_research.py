@@ -196,6 +196,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
                 e.state_file=Path(tmp)/(asset+'.json');e._save=lambda:None;e._new_session();c=context(now)
                 e.market={**c['market'],'slug':asset+'-test','startTs':now-60,'endTs':now+240};e.feed=c['feed'];e.spot=e.twap=100.;e.spot_ts=e.twap_ts=now
                 for side in ('up','down'):e._ingest_book(side,c['depth'][side])
+            p.engines['ETH'].inventory_stop=.1   # a stop inside the spread+fee friction labels probes immediately
             before={a:copy.deepcopy(e.paper) for a,e in p.engines.items()};manager=audit.DiagnosticDownloads()
             try:
                 with patch.object(ExchangeFeeds,'worker',parked),patch.object(SemanticResearch,'worker',parked):

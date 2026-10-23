@@ -401,7 +401,7 @@ async def poly_demo_event(body:PolyDemoEvent):
     return {'status':'ok','events':len(session['events'])}
 
 @app.get('/api/poly/demo/server')
-async def poly_demo_server(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_assets:bool=False):
+async def poly_demo_server(asset:Literal['BTC','ETH','BTC15','ETH15']='BTC',all_assets:bool=False):
     return poly_storage.snapshot(asset,include_assets=all_assets)
 
 @app.post('/api/poly/demo/server/reset')

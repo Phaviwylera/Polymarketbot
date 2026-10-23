@@ -284,3 +284,34 @@ class SeedRecordTests(unittest.TestCase):
             pf._seed_trade_record()
             self.assertEqual([t['pnl'] for t in pf.edge.trades],[.4,-.5]);self.assertEqual(pf.edge.trades[0]['strategy'],'MOMENTUM_SCALP')
             for x in pf.engines.values():x.close()
+
+class FifteenMinuteLaneTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lane_queries_15m_slug_and_round_bounds(self):
+        with tempfile.TemporaryDirectory() as d:
+            e=mod.PolyServerDemo('BTC',30,state_file=Path(d)/'s.json',interval=900,lane='BTC15');self.addCleanup(e.close)
+            seen=[]
+            async def get(url,params=None,headers=None):
+                if 'markets' in url:
+                    seen.append(params['slug']);ts=int(params['slug'].rsplit('-',1)[1])
+                    return [{'slug':params['slug'],'outcomes':'["Up","Down"]','clobTokenIds':'["u","d"]','acceptingOrders':True,'conditionId':'0xc'}]
+                return {'bids':[{'price':'.49','size':'50'}],'asks':[{'price':'.51','size':'50'}]}
+            e._get=get;m=await e.fetch_current_market()
+            self.assertTrue(seen[0].startswith('btc-updown-15m-'));self.assertEqual(int(seen[0].rsplit('-',1)[1])%900,0)
+            self.assertEqual(m['endTs']-m['startTs'],900);self.assertEqual(m['interval'],'15m');self.assertEqual(m['lane'],'BTC15')
+    def test_invalid_interval_rejected(self):
+        with self.assertRaises(ValueError):mod.PolyServerDemo('BTC',30,interval=60)
+    def test_calibration_cells_are_separate_per_round_length(self):
+        self.assertNotEqual(edge.time_bucket(200,300),edge.time_bucket(200,900))
+        c=Calibrator();tb=edge.time_bucket(500,900)
+        for _ in range(50):c.update([{'tb':tb,'pb':5,'fairUp':.5,'pUp':.5}],True)
+        self.assertGreater(c.estimate(.55,.5,500,900)['pUp'],.8)
+        self.assertAlmostEqual(c.estimate(.55,.5,200,300)['pUp'],.5)
+    def test_portfolio_lanes_retire_sol_xrp_and_fund_15m(self):
+        import poly_portfolio
+        with tempfile.TemporaryDirectory() as d,patch.dict('os.environ',{'POLY_DATA_DIR':d}):
+            pf=poly_portfolio.PaperPortfolio()
+            self.assertEqual(set(pf.engines),{'BTC','ETH','BTC15','ETH15'});self.assertEqual(sum(poly_portfolio.ALLOCATIONS.values()),200)
+            self.assertEqual(pf.engines['ETH15'].interval,900);self.assertEqual(pf.engines['ETH15'].asset,'ETH')
+            for e in pf.engines.values():self.assertGreaterEqual(e.inventory_stop,.30)   # stop leaves room for fees and spread
+            self.assertIn('SOL',pf.ledger_history);self.assertIn('XRP',pf.ledger_history)
+            for e in pf.engines.values():e.close()

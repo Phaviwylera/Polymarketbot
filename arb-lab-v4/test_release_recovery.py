@@ -14,17 +14,24 @@ class ReleaseRecoveryTests(unittest.IsolatedAsyncioTestCase):
             p=PaperPortfolio()
             for a,e in p.engines.items():
                 e.state_file=Path(tmp)/(a+'.json')
-                async def restore(e=e):self.assertTrue(e._restore_saved())
+                async def restore(e=e,a=a):
+                    restored=e._restore_saved()
+                    if a in recovery['assets']:self.assertTrue(restored)
+                    else:e._new_session()   # new 15m lanes start fresh, as PolyServerDemo.start does
                 e.start=restore
             local=p.engines['BTC'];local._new_session();local.paper['cash']=59;local._last_saved_at=0;local._save()
             response=httpx.Response(200,json={**recovery,'revision':'15.1-confirmed-trend'},request=httpx.Request('GET','https://test'))
             client=AsyncMock();client.get.return_value=response;context=AsyncMock();context.__aenter__.return_value=client
             with patch('poly_portfolio.httpx.AsyncClient',return_value=context):await p.start()
             self.assertEqual(p.engines['BTC'].paper['cash'],59)
-            self.assertAlmostEqual(p.engines['SOL'].paper['realizedPnl'],recovery['assets']['SOL']['paper']['realizedPnl'])
-            self.assertAlmostEqual(p.engines['XRP'].paper['realizedPnl'],recovery['assets']['XRP']['paper']['realizedPnl'])
-            expected=-1+sum(recovery['assets'][a]['paper']['totalPnl'] for a in ('ETH','SOL','XRP'))
-            self.assertAlmostEqual(p.snapshot()['portfolio']['totalPnl'],expected)
+            # Retired SOL/XRP lanes: their known losses move into the lifetime ledger, never vanish.
+            for a in ('SOL','XRP'):
+                sid=recovery['assets'][a]['paper']['sessionId']
+                self.assertAlmostEqual(p.ledger_history[a][sid]['realizedPnl'],recovery['assets'][a]['paper']['realizedPnl'])
+            snap=p.snapshot()['portfolio']
+            retired=sum(recovery['assets'][a]['paper']['realizedPnl'] for a in ('SOL','XRP'))
+            self.assertAlmostEqual(snap['priorSessionRealizedPnl'],retired+sum(float(h.get('realizedPnl') or 0) for a in ('BTC','ETH','BTC15','ETH15') for h in p.ledger_history[a].values()))
+            self.assertAlmostEqual(snap['totalPnl'],-1+recovery['assets']['ETH']['paper']['totalPnl'])
             self.assertEqual(p.engines['ETH'].paper['status'],recovery['assets']['ETH']['paper']['status'])
             for e in p.engines.values():e.close()
     async def test_restore_keeps_original_reference_age(self):
@@ -55,7 +62,9 @@ class ReleaseRecoveryTests(unittest.IsolatedAsyncioTestCase):
             portfolio=PaperPortfolio()
             for a,e in portfolio.engines.items():
                 e.state_file=Path(tmp)/(a+'.json')
-                async def restore(e=e):self.assertTrue(e._restore_saved())
+                async def restore(e=e,a=a):
+                    restored=e._restore_saved()
+                    if a in private['assets']:self.assertTrue(restored)
                 e.start=restore
             client=AsyncMock();client.get.side_effect=httpx.ConnectError('test handover unavailable');context=AsyncMock();context.__aenter__.return_value=client
             try:

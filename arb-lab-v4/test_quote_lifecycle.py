@@ -111,7 +111,7 @@ class QuoteLifecycleTests(unittest.TestCase):
         async def collect():
             return b''.join([chunk async for chunk in response.body_iterator])
         z=zipfile.ZipFile(io.BytesIO(asyncio.run(collect())))
-        self.assertEqual(set(z.namelist()),{'snapshot.json','manifest.json','README.txt','execution-attribution.json','storage-status.json','pair-shadow.json','research-quality.json','BTC.ndjson','ETH.ndjson','SOL.ndjson','XRP.ndjson'})
+        self.assertEqual(set(z.namelist()),{'snapshot.json','manifest.json','README.txt','execution-attribution.json','storage-status.json','pair-shadow.json','research-quality.json','BTC.ndjson','ETH.ndjson','BTC15.ndjson','ETH15.ndjson'})
         self.assertEqual(set(json.loads(z.read('manifest.json'))['assets']),set(p.engines))
 
 if __name__=='__main__':unittest.main()

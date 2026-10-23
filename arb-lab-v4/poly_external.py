@@ -3,7 +3,7 @@ import asyncio,json,math,time
 from collections import deque
 from datetime import datetime
 import websockets
-ASSETS=('BTC','ETH','SOL','XRP')
+ASSETS=('BTC','ETH')   # research feeds for the active 5-minute lanes
 class ExchangeFeeds:
     def __init__(self):
         self.data={a:{} for a in ASSETS};self.history={};self.flows={};self.ids={};self.tasks=[];self.rejected=0

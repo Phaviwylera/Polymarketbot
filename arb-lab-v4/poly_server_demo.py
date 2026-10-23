@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.3-tuned"
+ENGINE_REVISION="16.4-lanes"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
@@ -87,8 +87,10 @@ def _floor_tick(price,tick):
     return round(math.floor((float(price)+1e-12)/tick)*tick,6)
 
 class PolyServerDemo:
-    def __init__(self,asset='BTC',balance=DEMO_BALANCE,state_file=None,portfolio_guard=None,risk_profile=None):
+    def __init__(self,asset='BTC',balance=DEMO_BALANCE,state_file=None,portfolio_guard=None,risk_profile=None,interval=300,lane=None):
         if asset not in {'BTC','ETH','SOL','XRP'}:raise ValueError('unsupported crypto asset')
+        if int(interval) not in (300,900):raise ValueError('supported rounds: 5m and 15m')
+        self.interval=int(interval);self.tag={300:'5m',900:'15m'}[self.interval];self.lane=lane or asset
         self.asset=asset;self.symbol=asset.lower()+'/usd';self.balance=float(balance)
         if self.balance<=0:raise ValueError('positive paper allocation required')
         self.state_file=Path(state_file) if state_file is not None else STATE_FILE
@@ -101,7 +103,7 @@ class PolyServerDemo:
         self.first_price_cap=float(profile.get('firstPriceCap',INVENTORY_MAX_FIRST_PRICE))
         self.inventory_stop=float(profile.get('stopLoss',INVENTORY_STOP_LOSS_USD))
         self.session_loss_limit=float(profile.get('sessionLossLimit',self.session_loss_limit))
-        self.diagnostics=DiagnosticLog(str(self.state_file)+".diagnostics.sqlite3",asset)
+        self.diagnostics=DiagnosticLog(str(self.state_file)+".diagnostics.sqlite3",self.lane)
         self.last_diagnostic_state=0.0
         self.print_keys=deque(maxlen=2000)
         self.entry_checks=[]
@@ -200,7 +202,7 @@ class PolyServerDemo:
             data=json.loads(self.state_file.read_text(encoding='utf-8'))
             p=data.get('paper')
             now=time.time()
-            if not isinstance(p,dict) or int(p.get('version') or 0)!=14 or data.get('asset')!=self.asset or float(p.get('startingBalance') or 0)!=self.balance:
+            if not isinstance(p,dict) or int(p.get('version') or 0)!=14 or data.get('asset')!=self.asset or data.get('interval',self.tag)!=self.tag or float(p.get('startingBalance') or 0)!=self.balance:
                 return False
             # Strip calculated presentation fields before resuming mutable state.
             p=dict(p)
@@ -270,10 +272,10 @@ class PolyServerDemo:
             print('POLY_DEMO_SIGMA_FALLBACK',type(e).__name__,flush=True)
 
     async def fetch_current_market(self):
-        now=int(time.time());bucket=(now//300)*300
+        now=int(time.time());iv=self.interval;bucket=(now//iv)*iv
         selected=None
-        for ts in [bucket,bucket+300,bucket-300]:
-            try: data=await self._get(POLY_GAMMA+'/markets',{'slug':f'{self.asset.lower()}-updown-5m-{ts}'})
+        for ts in [bucket,bucket+iv,bucket-iv]:
+            try: data=await self._get(POLY_GAMMA+'/markets',{'slug':f'{self.asset.lower()}-updown-{self.tag}-{ts}'})
             except Exception: continue
             if isinstance(data,list) and data:
                 selected=(ts,data[0])
@@ -290,8 +292,8 @@ class PolyServerDemo:
         )
         self._fetched_books={str(up):ub,str(down):db}
         return {
-            'slug':m.get('slug') or f'{self.asset.lower()}-updown-5m-{ts}','question':m.get('question'),
-            'asset':self.asset,'interval':'5m','startTs':ts,'endTs':ts+300,'active':bool(m.get('active')),
+            'slug':m.get('slug') or f'{self.asset.lower()}-updown-{self.tag}-{ts}','question':m.get('question'),
+            'asset':self.asset,'lane':self.lane,'interval':self.tag,'startTs':ts,'endTs':ts+self.interval,'active':bool(m.get('active')),
             'closed':bool(m.get('closed')),'acceptingOrders':bool(m.get('acceptingOrders')),
             'minOrderSize':float(m.get('orderMinSize') or 0),
             'minTickSize':float(m.get('orderPriceMinTickSize') or .01),
@@ -329,7 +331,7 @@ class PolyServerDemo:
         while True:
             try:
                 now=time.time()
-                if self.market and self.market.get('slug')==f'{self.asset.lower()}-updown-5m-{int(now)//300*300}' and float(self.market['endTs'])>now:
+                if self.market and self.market.get('slug')==f'{self.asset.lower()}-updown-{self.tag}-{int(now)//self.interval*self.interval}' and float(self.market['endTs'])>now:
                     if min(self.book_observed.values())<now-3 and now-self._last_book_refresh>=3:
                         self._last_book_refresh=now
                         books=await asyncio.gather(*(self._get(POLY_CLOB+'/book',{'token_id':self.market[side+'Token']}) for side in ('up','down')))
@@ -585,7 +587,7 @@ class PolyServerDemo:
             T=max(1,remaining)
             std=max(.000015,sig*(T**1.5)/(math.sqrt(3)*60))
         else:
-            horizon=min(remaining,240)
+            horizon=min(remaining,self.interval-60)
             projected=self.spot*math.exp(drift*min(horizon,90)*.10)+basis
             std=max(.00008,sig*math.sqrt(max(30,horizon))*1.15)
 
@@ -596,7 +598,7 @@ class PolyServerDemo:
 
         # Shrink early-window resolution probability toward 50%; confidence grows
         # naturally as the five-minute market approaches resolution.
-        progress=max(0,min(1,elapsed/300))
+        progress=max(0,min(1,elapsed/self.interval))
         reliability=.30+.70*(progress**.72)
         fair_up=max(.02,min(.98,.5+(raw_up-.5)*reliability))
 
@@ -1555,7 +1557,7 @@ class PolyServerDemo:
 
     def _attribute_close(self,pos,price,fee,reason,latency_ms=0):
         from poly_attribution import closed_trade
-        trade=closed_trade(self.asset,(self.paper or {}).get('sessionId'),pos,price,fee,reason,latency_ms=latency_ms)
+        trade=closed_trade(self.lane,(self.paper or {}).get('sessionId'),pos,price,fee,reason,latency_ms=latency_ms)
         observer=getattr(self,'trade_observer',None)
         if observer:observer(trade)
         self._diagnostic('TRADE_ATTRIBUTION',trade=trade)
@@ -1641,7 +1643,7 @@ class PolyServerDemo:
                 b=self.bbo[side];row[side+'Bid']=b['bid']
                 row[side]=(b['bid']+b['ask'])/2 if b['bid'] is not None and b['ask'] is not None and now-self.book_observed.get(side,0)<=3 else None
             self.book_history.append(row)
-        edge_candidate=self.edge.evaluate(self.asset,self,m) if self.edge else None
+        edge_candidate=self.edge.evaluate(self.lane,self,m) if self.edge else None
         await self._momentum_manage(m)
         p=self.paper;self._update_risk()
         if p.get('position'):self.momentum_decision='managing live paper position';return
@@ -1753,10 +1755,10 @@ class PolyServerDemo:
             if c:
                 self.momentum_candidate=c;self.momentum_decision='EDGE: '+reason;p=self.paper;p['signals']+=1
                 def again():
-                    fresh=self.edge.evaluate(self.asset,self,self._model())
+                    fresh=self.edge.evaluate(self.lane,self,self._model())
                     return fresh if fresh and fresh['side']==c['side'] and self.edge.tradable(fresh) else None
                 await self._strategy_buy(c,'EDGE_HOLD',again);return True
-        else:self.edge_decision=(self.edge.signals.get(self.asset) or {}).get('decision','no signal') if self.edge else 'edge lab not attached'
+        else:self.edge_decision=(self.edge.signals.get(self.lane) or {}).get('decision','no signal') if self.edge else 'edge lab not attached'
         c,reason=self._model_candidate();self.model_decision=reason
         if c:
             self.momentum_candidate=c;self.momentum_decision='MODEL: '+reason;self.paper['signals']+=1
@@ -1818,7 +1820,7 @@ class PolyServerDemo:
         if not self.market or pos['marketSlug']!=self.market['slug']:return  # settles at verified resolution
         side=pos['side'];key=side.lower();bid=self.bbo[key].get('bid')
         if self.market['endTs']-time.time()<=4:return
-        reason=self.edge.hold_exit(self.asset,side,bid) if self.edge else None
+        reason=self.edge.hold_exit(self.lane,side,bid) if self.edge else None
         if reason and time.time()-self.book_observed.get(key,0)<=3:await self._try_sell(reason)
 
     async def _sell_walk(self,reason):
@@ -2140,7 +2142,7 @@ class PolyServerDemo:
         p=self.paper or {}
         eq=self._equity() if self.paper else 0
         return {
-            'status':'ok','asset':self.asset,'revision':ENGINE_REVISION,'serverTime':time.time(),'feed':dict(self.feed),'market':self.market,
+            'status':'ok','asset':self.asset,'lane':self.lane,'interval':self.tag,'revision':ENGINE_REVISION,'serverTime':time.time(),'feed':dict(self.feed),'market':self.market,
             'bbo':self.bbo,'depth':self.depth,'spot':self.spot,'spotAgeSec':time.time()-self.spot_ts if self.spot_ts else None,
             'twap':self.twap,'twapAgeSec':time.time()-self.twap_ts if self.twap_ts else None,
             'openRef':self.open_ref,'openTrusted':self.open_trusted,
@@ -2151,7 +2153,7 @@ class PolyServerDemo:
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
-            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'momentumSizing':self.momentum_sizing,'edgeSignal':(self.edge.signals.get(self.asset) if self.edge else None)},
+            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'momentumSizing':self.momentum_sizing,'edgeSignal':(self.edge.signals.get(self.lane) if self.edge else None)},
             'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
             'bookHealth':{'observedAt':dict(self.book_observed),'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
             'research':getattr(self,'research_state',{'mode':'SHADOW_ONLY','executionEnabled':False,'reason':'research starting'}),

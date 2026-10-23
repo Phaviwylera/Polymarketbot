@@ -55,7 +55,7 @@ class MultiAssetTests(unittest.IsolatedAsyncioTestCase):
     async def test_reset_does_not_erase_open_exposure(self):
         p=PaperPortfolio()
         for e in p.engines.values():e._save=lambda:None;e._new_session()
-        e=p.engines['XRP'];e.market={'slug':'xrp-test'};inv=e._inventory_get();e._inventory_add_lot(inv,'down',5,.1,0,'MAKER')
+        e=p.engines['ETH15'];e.market={'slug':'eth-updown-15m-test'};inv=e._inventory_get();e._inventory_add_lot(inv,'down',5,.1,0,'MAKER')
         self.assertEqual((await p.reset())['status'],'blocked');self.assertTrue(e._inventory_has_residual())
     def test_all_asset_snapshot_has_no_circular_or_selected_only_data(self):
         p=PaperPortfolio()

@@ -1,3 +1,9 @@
+# POLY / EDGE V16.4 — BTC/ETH 5-minute and 15-minute lanes
+
+SOL and XRP 5-minute lanes are retired. Their books routinely quoted spreads above 3c, and their $30 allocations implied a $0.15 loss stop, below the roughly $0.22 that spread plus both taker fees cost on a 5-share order near 50c; momentum could almost never enter (4 lifetime trades, all losses, kept in the lifetime ledger). Their $60 funds two new lanes on the liquid underlyings: **BTC 15m** and **ETH 15m** ($30 each, `btc-updown-15m-<start>` markets). Every lane's loss stop is at least $0.30 so fees and spread leave room to enter. `PolyServerDemo` now takes `interval` (300 or 900) and a `lane` key; EdgeLab calibrates 15-minute rounds in separate cells; the V16 research model and pair shadow stay on 5-minute rounds. Lanes: BTC $60, ETH $80, BTC15 $30, ETH15 $30.
+
+V16.3 tuning (from 43 closed trades): minimum momentum edge 5c, earned 1x-2x confidence sizing while the last 30 momentum trades have mean - 1 SE > 0, and depth-walking exits.
+
 # POLY / EDGE V16.2 — calibrated mispricing, skilled-wallet study and earned promotion
 
 V16.2 adds `arb-lab-v4/poly_edge.py` (EdgeLab). Strategies now *earn* the right to trade paper money:

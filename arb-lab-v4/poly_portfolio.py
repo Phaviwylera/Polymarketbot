@@ -5,8 +5,15 @@ from pathlib import Path
 import httpx
 from poly_server_demo import PolyServerDemo,ENGINE_REVISION
 
-ASSETS=('BTC','ETH','SOL','XRP')
-ALLOCATIONS={'BTC':60.0,'ETH':80.0,'SOL':30.0,'XRP':30.0}
+# Lanes: key -> (underlying, round seconds, paper allocation). SOL/XRP 5m were retired in V16.4:
+# their books routinely quoted spreads above 3c and a $30 allocation implied a $0.15 stop that
+# fees plus spread exceeded, so momentum could almost never enter (4 lifetime trades, all losses).
+# Their capital funds BTC/ETH 15-minute lanes. Retired history stays in the lifetime ledger.
+LANES={'BTC':('BTC',300,60.0),'ETH':('ETH',300,80.0),'BTC15':('BTC',900,30.0),'ETH15':('ETH',900,30.0)}
+RETIRED=('SOL','XRP')
+ASSETS=tuple(LANES)
+ALLOCATIONS={k:v[2] for k,v in LANES.items()}
+LANE_STOP_FLOOR=.30   # spread + both taker fees on 5 shares near 50c is ~$0.22; a smaller stop blocks entries
 TOTAL_BALANCE=sum(ALLOCATIONS.values())
 PORTFOLIO_LOSS_LIMIT=6.0
 AUTO_CYCLE=os.environ.get('POLY_AUTO_CYCLE','1').strip()!='0'
@@ -32,14 +39,14 @@ def merge_release_recovery(checkpoint,live):
 
 class PaperPortfolio:
     def __init__(self):
-        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False;self.research=None;self.ledger_history={a:{} for a in ASSETS}
+        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False;self.research=None;self.ledger_history={a:{} for a in ASSETS+RETIRED}
         from poly_attribution import Attribution
         self.attribution=Attribution();self.storage=None;self.durable_recovery=None
         self.data_root=Path(os.environ.get('POLY_DATA_DIR','/tmp'));self.data_root.mkdir(parents=True,exist_ok=True)
-        self.engines={asset:PolyServerDemo(asset=asset,balance=ALLOCATIONS[asset],
-            state_file=self.data_root/f'poly_v14_{asset.lower()}_paper.json',portfolio_guard=self.entry_allowed,
-            risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,ALLOCATIONS[asset]*.025),'firstPriceCap':.60,
-                'stopLoss':min(.40,ALLOCATIONS[asset]*.005),'sessionLossLimit':ALLOCATIONS[asset]*.05}) for asset in ASSETS}
+        self.engines={lane:PolyServerDemo(asset=coin,balance=alloc,interval=iv,lane=lane,
+            state_file=self.data_root/f'poly_v14_{lane.lower()}_paper.json',portfolio_guard=self.entry_allowed,
+            risk_profile={'momentumEnabled':True,'walletQuotes':True,'residualCap':min(2.0,alloc*.025),'firstPriceCap':.60,
+                'stopLoss':max(LANE_STOP_FLOOR,min(.40,alloc*.005)),'sessionLossLimit':max(1.5,alloc*.05)}) for lane,(coin,iv,alloc) in LANES.items()}
         from poly_edge import EdgeLab
         self.edge=EdgeLab(self.engines);self.handover=None;self.handover_edge=None
         self.lock_seen={};self.cycle_task=None;self.cycles=[]
@@ -165,6 +172,8 @@ class PaperPortfolio:
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
         self.peak=max(self.peak,float((recovery.get('portfolio') or {}).get('peakEquity') or (recovery.get('portfolio') or {}).get('equity') or TOTAL_BALANCE))
         if recovery.get('strategyConfig'):self.update_config(recovery['strategyConfig'])
+        for asset in RETIRED:   # keep the final session of a retired lane in the lifetime ledger
+            self._archive(asset,((recovery.get('assets') or {}).get(asset) or {}).get('paper') or {})
         for asset,e in self.engines.items():
             saved=(recovery.get('assets') or {}).get(asset);p=(saved or {}).get('paper') or {}
             use_saved=not e.state_file.exists()
@@ -200,7 +209,9 @@ class PaperPortfolio:
     def start_research(self):
         if self.research is None:
             from poly_shadow import ResearchHub
-            self.research=ResearchHub(self.engines,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
+            # The V16 research schema and labels are defined on 5-minute rounds only.
+            five={k:e for k,e in self.engines.items() if e.interval==300}
+            self.research=ResearchHub(five,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
 
     async def _stop_aux(self):
         if self.cycle_task:self.cycle_task.cancel();await asyncio.gather(self.cycle_task,return_exceptions=True);self.cycle_task=None
@@ -237,7 +248,7 @@ class PaperPortfolio:
         lanes=[]
         for a,s in snaps.items():
             p=s['paper'];m=s.get('market') or {};pair=s.get('pair') or {}
-            lanes.append({'asset':a,'market':m.get('slug'),'question':m.get('question'),'interval':'5m',
+            lanes.append({'asset':a,'coin':self.engines[a].asset,'market':m.get('slug'),'question':m.get('question'),'interval':self.engines[a].tag,
                 'feed':s['feed'],'spot':s.get('spot'),'spotAgeSec':s.get('spotAgeSec'),'twapAgeSec':s.get('twapAgeSec'),
                 'decision':s.get('decision'),'mode':s.get('mode'),'allocation':self.engines[a].balance,
                 'equity':p.get('equity',self.engines[a].balance) if p else self.engines[a].balance,
@@ -261,7 +272,7 @@ class PaperPortfolio:
             'priorSessionRealizedPnl':prior_pnl,'lifetimeRealizedPnl':prior_pnl+sum(l['realizedPnl'] for l in lanes),'lifetimeTrades':prior_trades+sum(l['trades'] for l in lanes),
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
             'maxDrawdownUsd':self.max_drawdown,'peakEquity':self.peak,'allocations':dict(ALLOCATIONS),
-            'assets':lanes,'scope':'crypto-updown-5m','strategy':'promoted calibrated-mispricing and research-model strategies first, then fee-aware momentum and executable complete sets; one entry per asset per round'}
+            'assets':lanes,'retiredLanes':list(RETIRED),'scope':'crypto-updown BTC/ETH 5m and 15m','strategy':'promoted calibrated-mispricing and research-model strategies first, then fee-aware momentum and executable complete sets; one entry per asset per round'}
         if include_assets:return {**selected,'assets':{a:{k:v for k,v in s.items() if k!='portfolio'} for a,s in snaps.items()}}
         return selected
 

@@ -24,7 +24,7 @@ class RestartRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_restart_endpoint_archives_results_and_rearms_all_four_lanes(self):
         e=self.p.engines['BTC'];e.paper.update(realizedPnl=2,cash=62,trades=2,consecutiveLosses=2,riskLockReason='two consecutive losses',status='risk_locked')
         self.p.started=True;config=self.p.get_config();r=await self.post();self.assertEqual(r.status_code,200);s=r.json()
-        self.assertEqual(set(s['assets']),{'BTC','ETH','SOL','XRP'});self.assertEqual(s['portfolio']['lifetimeRealizedPnl'],2)
+        self.assertEqual(set(s['assets']),{'BTC','ETH','BTC15','ETH15'});self.assertEqual(s['portfolio']['lifetimeRealizedPnl'],2)
         self.assertEqual(s['portfolio']['priorSessionRealizedPnl'],2);self.assertEqual(s['portfolio']['lifetimeTrades'],2)
         for a,lane in s['assets'].items():
             p=lane['paper'];self.assertNotEqual(p['sessionId'],self.old[a]['sessionId']);self.assertEqual(p['status'],'running');self.assertIsNone(p['riskLockReason']);self.assertGreater(p['endsAt'],time.time()+10790)

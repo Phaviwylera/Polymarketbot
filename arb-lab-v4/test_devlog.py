@@ -10,7 +10,7 @@ class DevLogTests(unittest.TestCase):
             for e in pf.engines.values():e._save=lambda:None;e._new_session()
             pf.engines['BTC']._record('BUY',side='UP',price=.41,detail='EDGE_HOLD test')
             rep=poly_devlog.report(pf)
-            self.assertEqual(set(rep['lanes']),{'BTC','ETH','SOL','XRP'})
+            self.assertEqual(set(rep['lanes']),{'BTC','ETH','BTC15','ETH15'})
             body=poly_devlog.text(rep);self.assertIn('EDGELAB',body);self.assertIn('EDGE_HOLD test',body)
             rows=poly_devlog.events(pf,'btc',10);self.assertEqual(rows[0]['action'],'BUY')
             self.assertEqual(poly_devlog.events(pf,None,10,'sell'),[])
