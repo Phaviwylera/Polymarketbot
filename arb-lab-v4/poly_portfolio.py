@@ -175,7 +175,6 @@ class PaperPortfolio:
                 e.state_file.write_text(json.dumps(saved))
         if self.handover_edge and not self.durable_recovery and not self.edge.restored:self.edge.restore(self.handover_edge)
         await asyncio.gather(*(e.start() for e in self.engines.values()))
-        self._seed_trade_record()
         self.edge.start()
         if self.cycle_task is None:self.cycle_task=asyncio.create_task(self.cycle_worker(),name='auto-cycle')
         for source in (checkpoint,recovery):
@@ -187,6 +186,7 @@ class PaperPortfolio:
                     if prior.get('sessionId')!=current.get('sessionId'):self._archive(asset,prior)
         for asset,e in self.engines.items():self.ledger_history[asset].pop((e.paper or {}).get('sessionId'),None)
         self._save_history()
+        self._seed_trade_record()  # after archived ledgers are merged: they hold the full history
 
     def _save_history(self):
         if not self.started:return

@@ -271,3 +271,16 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         await self.e._momentum_manage(self.m)
         self.assertIsNone(self.e.paper['position']);self.assertEqual(self.e.paper['momentumCloses'],1)
         self.assertLess(self.e.paper['realizedPnl'],0)
+
+class SeedRecordTests(unittest.TestCase):
+    def test_seed_uses_archived_and_current_sessions(self):
+        import poly_portfolio
+        with tempfile.TemporaryDirectory() as d,patch.dict('os.environ',{'POLY_DATA_DIR':d}):
+            pf=poly_portfolio.PaperPortfolio()
+            for e in pf.engines.values():e._save=lambda:None;e._new_session()
+            pf.ledger_history['BTC']['old']={'sessionId':'old','events':[{'t':2,'action':'SELL','side':'UP','price':.5,'pnl':.4,'detail':'x'},{'t':1,'action':'BUY','side':'UP','price':.4,'detail':'MOMENTUM_SCALP; 5 shares; estimated edge 0.1'}]}
+            e=pf.engines['ETH'];e._record('BUY',side='UP',price=.4,detail='MOMENTUM_SCALP; 5 shares');e._record('SELL',side='UP',price=.3,pnl=-.5,detail='y')
+            pf.edge.trades.append({'pnl':-.5,'at':3,'strategy':'MOMENTUM_SCALP'})
+            pf._seed_trade_record()
+            self.assertEqual([t['pnl'] for t in pf.edge.trades],[.4,-.5]);self.assertEqual(pf.edge.trades[0]['strategy'],'MOMENTUM_SCALP')
+            for x in pf.engines.values():x.close()
