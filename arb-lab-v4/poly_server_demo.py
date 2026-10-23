@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.9-edge12"
+ENGINE_REVISION="17.0-trust"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
@@ -1740,7 +1740,8 @@ class PolyServerDemo:
         if not variant:return None,'mispricing strategy not promoted (shadow test running)'
         key=c['side'].lower();min_sh=max(5.,float(self.market.get('minOrderSize') or 0))
         equity=self._equity()
-        shares=size_stake(kelly_full=c['kellyFull'],equity=equity,allocation=self.balance,loss_budget=self._loss_budget(),
+        kelly=c.get('calibratedKelly',c['kellyFull']) if variant=='edge_cal' else c['kellyFull']
+        shares=size_stake(kelly_full=kelly,equity=equity,allocation=self.balance,loss_budget=self._loss_budget(),
                           unit_cost=c['cost'],min_shares=min_sh,max_loss_per_dollar=1.)
         tick=max(.001,float(self.market.get('minTickSize') or .01))
         avail=sum(q for px,q in self._book_levels[key]['asks'].items() if px<=c['ask']+tick+1e-9)

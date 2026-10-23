@@ -365,3 +365,30 @@ class DashboardDataTests(unittest.TestCase):
         lab.on_trade({'netPnlUsd':.5,'closedAt':1,'strategy':'MOMENTUM_SCALP','asset':'ETH'});lab.on_trade({'netPnlUsd':-.2,'closedAt':2,'strategy':'MOMENTUM_SCALP','asset':'ETH'})
         f=lab.flows()[0];self.assertEqual((f['trades'],f['wins'],f['losses']),(2,1,1));self.assertAlmostEqual(f['pnl'],.3)
         snap=lab.snapshot();self.assertIn('samples',snap);self.assertIn('flows',snap);self.assertEqual(len(snap['resolutions']),1)
+
+class MarketTrustTests(unittest.TestCase):
+    def setUp(self):
+        self.now=time.time();self.lab=EdgeLab({});self.m={'rawFairUp':.75,'fairUp':.70,'fairDown':.30}
+    def fill(self,true_p):
+        import random;rng=random.Random(7)
+        for i in range(400):
+            ask=.30;p=.55   # model always claims 25 points of edge
+            self.lab.strategies['edge'].add({'p':p,'ask':ask,'cost':ask+edge.fee(ask),'won':rng.random()<true_p,'returnPerDollar':0,'roundStart':i})
+    def test_overconfident_model_earns_no_trust(self):
+        self.fill(.30);t=self.lab.trust()
+        self.assertLess(t['conservativeTrust'],.1);self.assertLess(t['brierMarket'],t['brierModel'])
+    def test_accurate_model_earns_trust_and_calibrated_bets(self):
+        self.fill(.55);t=self.lab.trust();self.assertGreater(t['conservativeTrust'],.6)
+        tb=edge.time_bucket(180);pb=edge.prob_bin(.75)
+        for i in range(200):self.lab.cal.update([{'tb':tb,'pb':pb,'fairUp':.7,'pUp':.7}],i<150)
+        c=self.lab.evaluate('BTC',FakeEngine(self.now),self.m,self.now)
+        self.assertIn('edge_cal',self.lab.rounds['btc-updown-5m-1']['bets']);self.assertIn('calibratedKelly',c)
+        self.assertLessEqual(c['calibratedP'],c['p']+1e-9)
+    def test_no_trust_means_no_calibrated_bet(self):
+        tb=edge.time_bucket(180);pb=edge.prob_bin(.75)
+        for i in range(200):self.lab.cal.update([{'tb':tb,'pb':pb,'fairUp':.7,'pUp':.7}],i<150)
+        self.lab.evaluate('BTC',FakeEngine(self.now),self.m,self.now)
+        self.assertNotIn('edge_cal',self.lab.rounds['btc-updown-5m-1']['bets'])
+    def test_calibrated_only_candidate_not_tradable_by_raw_variant(self):
+        for i in range(60):self.lab.strategies['edge'].add(bet(.9 if i%2 else -.5,i))
+        self.assertIsNone(self.lab.tradable({'side':'UP','calibratedOnly':True}))

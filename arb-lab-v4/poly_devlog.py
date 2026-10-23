@@ -43,7 +43,7 @@ def report(engine,now=None):
         'portfolio':{'equity':_r(pf.get('equity'),2),'totalPnl':_r(pf.get('totalPnl')),'realizedPnl':_r(pf.get('realizedPnl')),'trades':pf.get('trades'),
                      'lifetimeRealizedPnl':_r(pf.get('lifetimeRealizedPnl')),'lifetimeTrades':pf.get('lifetimeTrades'),'riskLocked':pf.get('riskLocked'),'maxDrawdownUsd':_r(pf.get('maxDrawdownUsd'))},
         'edge':{'mode':edge.get('mode'),'promoted':edge.get('promotedStrategy'),'strategies':strategies,
-                'maker':{k:(edge.get('maker') or {}).get(k) for k in ('bets','rounds','wins','winRatePct','meanReturnPerDollar','meanMinus2SE','gatePassed')},'calibration':edge.get('calibration'),
+                'maker':{k:(edge.get('maker') or {}).get(k) for k in ('bets','rounds','wins','winRatePct','meanReturnPerDollar','meanMinus2SE','gatePassed')},'calibration':edge.get('calibration'),'modelTrust':edge.get('modelTrust'),
                 'pendingRounds':edge.get('pendingRounds'),'errors':edge.get('errors'),
                 'wallets':{k:wallets.get(k) for k in ('walletsTracked','roundsStudied','skilledWallets','skilledEntryProfile','errors','lastError')},
                 'readiness':edge.get('readiness'),'autoCycle':edge.get('autoCycle')},
@@ -62,7 +62,7 @@ def text(rep):
     e=rep['edge'];out+=[f"EDGELAB · mode {e['mode']} · promoted {e['promoted']} · pending rounds {e['pendingRounds']} · errors {e['errors']}"]
     for k,s in e['strategies'].items():out.append(_line('  '+k,json.dumps(s)))
     out.append(_line('  maker (pairs)',json.dumps(e.get('maker'))))
-    out+=[_line('  calibration',json.dumps(e['calibration'])),_line('  wallets',json.dumps(e['wallets'])),
+    out+=[_line('  model trust',json.dumps(e.get('modelTrust'))),_line('  calibration',json.dumps(e['calibration'])),_line('  wallets',json.dumps(e['wallets'])),
           _line('  readiness',json.dumps({'ready':(e['readiness'] or {}).get('readyForRealMoney'),'checks':[(c['check'],c['value'],c['pass']) for c in (e['readiness'] or {}).get('checks',[])]})),
           _line('  auto-cycle',json.dumps((e['autoCycle'] or {}).get('recent'))),'',
           _line('RESEARCH MODEL',json.dumps(rep['researchModel'])),'',
@@ -89,7 +89,7 @@ def events(engine,asset=None,limit=200,action=None):
 def compact_lines(rep):
     """Short single-line JSON records for stdout; each well under hosting log line limits."""
     head={k:rep[k] for k in ('generatedAtUtc','revision','storage','portfolio','researchModel')}
-    e=rep['edge'];head['edge']={k:e[k] for k in ('mode','promoted','strategies','calibration','pendingRounds','errors')}
+    e=rep['edge'];head['edge']={k:e.get(k) for k in ('mode','promoted','strategies','modelTrust','calibration','pendingRounds','errors')}
     head['wallets']={k:(e['wallets'] or {}).get(k) for k in ('walletsTracked','roundsStudied','skilledWallets','errors','lastError')}
     head['readiness']=[(c['check'][:24],c['value'],c['pass']) for c in (e['readiness'] or {}).get('checks',[])]
     out=['POLY_DEV_REPORT '+json.dumps(head,separators=(',',':'),default=str)]

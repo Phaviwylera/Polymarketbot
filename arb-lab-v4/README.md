@@ -11,3 +11,12 @@ Hosted service requires access to `api.jup.ag` and a mainnet RPC; quote API key 
 Run locally for testing: `pip install -r requirements.txt && uvicorn server:app --host 127.0.0.1 --port 8765`. Go to http://127.0.0.1:8765.
 
 The site does not remain trading after closing or locking the browser tab; Render free-tier services sleep and should not be used for uptime-critical trading. The default mode is disarmed. For a $2 wallet, fees, account rent and route minimums will generally defeat possible gains. Be prepared for zero trades or total loss.
+## V17.0 — market-trust calibration (edge_cal)
+
+Analysis of 74 settled EdgeLab shadow bets: the heuristic model claimed a 52% average win chance but won 31%;
+its Brier score (0.244) was worse than the market price alone (0.200). Regressing (outcome − price) on
+(model − price) gives ~0.05 ± 0.22, so the model's "mispricings" were mostly false. The new `edge_cal`
+variant uses `p = price + trust × (model − price)`, with `trust` learned online from settled raw bets
+(ridge-shrunk toward 0 and cut by one standard error). It starts with an empty record and must pass the
+normal promotion gate on future bets. `modelTrust` is shown in `/api/poly/dev/report.txt`.
+Momentum (the only strategy with positive out-of-sample evidence) is unchanged.

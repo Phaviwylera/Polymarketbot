@@ -32,7 +32,17 @@ GATE_MIN_BETS=40
 GATE_MIN_ROUNDS=20
 GATE_WINDOW=200
 SKILL_MIN_ROUNDS=6
-VARIANTS=('edge','edge_smart')
+VARIANTS=('edge','edge_smart','edge_cal')
+# Market-trust shrinkage. Settled shadow bets showed the heuristic model is
+# overconfident: on 74 bets it said 52% on average and won 31%, and its Brier
+# score (0.244) was worse than simply using the market price (0.200). A
+# least-squares fit of (outcome - price) on (model - price) gave ~0.06, i.e. the
+# market already knows almost everything the model knows. edge_cal therefore
+# uses p = price + trust * (model - price), with trust learned online from the
+# raw 'edge' bets, shrunk toward zero and cut by one standard error. It starts
+# with an empty record and has to earn promotion on future bets only.
+TRUST_RIDGE=0.5            # sum((model-price)^2) worth of prior pulling trust to 0
+TRUST_MIN_BETS=30
 
 def fee(p):return round(.07*p*(1-p),5)
 
@@ -266,11 +276,39 @@ class EdgeLab:
                 if v not in r['bets'] and (v=='edge' or candidate['smartAligned']):
                     r['bets'][v]={'side':best['side'],'ask':best['ask'],'cost':best['cost'],'p':best['p'],'pConservative':best['pConservative'],
                                   'edge':best['edge'],'smartFlow':best['smartFlow'],'t':now,'remaining':remaining}
+        cal=None
+        if window and best.get('ask') is not None and not str(best.get('reason','')).startswith(('book','price','spread','insufficient','no book')):
+            t=self._trust_cache(now);pa=best['ask']+t*(best['p']-best['ask']);ce=pa-best['cost']-EDGE_BUFFER
+            cal={'pAdjusted':pa,'trust':t,'edge':ce}
+            if ce>0:
+                if 'edge_cal' not in r['bets']:
+                    r['bets']['edge_cal']={'side':best['side'],'ask':best['ask'],'cost':best['cost'],'p':pa,'pConservative':pa,
+                                           'edge':ce,'smartFlow':best['smartFlow'],'t':now,'remaining':remaining}
+                if candidate is None:
+                    candidate={**best,'p':pa,'pConservative':pa,'conservativeEdge':ce,'remaining':remaining,'cellRounds':est['cellRounds'],'se':est['se'],
+                               'marketSlug':market['slug'],'smartAligned':best['smartFlow']>0,'kellyFull':kelly_binary(pa,best['cost']),'calibratedOnly':True}
+                else:candidate.update(calibratedEdge=ce,calibratedP=pa,calibratedKelly=kelly_binary(pa,best['cost']))
         reason='MISPRICED' if candidate else (best.get('reason') if window else 'outside entry window')
         self.signals[asset]={'decision':reason,'at':now,'pUp':est['pUp'],'se':est['se'],'cellRounds':est['cellRounds'],
             'heuristicFairUp':number(m.get('fairUp'),.5),'best':best,'sides':sides,'smart':smart if smart_fresh else None,
-            'promoted':self.promoted()}
+            'promoted':self.promoted(),'calibrated':cal}
         return candidate
+    def _trust_cache(self,now):
+        c=getattr(self,'_trust',None)
+        if c is None or now-c[0]>60 or c[0]>now:c=self._trust=(now,self.trust()['conservativeTrust'])
+        return c[1]
+    def trust(self):
+        """How much of the model's disagreement with the market to believe, learned from settled raw bets."""
+        rows=[b for b in self.strategies['edge'].bets if 'p' in b and 'ask' in b][-GATE_WINDOW*2:]
+        xs=[number(b['p'])-number(b['ask']) for b in rows];ys=[(1. if b['won'] else 0.)-number(b['ask']) for b in rows]
+        sxx=sum(x*x for x in xs)+TRUST_RIDGE;lam=sum(x*y for x,y in zip(xs,ys))/sxx
+        resid=[y-lam*x for x,y in zip(xs,ys)];var=statistics.pvariance(resid) if len(resid)>1 else .25
+        se=math.sqrt(var/sxx);usable=len(rows)>=TRUST_MIN_BETS
+        bm=statistics.mean((number(b['ask'])-(1. if b['won'] else 0.))**2 for b in rows) if rows else None
+        bp=statistics.mean((number(b['p'])-(1. if b['won'] else 0.))**2 for b in rows) if rows else None
+        return {'bets':len(rows),'trust':max(0.,min(1.,lam)),'se':se,'conservativeTrust':max(0.,min(1.,lam-se)) if usable else 0.,
+                'brierMarket':bm,'brierModel':bp,
+                'note':'share of the model-vs-market gap that settled bets support; 0 means the market price is the best estimate'}
     def promoted(self):
         s={v:self.strategies[v].stats() for v in VARIANTS}
         passing=[v for v in VARIANTS if s[v]['gatePassed']]
@@ -285,6 +323,8 @@ class EdgeLab:
     def tradable(self,candidate):
         v=self.promoted()
         if not v or not candidate:return None
+        if v=='edge_cal':return v if 'calibratedEdge' in candidate or candidate.get('calibratedOnly') else None
+        if candidate.get('calibratedOnly'):return None
         if v=='edge_smart' and not candidate.get('smartAligned'):return None
         return v
     def hold_exit(self,asset,side,bid):
@@ -390,7 +430,7 @@ class EdgeLab:
         return [{**v,'pnl':round(v['pnl'],4),'won':round(v['won'],4),'lost':round(v['lost'],4)} for v in out.values()]
     def snapshot(self,capital=200.):
         return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),
-                'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'maker':{**self.maker.stats(),'note':'returns are USD per share-pair; promotion enables funded maker quoting on 5-minute lanes'},'calibration':self.cal.summary(),
+                'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'maker':{**self.maker.stats(),'note':'returns are USD per share-pair; promotion enables funded maker quoting on 5-minute lanes'},'calibration':self.cal.summary(),'modelTrust':self.trust(),
                 'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),
                 'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],'flows':self.flows(),
                 'readiness':self.readiness(capital),'errors':self.errors,
