@@ -123,3 +123,15 @@ def trade_rows(engine):
 def trades_csv(rows):
     cols=['asset','session','entryAt','exitAt','mode','side','entry','exit','pnl','holdSec','estEdge','reason']
     return ','.join(cols)+'\n'+''.join(','.join('' if r.get(c) is None else str(r[c]).replace(',',' ') for c in cols)+'\n' for r in rows)
+
+EDGE_COLS=('strategy','asset','marketSlug','t','remaining','side','ask','cost','p','pConservative','edge','smartFlow','won','returnPerDollar')
+def edge_bets_csv(edge):
+    """Every settled EdgeLab shadow bet (mispricing variants and maker cycles), oldest first."""
+    rows=[]
+    for name,rec in list(getattr(edge,'strategies',{}).items())+[('maker',getattr(edge,'maker',None))]:
+        for b in (list(rec.bets) if rec else []):rows.append({'strategy':name,**b})
+    rows.sort(key=lambda r:r.get('t') or r.get('at') or 0)
+    def cell(v):
+        if isinstance(v,float):return f'{v:.5g}'
+        return '' if v is None else str(v).replace(',',' ')
+    return ','.join(EDGE_COLS)+'\n'+''.join(','.join(cell(r.get(c)) for c in EDGE_COLS)+'\n' for r in rows)

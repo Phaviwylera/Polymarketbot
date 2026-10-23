@@ -781,6 +781,11 @@ async def dev_events(asset:str|None=None,limit:int=300,action:str|None=None):
     rows=poly_devlog.events(poly_server_engine,asset,limit,action)
     return PlainTextResponse(''.join(json.dumps(r,separators=(',',':'),default=str)+'\n' for r in rows),headers={'Cache-Control':'no-store'})
 
+@app.get('/api/poly/dev/edgebets.csv')
+async def dev_edge_bets_csv():
+    import poly_devlog
+    return PlainTextResponse(poly_devlog.edge_bets_csv(poly_server_engine.edge),headers={'Cache-Control':'no-store'})
+
 @app.get('/api/poly/dev/trades.csv')
 async def dev_trades_csv():
     import poly_devlog
@@ -792,6 +797,7 @@ async def _print_trade_history():
     try:
         rows=poly_devlog.trade_rows(poly_server_engine)
         for line in poly_devlog.trades_csv(rows).splitlines():print('POLY_TRADE_CSV',line,flush=True)
+        for line in poly_devlog.edge_bets_csv(poly_server_engine.edge).splitlines():print('POLY_EDGEBET_CSV',line,flush=True)
     except Exception as exc:print('POLY_TRADE_CSV_ERROR',type(exc).__name__,flush=True)
 
 async def _dev_report_printer():
