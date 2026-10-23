@@ -224,7 +224,8 @@ class PaperPortfolio:
             from poly_shadow import ResearchHub
             # The V16 research schema and labels are defined on 5-minute rounds only.
             five={k:e for k,e in self.engines.items() if e.interval==300}
-            self.research=ResearchHub(five,str(self.data_root/'poly_v16_research.sqlite3'));self.research.start()
+            self.research=ResearchHub(five,str(self.data_root/'poly_v16_research.sqlite3'))
+            self.research.on_pair_outcome=self.edge.on_pair_outcome;self.research.start()
 
     async def _stop_aux(self):
         if self.cycle_task:self.cycle_task.cancel();await asyncio.gather(self.cycle_task,return_exceptions=True);self.cycle_task=None

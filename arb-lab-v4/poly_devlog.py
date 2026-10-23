@@ -42,7 +42,8 @@ def report(engine,now=None):
         'storage':{k:(snap.get('infrastructure') or {}).get(k) for k in ('backend','state','checkpointAgeSec','errors','lastError','databaseExpiresAt')},
         'portfolio':{'equity':_r(pf.get('equity'),2),'totalPnl':_r(pf.get('totalPnl')),'realizedPnl':_r(pf.get('realizedPnl')),'trades':pf.get('trades'),
                      'lifetimeRealizedPnl':_r(pf.get('lifetimeRealizedPnl')),'lifetimeTrades':pf.get('lifetimeTrades'),'riskLocked':pf.get('riskLocked'),'maxDrawdownUsd':_r(pf.get('maxDrawdownUsd'))},
-        'edge':{'mode':edge.get('mode'),'promoted':edge.get('promotedStrategy'),'strategies':strategies,'calibration':edge.get('calibration'),
+        'edge':{'mode':edge.get('mode'),'promoted':edge.get('promotedStrategy'),'strategies':strategies,
+                'maker':{k:(edge.get('maker') or {}).get(k) for k in ('bets','rounds','wins','winRatePct','meanReturnPerDollar','meanMinus2SE','gatePassed')},'calibration':edge.get('calibration'),
                 'pendingRounds':edge.get('pendingRounds'),'errors':edge.get('errors'),
                 'wallets':{k:wallets.get(k) for k in ('walletsTracked','roundsStudied','skilledWallets','skilledEntryProfile','errors','lastError')},
                 'readiness':edge.get('readiness'),'autoCycle':edge.get('autoCycle')},
@@ -60,6 +61,7 @@ def text(rep):
         _line('Storage',json.dumps(rep['storage'])),'']
     e=rep['edge'];out+=[f"EDGELAB · mode {e['mode']} · promoted {e['promoted']} · pending rounds {e['pendingRounds']} · errors {e['errors']}"]
     for k,s in e['strategies'].items():out.append(_line('  '+k,json.dumps(s)))
+    out.append(_line('  maker (pairs)',json.dumps(e.get('maker'))))
     out+=[_line('  calibration',json.dumps(e['calibration'])),_line('  wallets',json.dumps(e['wallets'])),
           _line('  readiness',json.dumps({'ready':(e['readiness'] or {}).get('readyForRealMoney'),'checks':[(c['check'],c['value'],c['pass']) for c in (e['readiness'] or {}).get('checks',[])]})),
           _line('  auto-cycle',json.dumps((e['autoCycle'] or {}).get('recent'))),'',

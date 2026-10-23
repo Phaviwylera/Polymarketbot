@@ -197,6 +197,7 @@ class EdgeLab:
     def __init__(self,engines):
         self.engines=engines;self.cal=Calibrator();self.intel=WalletIntel()
         self.strategies={v:StrategyRecord(v) for v in VARIANTS}
+        self.maker=StrategyRecord('maker')   # pair-shadow cycles: maker first leg, taker hedge or unwind
         self.rounds={}            # slug -> round record awaiting resolution
         self.signals={}           # asset -> latest decision for UI/orb
         self.trades=deque(maxlen=5000)   # funded paper closes for the readiness scorecard
@@ -274,6 +275,13 @@ class EdgeLab:
         s={v:self.strategies[v].stats() for v in VARIANTS}
         passing=[v for v in VARIANTS if s[v]['gatePassed']]
         return max(passing,key=lambda v:s[v]['meanMinus2SE']) if passing else None
+    def on_pair_outcome(self,row):
+        q=number(row.get('quantity'),0)
+        if q<=0 or row.get('netPnlUsd') is None:return
+        net=number(row['netPnlUsd'])
+        self.maker.add({'returnPerDollar':net/q,'roundStart':number(row.get('roundStart')),'won':net>0,'netPnlUsd':net,
+                        'status':row.get('status'),'markout5s':row.get('markout5s'),'asset':row.get('asset'),'at':number(row.get('closedAt'),time.time())})
+    def maker_promoted(self):return self.maker.stats()['gatePassed']
     def tradable(self,candidate):
         v=self.promoted()
         if not v or not candidate:return None
@@ -382,14 +390,14 @@ class EdgeLab:
         return [{**v,'pnl':round(v['pnl'],4),'won':round(v['won'],4),'lost':round(v['lost'],4)} for v in out.values()]
     def snapshot(self,capital=200.):
         return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),
-                'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'calibration':self.cal.summary(),
+                'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'maker':{**self.maker.stats(),'note':'returns are USD per share-pair; promotion enables funded maker quoting on 5-minute lanes'},'calibration':self.cal.summary(),
                 'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),
                 'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],'flows':self.flows(),
                 'readiness':self.readiness(capital),'errors':self.errors,
                 'sizing':{'kellyFraction':KELLY_FRACTION,'maxAllocationFraction':MAX_ALLOCATION_FRACTION,
                           'rule':'quarter-Kelly on conservative probability, capped at 15% of the asset budget and the remaining loss budget'}}
     def export(self):
-        return {'version':VERSION,'savedAt':time.time(),'calibration':self.cal.export(),
+        return {'version':VERSION,'savedAt':time.time(),'calibration':self.cal.export(),'maker':self.maker.export(),
                 'strategies':{v:s.export() for v,s in self.strategies.items()},'wallets':self.intel.export(),
                 'trades':list(self.trades)[-3000:]}
     def restore(self,state):
@@ -398,6 +406,7 @@ class EdgeLab:
         self.strategies={v:StrategyRecord(v) for v in VARIANTS}
         for v,rows in (state.get('strategies') or {}).items():
             if v in self.strategies:self.strategies[v].restore(rows)
+        self.maker=StrategyRecord('maker');self.maker.restore(state.get('maker'))
         self.intel.restore(state.get('wallets'))
         self.trades.clear();self.trades.extend(r for r in state.get('trades') or [] if isinstance(r,dict) and 'pnl' in r)
         self.restored=True;return True

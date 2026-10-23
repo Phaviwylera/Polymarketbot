@@ -79,9 +79,13 @@ class ResearchHub:
         self.rows=deque(maxlen=12000);self.artifact=None;self.training={'state':'collecting_data','executionEnabled':False};self.errors=0;self.last_step=0.;self.tasks=[]
         self.lanes={a:ShadowLane(a,self.emit,lambda:self.artifact) for a in engines};self.child=None;self.directory=Path(path).parent
         self.pairs={a:PairShadow(a,e.balance,self.emit) for a,e in engines.items()};self.pair_errors=Counter()
+    on_pair_outcome=None
     def emit(self,kind,row):
         self.journal.append(kind,row=row)
         if kind=='SHADOW_OUTCOME':self.rows.append(row)
+        if kind=='PAIR_OUTCOME' and self.on_pair_outcome:
+            try:self.on_pair_outcome(row)
+            except Exception:self.errors+=1
     @staticmethod
     def context(e):
         depth={s:{key:[{'price':p,'size':q} for p,q in sorted(levels.items(),reverse=key=='bids')[:8]] for key,levels in book.items()} for s,book in e._book_levels.items()}
@@ -90,7 +94,9 @@ class ResearchHub:
     def step(self,now):
         for asset,e in self.engines.items():
             context=self.context(e)
-            obs,reason=observe(asset,context,self.external.data.get(asset,{}),now)
+            ext=self.external.data.get(asset,{})
+            context['fast']={p:(r.get('return5Bps') if r and 0<=now-float(r.get('eventAt') or -1e9)<=5 else None) for p,r in ext.items()}
+            obs,reason=observe(asset,context,ext,now)
             lane=self.lanes[asset];lane.reason=reason;lane.step(obs,now)
             if not self.pair_errors[asset]:
                 try:self.pairs[asset].step(context,now)

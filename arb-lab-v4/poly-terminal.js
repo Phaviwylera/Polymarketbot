@@ -174,6 +174,7 @@
   set('confEdge',`EDGE AFTER FEES ${ok(best.conservativeEdge)?(best.conservativeEdge*100).toFixed(1)+'¢ '+(best.side||''):'—'} · ${sig.cellRounds??0} cal rounds`);
   set('confStrat',e.promotedStrategy?`STRATEGY ${e.promotedStrategy.toUpperCase()} · LIVE ON PAPER`:`STRATEGY SHADOW · ${Math.min(es.bets||0,40)}/40 BETS`);
   set('confSize',`MOMENTUM SIZING ${ms.earned?'EARNED 1–2×':'1× (earning)'} · ${ms.trades??0} rec`);
+  const mk=e.maker||{};set('confMaker',`MAKER ${mk.gatePassed?'PROMOTED · FUNDED QUOTES':'SHADOW · '+Math.min(mk.bets||0,40)+'/40 CYCLES'}`);
   const sb=$('shellBadge');sb.textContent=sig.decision||a.decision||'—';sb.className='badge '+(sig.decision==='MISPRICED'?'live':'');
   LANES.forEach(l=>{const c=$('tl_'+l);if(!c)return;const[g,w,h]=ctx2d(c),d=buf[l].decision,cw=w/MAXB;
    const colr={trade:C.amber,signal:C.green,lock:C.red,feed:C.violet,wait:'#1d3036'};d.forEach((x,i)=>{g.fillStyle=colr[x.state];g.fillRect(w-(d.length-i)*cw,0,Math.ceil(cw),h);});

@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="16.5-resolution"
+ENGINE_REVISION="16.7-maker"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
@@ -115,6 +115,7 @@ class PolyServerDemo:
         self.edge=None;self.edge_decision='waiting for market data';self.model_decision='waiting for research model'
         self.loss_budget=None  # portfolio-provided callable: remaining portfolio loss budget
         self.momentum_sizing={'earned':False,'reason':'no record yet'}
+        self.maker_decision='maker not evaluated yet'
         self.book_history=deque(maxlen=160)
         self.book_observed={'up':0.,'down':0.}
         self.book_event_lag={'up':None,'down':None}
@@ -842,6 +843,7 @@ class PolyServerDemo:
         self.paper['inventoryMerges']=int(self.paper.get('inventoryMerges') or 0)+1
         inv['cycles']=int(inv.get('cycles') or 0)+1;inv['status']='MERGED'
         self._pair_stats_update(qty,pair_cost,pnl)
+        self._report_inventory(pnl,qty,pair_cost,1.0,'complete-set merge')
         self._record('INV_MERGE',pnl=pnl,detail=f'{qty:.2f} complete sets; all-in {pair_cost:.4f}; locked edge {(1-pair_cost)*100:.2f}c/share')
         inv['lastAction']=f'merged {qty:.2f} pairs at {pair_cost:.4f}'
         return True
@@ -908,6 +910,7 @@ class PolyServerDemo:
             projected=maker_px+oppask+_fee_per_share(oppask)
             if projected>self.pair_target+INVENTORY_MAX_INITIAL_GAP:row['reason']='fee-adjusted set exceeds target';continue
             direction=1 if side=='up' else -1
+            if self._maker_guard(side,m):row['reason']='adverse-selection guard';continue
             lead=float(m.get('leadBps') or 0)*direction;imp=float(m.get('impulse5Bps') or 0)*direction
             if not self.wallet_quotes and (lead<INVENTORY_MIN_REVERSAL_LEAD_BPS or imp<INVENTORY_MIN_REVERSAL_IMPULSE_BPS):row['reason']='legacy directional gate';continue
             row.update(eligible=True,reason='funded passive candidate')
@@ -1013,7 +1016,7 @@ class PolyServerDemo:
             if not res or res==q['side'] or abs(totals[res]['shares']-float(q['shares']))>1e-9:
                 self._inventory_cancel_quote(inv,'orphan complement cancelled')
         else:
-            reason=self._inventory_resting_reason(inv,m,q)
+            reason=self._inventory_resting_reason(inv,m,q) or self._maker_guard(q['side'],m)
             if reason:self._inventory_cancel_quote(inv,reason)
 
     async def _inventory_taker_complement(self,inv,res_side,res_unit):
@@ -1072,6 +1075,7 @@ class PolyServerDemo:
                 self.paper['losses']+=1;self.paper['consecutiveLosses']+=1
                 self.paper['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
             self.paper['inventoryRecoveryExits']=int(self.paper.get('inventoryRecoveryExits') or 0)+1
+            self._report_inventory(pnl2,shares,cost/shares if shares else 0,bid2,'residual recovery exit',fee2)
             inv['status']='EXITED';inv['lastAction']='risk exit' if force else 'profitable recovery'
             self._update_risk()
             self._record('INV_RISK_EXIT' if force else 'INV_RECOVERY_EXIT',side=res_side.upper(),price=bid2,pnl=pnl2,detail=inv['lastAction'])
@@ -1083,8 +1087,8 @@ class PolyServerDemo:
         inv=self._inventory_get()
         if inv is None:return
         self._update_risk()
-        if self.momentum_enabled and not self._inventory_has_residual():
-            self._inventory_cancel_quote(inv,'marketable momentum strategy selected');return
+        if self.momentum_enabled and not self._inventory_has_residual() and not self._maker_enabled():
+            self._inventory_cancel_quote(inv,self.maker_decision);return
         self._inventory_process_quote(inv,m)
         if not self._inventory_feed_ready():
             self._inventory_cancel_quote(inv,'feed stale; fills paused');return
@@ -1151,6 +1155,7 @@ class PolyServerDemo:
         p['cash']+=payout;p['realizedPnl']+=pnl;p['trades']+=1;p['inventoryResidualSettles']=int(p.get('inventoryResidualSettles') or 0)+1
         if pnl>=0:p['wins']+=1;p['consecutiveLosses']=0
         else:p['losses']+=1;p['consecutiveLosses']=int(p.get('consecutiveLosses') or 0)+1
+        self._report_inventory(pnl,shares,cost/shares if shares else 0,1.0 if res==winner else 0.0,'residual verified settlement')
         self._record('INV_RESIDUAL_SETTLE',side=res.upper(),price=1.0 if res==winner else 0.0,pnl=pnl,detail=f'bounded residual; winner {winner.upper()}; no forced loss sale')
         inv['status']='SETTLED';inv['lastAction']=f'residual settled {pnl:+.4f}'
         if pnl<0:p['cooldownUntil']=time.time()+LOSS_COOLDOWN_SEC
@@ -1664,6 +1669,28 @@ class PolyServerDemo:
             await self._momentum_enter(candidate)
 
     # ---------------- promoted strategies (EdgeLab mispricing, research model) ----------------
+    def _maker_enabled(self):
+        """Funded maker quoting runs only while the pair shadow's record passes its promotion gate,
+        and only on 5-minute lanes where that evidence is collected."""
+        if self.interval!=300:self.maker_decision='maker evidence is collected on 5-minute rounds only';return False
+        if not (self.edge and self.edge.maker_promoted()):
+            st=self.edge.maker.stats() if self.edge else {}
+            self.maker_decision=f"maker not promoted (shadow {min(st.get('bets',0),40)}/40 cycles)";return False
+        self.maker_decision='maker promoted: funded passive quoting';return True
+
+    def _maker_guard(self,side,m):
+        d=1 if side=='up' else -1;imp=float((m or {}).get('impulse5Bps') or 0)
+        return 'adverse-selection guard: oracle moving against quote' if d*imp<-.5 else None
+
+    def _report_inventory(self,pnl,shares,entry,exit_price,reason,fee=0.):
+        observer=getattr(self,'trade_observer',None)
+        if not observer:return
+        now=time.time()
+        observer({'id':f"{(self.paper or {}).get('sessionId')}:{self.lane}:inv:{now}",'asset':self.lane,'sessionId':(self.paper or {}).get('sessionId'),
+                  'marketSlug':(self.market or {}).get('slug'),'side':'PAIR','strategy':'PAIR_INVENTORY','entryAt':now,'closedAt':now,
+                  'quantity':shares,'entryPrice':entry,'exitPrice':exit_price,'grossPnlUsd':pnl+fee,'feesUsd':fee,'netPnlUsd':pnl,'holdSec':0,
+                  'exitReason':reason,'stopOvershootUsd':0,'entryLatencyMs':0,'exitLatencyMs':0,'entrySlippageUsd':0,'entryFeatures':{},'accountingErrorUsd':0})
+
     def _loss_budget(self):
         p=self.paper or {}
         lane=self.session_loss_limit+min(0.,float(p.get('realizedPnl') or 0))
@@ -2156,7 +2183,7 @@ class PolyServerDemo:
                     'executionLatencyMs':int(EXECUTION_LATENCY_SEC*1000),'maxEntryChase':MAX_ENTRY_CHASE,
                     'inventoryV12Enabled':INVENTORY_V12_ENABLED,'inventoryPairTarget':self.pair_target,
                     'inventoryMaxHoldSec':INVENTORY_MAX_HOLD_SEC,'inventoryStopLossUsd':self.inventory_stop,'inventoryMaxInitialGap':INVENTORY_MAX_INITIAL_GAP,'inventoryMaxResidualUsd':self.residual_cap,'inventoryMaxFirstPrice':self.first_price_cap,'entryAudit':self.entry_audit,'walletQuotes':self.wallet_quotes},
-            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'momentumSizing':self.momentum_sizing,'edgeSignal':(self.edge.signals.get(self.lane) if self.edge else None)},
+            'strategies':{'edge':self.edge_decision,'model':self.model_decision,'momentumSizing':self.momentum_sizing,'maker':self.maker_decision,'edgeSignal':(self.edge.signals.get(self.lane) if self.edge else None)},
             'momentum':{'enabled':self.momentum_enabled,'decision':self.momentum_decision,'candidate':self.momentum_candidate,'entryNotionalCap':min(3.25,self.balance*.1),'stopLossUsd':self.inventory_stop,'takeProfitUsd':max(.18,self.inventory_stop),'maxHoldSec':30,'modelCalibrated':False},
             'bookHealth':{'observedAt':dict(self.book_observed),'ageSec':{k:time.time()-v if v else None for k,v in self.book_observed.items()},'eventLagSec':self.book_event_lag,'staleBookMessagesRejected':self.stale_book_messages,'riskLoopLagSec':self.risk_loop_lag,'lastTradeEventLagSec':self.trade_event_lag},
             'research':getattr(self,'research_state',{'mode':'SHADOW_ONLY','executionEnabled':False,'reason':'research starting'}),

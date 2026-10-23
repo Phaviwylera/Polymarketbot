@@ -6,8 +6,21 @@ hypothetical $1 credit, not an actual merge, redemption or funded paper trade.
 import copy,math,uuid
 from collections import Counter,deque
 from poly_features import number,walk
-POLICY='pair-maker-queue-taker-hedge-v1'
+POLICY='pair-maker-queue-taker-hedge-v2-guard'
 LATENCY=.35
+GUARD_IMPULSE_BPS=.5     # 5s oracle impulse against the quoted side
+GUARD_FAST_BPS=1.0       # 5s Binance/Coinbase move against the quoted side
+MARKOUT_SEC=5.
+
+def adverse(c,side,now):
+    """A resting bid on `side` is picked off when the underlying moves against it. Uses the fastest
+    fresh signals: Polymarket's oracle impulse and external exchange returns (each only if fresh)."""
+    d=1 if side=='up' else -1;m=c.get('model') or {};hits=[]
+    imp=m.get('impulse5Bps')
+    if imp is not None and d*number(imp)<-GUARD_IMPULSE_BPS:hits.append(f'oracle impulse {number(imp):+.2f}bps')
+    for name,r in (c.get('fast') or {}).items():
+        if r is not None and d*number(r)<-GUARD_FAST_BPS:hits.append(f'{name} {number(r):+.2f}bps')
+    return '; '.join(hits) or None
 
 class PairShadow:
     def __init__(self,asset,balance,emit):
@@ -17,6 +30,7 @@ class PairShadow:
         self.active=None;self.last_market=None;self.reason='warming';self.last_check=0.;self.recent=deque(maxlen=200)
         self.residual_cap=min(3.25,self.balance*.05);self.cycle_cap=min(8.,self.balance*.2)
         self.stop=min(.4,self.balance*.005);self.loss_limit=self.balance*.03
+        self.markouts=deque(maxlen=200)
     def event(self,kind,now,**data):
         self.emit('PAIR_'+kind,{'policy':POLICY,'asset':self.asset,'at':now,'executionEnabled':False,**data})
     def block(self,reason):self.reason=reason;self.reasons[reason]+=1
@@ -47,7 +61,7 @@ class PairShadow:
              'quantity':a['quantity'],'createdAt':a['createdAt'],'entryAt':a.get('entryAt'),
              'closedAt':now,'status':status,'reason':reason,'entryCostUsd':cost,
              'proceedsUsd':proceeds,'cashFlowConvention':'proceeds net of hedge spend or exit fees','feesUsd':fees,'netPnlUsd':net,'accountingErrorUsd':net-(proceeds-cost),
-             'maxUnhedgedSec':now-a.get('entryAt',now),'censored':status=='censored_loss',
+             'maxUnhedgedSec':now-a.get('entryAt',now),'censored':status=='censored_loss','markout5s':a.get('markout'),
              'fillModel':'sell-volume queue proxy; no partial fills'}
         self.recent.append(row);self.event('OUTCOME',now,**row);self.active=None;self.reason=reason
         self.peak=max(self.peak,self.cash);self.drawdown=max(self.drawdown,self.peak-self.cash)
@@ -66,6 +80,8 @@ class PairShadow:
             q=a['quantity'];side=a['side'];opposite='down' if side=='up' else 'up'
             if a['phase']=='quote':
                 if now-a['createdAt']>=10:self.cancel(now,'quote TTL');return
+                bad=adverse(c,side,now)
+                if bad:self.counts['guardCancels']+=1;self.cancel(now,'adverse-selection guard: '+bad);return
                 if now-a['createdAt']<LATENCY:return
                 if 'activatedAt' not in a:
                     if a['price']<min(number(p.get('price')) for p in book[side]['bids'] if number(p.get('size'))>0)-1e-9:
@@ -90,10 +106,14 @@ class PairShadow:
                         self.cancel(now,'quote queue moved beyond retained depth');return
                     if not hedge or a['price']+hedge['vwap']+hedge['feePerShare']>.98+1e-9:self.cancel(now,'pair edge disappeared before fill')
                     return
-                cost=q*a['price'];self.cash-=cost;a.update(phase='hedge',entryAt=now,entryCost=cost)
+                cost=q*a['price'];self.cash-=cost
+                b=c['bbo'][side];a.update(phase='hedge',entryAt=now,entryCost=cost,fillMid=(number(b['bid'])+number(b['ask']))/2)
                 self.counts['firstFills']+=1;self.event('FIRST_FILL',now,id=a['id'],marketSlug=a['marketSlug'],side=side,quantity=q,price=a['price'],queueAhead=a['queueAhead'],sellVolume=a['consumed'],entryCostUsd=cost)
                 return
             if a['phase']=='hedge':
+                if 'markout' not in a and now-a['entryAt']>=MARKOUT_SEC:
+                    b=c['bbo'][side];a['markout']=(number(b['bid'])+number(b['ask']))/2-a['fillMid']
+                    self.markouts.append(a['markout'])
                 if now-a['entryAt']<LATENCY:return
                 hedge=walk(book[opposite]['asks'],q,True)
                 hedge_cost=q*(hedge['vwap']+hedge['feePerShare']) if hedge else math.inf
@@ -123,6 +143,7 @@ class PairShadow:
         q=max(5.,number(m.get('minOrderSize')));choices=[]
         for side in ('up','down'):
             other='down' if side=='up' else 'up';hedge=walk(book[other]['asks'],q,True)
+            if adverse(c,side,now):self.counts['guardSkips']+=1;continue
             if not hedge or not walk(book[side]['bids'],q,False):continue
             tick=max(.001,number(m.get('minTickSize'),.01))
             ceiling=min(number(c['bbo'][side]['bid']),.98-hedge['vwap']-hedge['feePerShare'],self.residual_cap/q,.6)
@@ -162,6 +183,9 @@ class PairShadow:
             'censoredLossBoundUsd':self.censored,'feesUsd':self.fees,'maxDrawdownUsd':self.drawdown,
             'unhedgedCostUsd':cost,'unhedgedSince':a.get('entryAt'),'phase':a.get('phase','idle'),
             'counts':dict(self.counts),'reasonCounts':dict(self.reasons),'reason':self.reason,'active':copy.deepcopy(self.active),'recent':list(self.recent),
+            'adverseSelection':{'guard':{'oracleImpulseBps':GUARD_IMPULSE_BPS,'exchangeReturnBps':GUARD_FAST_BPS},'markoutSec':MARKOUT_SEC,
+                'fillsMeasured':len(self.markouts),'meanMarkout':(sum(self.markouts)/len(self.markouts)) if self.markouts else None,
+                'note':'Mid-price change on the filled side 5s after a first-leg fill; negative means fills were picked off.'},
             'limits':{'cycleCapUsd':self.cycle_cap,'residualCapUsd':self.residual_cap,'stopUsd':self.stop,'lossLimitUsd':self.loss_limit,'maxUnhedgedSec':15,'quoteTtlSec':10,'maxPairCost':.98},
             'assumptions':{'makerFee':0,'takerFee':'0.07*p*(1-p), assumed per share','rebates':0,'latencySec':LATENCY,'partialFills':False,'queueModel':'displayed queue plus full quantity consumed by fresh sell prints'},
             'note':'Isolated hypothetical cash; censored loss bounds are not observed losses. No promotion or real execution.'}
