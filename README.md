@@ -52,7 +52,7 @@ cd arb-lab-v4
 python -m uvicorn server:app --host 127.0.0.1 --port 8765
 ```
 
-Open `/poly`. The dashboard uses the deployed dedicated engine URL in `poly.js`; set `BASE` there to an empty string for a combined local server. `POLY_ENGINE_ROLE=frontend` skips the local engine when deploying the dashboard separately.
+Open `/poly`. The dashboard calls the paper engine on its own origin; the unified server runs the engine itself (`POLY_ENGINE_ROLE=combined`, the default). Set `POLY_HANDOVER_URL` to a running engine's base URL to import its live ledger on startup.
 
 Dedicated engine:
 

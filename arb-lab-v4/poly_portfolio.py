@@ -75,7 +75,10 @@ class PaperPortfolio:
         try:
             if self.durable_recovery:raise RuntimeError('durable recovery is authoritative')
             async with httpx.AsyncClient(timeout=5) as client:
-                response=await client.get('https://poly-edge-paper-engine.onrender.com/api/poly/demo/server',params={'all_assets':'true'})
+                # Optional live handover from a previous engine instance (e.g. during a migration).
+                handover=os.environ.get('POLY_HANDOVER_URL','').strip().rstrip('/')
+                if not handover:raise RuntimeError('no handover source configured')
+                response=await client.get(handover+'/api/poly/demo/server',params={'all_assets':'true'})
                 response.raise_for_status();live=response.json()
                 recovery=merge_release_recovery(recovery,live)
         except Exception:pass

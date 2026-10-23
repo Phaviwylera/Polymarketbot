@@ -389,7 +389,7 @@ async def poly_demo_server(asset:Literal['BTC','ETH','SOL','XRP']='BTC',all_asse
 @app.post('/api/poly/demo/server/reset')
 async def poly_demo_server_reset():
     if POLY_ENGINE_ROLE=='frontend':
-        return JSONResponse({'status':'blocked','detail':'Restart the dedicated paper engine, not the frontend service.'},status_code=409)
+        return JSONResponse({'status':'blocked','detail':'This service runs with POLY_ENGINE_ROLE=frontend; set it to combined to run the paper engine here.'},status_code=409)
     if poly_storage.url and not poly_storage.entry_allowed():
         return JSONResponse({'status':'blocked','detail':'Engine is in storage recovery or handover.'},status_code=409)
     result=await poly_server_engine.reset()
@@ -704,6 +704,11 @@ async def poly_operations():
 @app.get("/api/poly/research/v16")
 async def poly_v16_research():
     return poly_server_engine.research.snapshot() if poly_server_engine.research else {"mode":"SHADOW_ONLY","executionEnabled":False,"state":"starting"}
+
+
+@app.get("/api/poly/research/v16/model")
+async def poly_v16_model():
+    return poly_server_engine.research.artifact if poly_server_engine.research and poly_server_engine.research.artifact else {"model":None,"executionEnabled":False,"state":"collecting_data"}
 
 
 @app.get("/api/poly/research/pairs")

@@ -1,7 +1,7 @@
 'use strict';
 (() => {
- const isLocal=typeof window!=='undefined'&&(window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1'||window.location.hostname.endsWith('.e2b.app'));
- const BASE=isLocal?'':'https://poly-edge-paper-engine.onrender.com',ASSETS=['BTC','ETH','SOL','XRP'];
+ // The paper engine runs inside the unified server, so the dashboard talks to its own origin.
+ const BASE='',ASSETS=['BTC','ETH','SOL','XRP'];
  const colors={BTC:'#ffc45a',ETH:'#65d5ff',SOL:'#bdabff',XRP:'#67f3a2'};
  const $=id=>document.getElementById(id),valid=v=>v!==null&&v!==undefined&&Number.isFinite(Number(v));
  const money=(v,d=2)=>valid(v)?'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
