@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, PlainTextResponse
 from pydantic import BaseModel, Field
 from poly_portfolio import engine as poly_server_engine
 from poly_storage import DurableStore
@@ -723,6 +723,43 @@ async def poly_operations():
 async def poly_v16_research():
     return poly_server_engine.research.snapshot() if poly_server_engine.research else {"mode":"SHADOW_ONLY","executionEnabled":False,"state":"starting"}
 
+
+# ---- developer logs: plain text, no ZIP, viewable in any browser ----
+@app.get('/robots.txt')
+async def robots():
+    return PlainTextResponse('User-agent: *\nAllow: /\n')
+
+@app.get('/api/poly/dev/report')
+async def dev_report(format:str='text'):
+    import poly_devlog
+    rep=poly_devlog.report(poly_server_engine)
+    if format=='json':return JSONResponse(rep,headers={'Cache-Control':'no-store'})
+    return PlainTextResponse(poly_devlog.text(rep),headers={'Cache-Control':'no-store'})
+
+@app.get('/api/poly/dev/report.txt')
+async def dev_report_download():
+    import poly_devlog
+    body=poly_devlog.text(poly_devlog.report(poly_server_engine))
+    name='poly-edge-report-'+time.strftime('%Y-%m-%dT%H-%M-%SZ',time.gmtime())+'.txt'
+    return PlainTextResponse(body,headers={'Cache-Control':'no-store','Content-Disposition':f'attachment; filename="{name}"'})
+
+@app.get('/api/poly/dev/events')
+async def dev_events(asset:str|None=None,limit:int=300,action:str|None=None):
+    import poly_devlog
+    rows=poly_devlog.events(poly_server_engine,asset,limit,action)
+    return PlainTextResponse(''.join(json.dumps(r,separators=(',',':'),default=str)+'\n' for r in rows),headers={'Cache-Control':'no-store'})
+
+async def _dev_report_printer():
+    import poly_devlog
+    while True:
+        await asyncio.sleep(300)
+        try:
+            for line in poly_devlog.compact_lines(poly_devlog.report(poly_server_engine)):print(line,flush=True)
+        except Exception as exc:print('POLY_DEV_REPORT_ERROR',type(exc).__name__,str(exc)[:160],flush=True)
+
+@app.on_event('startup')
+async def start_dev_report_printer():
+    if POLY_ENGINE_ROLE!='frontend':asyncio.create_task(_dev_report_printer())
 
 @app.get("/api/poly/edge")
 async def poly_edge():
