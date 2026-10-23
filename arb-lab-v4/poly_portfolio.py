@@ -48,7 +48,8 @@ def merge_release_recovery(checkpoint,live):
             if regressed:print('POLY_RECOVERY_LEDGER_REGRESSION',asset,flush=True)
     cp=checkpoint.get('portfolio') or {};mp=merged.setdefault('portfolio',{})
     mp['riskLocked']=bool(mp.get('riskLocked') or cp.get('riskLocked'))
-    mp['maxDrawdownUsd']=max(float(mp.get('maxDrawdownUsd') or 0),float(cp.get('maxDrawdownUsd') or 0))
+    if float(cp.get('epochStart') or 0)==float(mp.get('epochStart') or 0):
+        mp['maxDrawdownUsd']=max(float(mp.get('maxDrawdownUsd') or 0),float(cp.get('maxDrawdownUsd') or 0))
     return merged
 
 class PaperPortfolio:
@@ -249,9 +250,12 @@ class PaperPortfolio:
             recovery=merge_release_recovery(recovery,self.handover)
         except Exception:pass
         self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
-        self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
-        self.peak=max(self.peak,float((recovery.get('portfolio') or {}).get('peakEquity') or (recovery.get('portfolio') or {}).get('equity') or TOTAL_BALANCE))
         self.epoch=max(self.epoch,float((recovery.get('portfolio') or {}).get('epochStart') or 0))
+        # Drawdown and peak carry over only from a checkpoint of the same fresh-start period; an older
+        # snapshot (e.g. the committed release checkpoint) must not leak a pre-reset drawdown.
+        if float((recovery.get('portfolio') or {}).get('epochStart') or 0)==self.epoch:
+            self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
+            self.peak=max(self.peak,float((recovery.get('portfolio') or {}).get('peakEquity') or (recovery.get('portfolio') or {}).get('equity') or TOTAL_BALANCE))
         pf0=recovery.get('portfolio') or {}
         if self.epoch and float(pf0.get('epochStart') or 0)==self.epoch:
             self.epoch_peak=max(self.epoch_peak,float(pf0.get('epochPeakPnl') or 0));self.guard_until=float((pf0.get('guard') or {}).get('pausedUntil') or 0)

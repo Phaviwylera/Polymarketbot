@@ -95,7 +95,7 @@ class AssetScout:
         for e in self.engines.values():
             if f'{e.asset.lower()}-{e.tag}'!=tr.key or not e.market:continue
             b=e.bbo.get('up') or {}
-            if b.get('bid') is None or b.get('ask') is None or now-e.book_observed.get('up',0)>3:return
+            if b.get('bid') is None or b.get('ask') is None or now-e.book_observed.get('up',0)>15:return
             tr.listed=True;tr.add(now,float(e.market['startTs']),float(b['bid']),float(b['ask']),float(b.get('bidSize') or 0),float(b.get('askSize') or 0));return
     async def step(self,now=None):
         now=time.time() if now is None else now;active=self.active_keys()

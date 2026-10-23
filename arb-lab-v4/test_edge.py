@@ -499,3 +499,12 @@ class OvernightGuardTests(unittest.TestCase):
         self.set_pnl(-8.5);self.assertIn('loss limit',self.p.pause_reason())
     def test_no_guard_before_a_fresh_start(self):
         self.p.epoch=0.;self.set_pnl(-20);self.assertIsNone(self.p.pause_reason())
+
+class DrawdownEpochTests(unittest.TestCase):
+    def test_old_checkpoint_drawdown_does_not_leak_into_fresh_start(self):
+        from poly_portfolio import merge_release_recovery
+        old={'serverTime':1,'portfolio':{'maxDrawdownUsd':3.33},'assets':{'BTC':{'paper':{'sessionId':'a'}}}}
+        live={'revision':'17.3','serverTime':2,'portfolio':{'maxDrawdownUsd':0.,'epochStart':100.},'assets':{'BTC':{'paper':{'sessionId':'b'}}}}
+        self.assertEqual(merge_release_recovery(old,live)['portfolio']['maxDrawdownUsd'],0.)
+        same={**old,'portfolio':{'maxDrawdownUsd':3.33,'epochStart':100.}}
+        self.assertEqual(merge_release_recovery(same,live)['portfolio']['maxDrawdownUsd'],3.33)
