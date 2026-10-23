@@ -205,8 +205,8 @@
   const f=(s.edge?.flows||[]).filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
   if(!f.length){text(g,'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
   const SN={MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
-  const total=f.reduce((a,x)=>a+x.trades,0),wins=f.reduce((a,x)=>a+x.wins,0),losses=total-wins,pad=6,top=14,usable=h-top-8;
-  const col=(items,weights,X)=>{const gap=pad*(items.length-1),sc=(usable-gap)/total;let y=top;return Object.fromEntries(items.map((k,i)=>{const hh=Math.max(2,weights[i]*sc),r={x:X,y,h:hh,used:0,usedR:0};y+=hh+pad;return [k,r];}));};
+  const total=f.reduce((a,x)=>a+x.trades,0),wins=f.reduce((a,x)=>a+x.wins,0),losses=total-wins,pad=6,top=14,usable=h-top-8-22*4;
+  const col=(items,weights,X)=>{const gap=pad*(items.length-1),sc=(usable-gap)/total;let y=top;return Object.fromEntries(items.map((k,i)=>{const hh=weights[i]*sc,r={x:X,y,h:hh,used:0,usedR:0};y+=Math.max(hh,22)+pad;return [k,r];}));};
   const LX=86,MX=w*.48,RX=w-92,NW=10;
   const nL=col(lanes,lanes.map(l=>f.filter(x=>x.lane===l).reduce((a,x)=>a+x.trades,0)),LX),nM=col(strats,strats.map(k=>f.filter(x=>x.strategy===k).reduce((a,x)=>a+x.trades,0)),MX),nR=col(['WIN','LOSS'],[wins,losses],RX);
   const sc=(usable-pad*(Math.max(lanes.length,strats.length,2)-1))/total;
@@ -219,7 +219,7 @@
   strats.forEach(k=>{const fl=f.filter(x=>x.strategy===k);node(nM[k],SN[k]||k,C.text,`${signed(fl.reduce((a,x)=>a+x.pnl,0))}`,true);});
   const won=f.reduce((a,x)=>a+x.won,0),lost=f.reduce((a,x)=>a+x.lost,0);node(nR.WIN,'WINS '+wins,C.green,signed(won),true);if(losses)node(nR.LOSS,'LOSSES '+losses,C.red,signed(-lost),true);
   text(g,'LANE',LX,9,C.dim,8.5);text(g,'STRATEGY',MX,9,C.dim,8.5);text(g,'OUTCOME',RX,9,C.dim,8.5);
-  set('flowBadge',`${total} trades · net ${signed(won-lost)}`);
+  set('flowBadge',`${total} closed positions · net ${signed(won-lost)}`);
  }
 
  // ---------- footer ----------
