@@ -440,6 +440,19 @@ class EdgeLab:
         return {'version':VERSION,'savedAt':time.time(),'calibration':self.cal.export(),'maker':self.maker.export(),
                 'strategies':{v:s.export() for v,s in self.strategies.items()},'wallets':self.intel.export(),
                 'trades':list(self.trades)[-3000:]}
+    def import_bets(self,archive):
+        """Owner-supplied archive of settled shadow bets {strategy:[bet,...]}: adds only bets not already held."""
+        added=0
+        for name,rows in (archive or {}).items():
+            rec=self.strategies.get(name) if name!='maker' else self.maker
+            if rec is None or not isinstance(rows,list):continue
+            have={(b.get('marketSlug'),b.get('side'),round(number(b.get('t')),0)) for b in rec.bets}
+            new=[b for b in rows if isinstance(b,dict) and 'returnPerDollar' in b and (b.get('marketSlug'),b.get('side'),round(number(b.get('t')),0)) not in have]
+            if new:
+                merged=sorted(list(rec.bets)+new,key=lambda b:number(b.get('t') or b.get('at')))
+                rec.bets.clear();rec.bets.extend(merged);added+=len(new)
+        self._trust=None
+        return added
     def restore(self,state):
         if not isinstance(state,dict) or state.get('version')!=VERSION:return False
         self.cal=Calibrator();self.cal.restore(state.get('calibration'))

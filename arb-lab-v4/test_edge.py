@@ -392,3 +392,16 @@ class MarketTrustTests(unittest.TestCase):
     def test_calibrated_only_candidate_not_tradable_by_raw_variant(self):
         for i in range(60):self.lab.strategies['edge'].add(bet(.9 if i%2 else -.5,i))
         self.assertIsNone(self.lab.tradable({'side':'UP','calibratedOnly':True}))
+
+class RecoveryCompatibilityTests(unittest.TestCase):
+    def test_v17_checkpoint_is_not_discarded(self):
+        from poly_portfolio import merge_release_recovery,compatible_revision
+        self.assertTrue(compatible_revision('17.0-trust'));self.assertTrue(compatible_revision('16.9-edge12'))
+        self.assertFalse(compatible_revision('13.2'));self.assertFalse(compatible_revision(None))
+        old={'serverTime':1,'assets':{'BTC':{'paper':{'sessionId':'old'}}}}
+        live={'revision':'17.0-trust','serverTime':2,'assets':{'BTC':{'paper':{'sessionId':'new','trades':3}}}}
+        self.assertEqual(merge_release_recovery(old,live)['assets']['BTC']['paper']['sessionId'],'new')
+    def test_import_bets_adds_only_missing(self):
+        lab=EdgeLab({});b={'marketSlug':'s1','side':'UP','t':10.,'returnPerDollar':1.,'won':True,'roundStart':1}
+        self.assertEqual(lab.import_bets({'edge':[b,{**b,'marketSlug':'s2'}]}),2)
+        self.assertEqual(lab.import_bets({'edge':[b]}),0);self.assertEqual(lab.strategies['edge'].stats()['bets'],2)

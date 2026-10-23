@@ -20,9 +20,14 @@ AUTO_CYCLE=os.environ.get('POLY_AUTO_CYCLE','1').strip()!='0'
 LANE_LOCK_COOLDOWN_SEC=1800.
 PORTFOLIO_LOCK_COOLDOWN_SEC=3600.
 
+def compatible_revision(rev):
+    """Ledger format is stable from V14 on; accept every later major (17, 18, ...)."""
+    try:return int(str(rev).split('.')[0])>=14
+    except (TypeError,ValueError):return False
+
 def merge_release_recovery(checkpoint,live):
     """A later wall clock cannot roll a known session's ledger backwards."""
-    if not str(live.get('revision','')).startswith(('14.','15.','16.')) or not live.get('assets'):return checkpoint
+    if not compatible_revision(live.get('revision','')) or not live.get('assets'):return checkpoint
     if float(live.get('serverTime') or 0)<float(checkpoint.get('serverTime') or 0):return checkpoint
     merged=copy.deepcopy(live)
     for asset,saved in (checkpoint.get('assets') or {}).items():
@@ -209,6 +214,10 @@ class PaperPortfolio:
             if use_saved and p.get('version')==14 and p.get('startingBalance')==e.balance:
                 e.state_file.write_text(json.dumps(saved))
         if self.handover_edge and not self.durable_recovery and not self.edge.restored:self.edge.restore(self.handover_edge)
+        encoded=os.environ.get('POLY_EDGE_BETS_B64','')
+        if encoded:
+            try:print('POLY_EDGE_BETS_RESTORED',self.edge.import_bets(json.loads(gzip.decompress(base64.b64decode(encoded,validate=True)))),flush=True)
+            except Exception as exc:print('POLY_EDGE_BETS_INVALID',type(exc).__name__,flush=True)
         await asyncio.gather(*(e.start() for e in self.engines.values()))
         self.edge.start()
         if self.cycle_task is None:self.cycle_task=asyncio.create_task(self.cycle_worker(),name='auto-cycle')
