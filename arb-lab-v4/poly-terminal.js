@@ -153,7 +153,7 @@
   // gate column
   g.strokeStyle=C.line;g.beginPath();g.moveTo(gx,gy(0)-12);g.lineTo(gx,gy(GATES.length-1)+12);g.stroke();
   GATES.forEach((gt,j)=>{const pass=st[gt[0]],y=gy(j);g.fillStyle=pass?C.green:C.red;g.globalAlpha=.18;g.beginPath();g.arc(gx,y,9,0,7);g.fill();g.globalAlpha=1;g.beginPath();g.arc(gx,y,4,0,7);g.fill();
-   text(g,gt[0],gx+12,y-1,pass?C.text:C.red,9,'left','600');text(g,gt[1],gx+12,y+9,C.dim,8);});
+   const roomy=(gy(1)-gy(0))>=26;text(g,gt[0],gx+12,roomy?y-1:y+3,pass?C.text:C.red,9,'left','600');if(roomy)text(g,gt[1],gx+12,y+9,C.dim,8);});
   // sphere: teal shell + gold core; core grows with calibrated conviction and pulses on fills
   const rot=time*.18,tilt=-.3,conv=pUp===null?0:Math.abs(pUp-.5)*2,coreScale=.75+conv*.5+pulse*.35;
   const proj=(p,s)=>{const x=p.x*s,y=p.y*s,z=p.z*s,c1=Math.cos(rot),s1=Math.sin(rot),x1=x*c1+z*s1,z1=-x*s1+z*c1,c2=Math.cos(tilt),s2=Math.sin(tilt),y1=y*c2-z1*s2,z2=y*s2+z1*c2,k=3/(3-z2);return{x:cx+x1*R*k,y:cy+y1*R*k,z:z2};};
