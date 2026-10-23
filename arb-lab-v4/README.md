@@ -28,3 +28,9 @@ Momentum (the only strategy with positive out-of-sample evidence) is unchanged.
 * The profit target now rests as a paper maker sell (zero fee) at the lowest tick that meets the target.
   Paper fills only when the best bid trades through that price (bid ≥ price + 1 tick, book ≤ 3 s old).
   Stops, direction-reversal and time exits still sell as takers. Set `POLY_MAKER_EXIT=0` to switch off.
+
+## V17.2 — profit target back to a taker exit
+
+The V17.1 resting maker sell is now off by default (`POLY_MAKER_EXIT=1` turns it back on). A resting
+order fills only at its own price, so it capped wins at the target (~$0.31), while taker target exits
+had averaged +$0.87 by selling into price jumps; the fee saved (~$0.08 per exit) did not cover that.

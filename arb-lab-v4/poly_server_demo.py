@@ -38,13 +38,17 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="17.1-maker-exit"
+ENGINE_REVISION="17.2-taker-target"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 import os as _os
 # V17.1: the profit target rests as a paper maker sell (zero fee) instead of a taker exit.
 # Paper fill rule is conservative: only when the best bid trades THROUGH the resting price
 # (bid >= price + 1 tick) on a book no older than 3s, at least one latency after posting.
-MAKER_EXIT=_os.getenv("POLY_MAKER_EXIT","1")!="0"
+# V17.2: OFF by default. A resting sell fills at its own price, so it caps every win at the target
+# (~$0.31 on 5 shares), while the taker exit sells into price jumps past the target: taker target
+# exits averaged +$0.87 (47 trades; +$1.11 on the 26 matching current rules) against a fee saving of
+# about $0.08 per exit. The first two live maker exits made +$0.31 and +$0.32.
+MAKER_EXIT=_os.getenv("POLY_MAKER_EXIT","0")=="1"
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
 INVENTORY_MAX_INITIAL_GAP=0.0

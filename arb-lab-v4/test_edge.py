@@ -421,7 +421,9 @@ class PromoteRetryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(e.starts,0)   # nothing started before every read succeeded
 
 class MakerExitTests(unittest.IsolatedAsyncioTestCase):
-    setUp=MomentumTuningTests.setUp
+    def setUp(self):
+        MomentumTuningTests.setUp(self)
+        p=patch.object(mod,'MAKER_EXIT',True);p.start();self.addCleanup(p.stop)
     async def _open(self):
         c,_=self.e._momentum_signal(self.m);self.assertIsNotNone(c)
         self.assertTrue(await self.e._momentum_enter(self.e._momentum_size(c)))
@@ -447,3 +449,7 @@ class MakerExitTests(unittest.IsolatedAsyncioTestCase):
     async def test_switch_off_restores_taker_target(self):
         with patch.object(mod,'MAKER_EXIT',False):
             pos=await self._open();await self.e._momentum_manage(self.m);self.assertNotIn('makerExit',pos)
+    def test_maker_exit_is_off_by_default(self):
+        import importlib,os
+        self.assertNotEqual(os.environ.get('POLY_MAKER_EXIT'),'1')
+        self.assertFalse(importlib.reload(mod).MAKER_EXIT)
