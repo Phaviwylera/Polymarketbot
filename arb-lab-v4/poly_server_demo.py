@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="17.2-taker-target"
+ENGINE_REVISION="17.3-fresh-start"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 import os as _os
 # V17.1: the profit target rests as a paper maker sell (zero fee) instead of a taker exit.
@@ -1570,7 +1570,9 @@ class PolyServerDemo:
 
     def _operational_entry_allowed(self):
         guard=getattr(self,'operational_guard',None)
-        return guard is None or guard()
+        if guard is not None and not guard():return False
+        pause=getattr(self,'entry_pause',None)
+        return not (pause and pause())
 
     def _attribute_close(self,pos,price,fee,reason,latency_ms=0):
         from poly_attribution import closed_trade
@@ -1665,7 +1667,9 @@ class PolyServerDemo:
         await self._momentum_manage(m)
         p=self.paper;self._update_risk()
         if p.get('position'):self.momentum_decision='managing live paper position';return
-        if not self._operational_entry_allowed():self.momentum_decision='entries paused: storage recovery or handover';return
+        if not self._operational_entry_allowed():
+            pause=getattr(self,'entry_pause',None);why=pause() if pause else None
+            self.momentum_decision=('entries paused: '+why) if why else 'entries paused: storage recovery or handover';return
         if self._inventory_has_residual():self.momentum_decision='managing older paired-inventory exposure';return
         if p['status']!='running':self.momentum_decision=p.get('riskLockReason') or p['status'];return
         if now<p.get('cooldownUntil',0):self.momentum_decision='cooldown after loss';return

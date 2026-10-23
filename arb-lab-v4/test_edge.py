@@ -453,3 +453,49 @@ class MakerExitTests(unittest.IsolatedAsyncioTestCase):
         import importlib,os
         self.assertNotEqual(os.environ.get('POLY_MAKER_EXIT'),'1')
         self.assertFalse(importlib.reload(mod).MAKER_EXIT)
+
+class FreshStartTests(unittest.TestCase):
+    def test_fresh_start_resets_headline_and_keeps_history(self):
+        import os,poly_portfolio
+        d=tempfile.TemporaryDirectory();self.addCleanup(d.cleanup)
+        with patch.dict(os.environ,{'POLY_DATA_DIR':d.name,'POLY_FRESH_START_AT':''}):
+            p=poly_portfolio.PaperPortfolio()
+        p.started=True;p.data_root=Path(d.name)
+        for e in p.engines.values():e._save=lambda:None;e._new_session()
+        old={'sessionId':'old','startedAt':1000.,'realizedPnl':5.,'trades':10,'events':[]}
+        p.ledger_history['BTC']['old']=old
+        self.assertEqual(p.snapshot()['portfolio']['lifetimeTrades'],10)
+        with patch.dict(os.environ,{'POLY_FRESH_START_AT':str(time.time())}):
+            self.assertTrue(p.apply_fresh_start())
+            self.assertFalse(p.apply_fresh_start())          # applied once
+        pf=p.snapshot()['portfolio']
+        self.assertEqual(pf['lifetimeTrades'],0);self.assertEqual(pf['lifetimeRealizedPnl'],0)
+        self.assertEqual(pf['archivedTrades'],10);self.assertIn('old',p.ledger_history['BTC'])
+        self.assertAlmostEqual(pf['equity'],200.)
+    def test_fresh_start_waits_while_exposed(self):
+        import os,poly_portfolio
+        d=tempfile.TemporaryDirectory();self.addCleanup(d.cleanup)
+        with patch.dict(os.environ,{'POLY_DATA_DIR':d.name}):p=poly_portfolio.PaperPortfolio()
+        for e in p.engines.values():e._save=lambda:None;e._new_session()
+        p.engines['ETH'].paper['position']={'side':'UP'}
+        with patch.dict(os.environ,{'POLY_FRESH_START_AT':str(time.time())}):self.assertFalse(p.apply_fresh_start())
+
+class OvernightGuardTests(unittest.TestCase):
+    def setUp(self):
+        import os,poly_portfolio
+        self.d=tempfile.TemporaryDirectory();self.addCleanup(self.d.cleanup)
+        with patch.dict(os.environ,{'POLY_DATA_DIR':self.d.name}):self.p=poly_portfolio.PaperPortfolio()
+        for e in self.p.engines.values():e._save=lambda:None;e._new_session()
+        self.p.epoch=time.time()-10
+    def set_pnl(self,x):self.p.engines['BTC'].paper['realizedPnl']=x
+    def test_giveback_pauses_after_half_the_peak_is_lost(self):
+        p=self.p;self.set_pnl(5.);self.assertIsNone(p.pause_reason())
+        self.set_pnl(3.);self.assertIsNone(p.pause_reason())
+        self.set_pnl(2.4);self.assertIn('gave back',p.pause_reason())
+        self.assertFalse(p.engines['ETH']._operational_entry_allowed())
+        self.assertNotEqual(p.engines['ETH'].paper['status'],'risk_locked')   # pauses, never locks lanes
+        p.guard_until=time.time()-1;self.assertIsNone(p.pause_reason())         # resumes after the pause
+    def test_overnight_loss_limit_stops_entries(self):
+        self.set_pnl(-8.5);self.assertIn('loss limit',self.p.pause_reason())
+    def test_no_guard_before_a_fresh_start(self):
+        self.p.epoch=0.;self.set_pnl(-20);self.assertIsNone(self.p.pause_reason())

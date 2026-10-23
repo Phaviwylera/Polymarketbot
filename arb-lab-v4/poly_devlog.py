@@ -41,7 +41,7 @@ def report(engine,now=None):
     return {'generatedAt':now,'generatedAtUtc':time.strftime('%Y-%m-%d %H:%M:%S',time.gmtime(now)),'revision':pf.get('revision'),
         'storage':{k:(snap.get('infrastructure') or {}).get(k) for k in ('backend','state','checkpointAgeSec','errors','lastError','databaseExpiresAt')},
         'portfolio':{'equity':_r(pf.get('equity'),2),'totalPnl':_r(pf.get('totalPnl')),'realizedPnl':_r(pf.get('realizedPnl')),'trades':pf.get('trades'),
-                     'lifetimeRealizedPnl':_r(pf.get('lifetimeRealizedPnl')),'lifetimeTrades':pf.get('lifetimeTrades'),'riskLocked':pf.get('riskLocked'),'maxDrawdownUsd':_r(pf.get('maxDrawdownUsd'))},
+                     'lifetimeRealizedPnl':_r(pf.get('lifetimeRealizedPnl')),'lifetimeTrades':pf.get('lifetimeTrades'),'epochStart':pf.get('epochStart'),'archivedRealizedPnl':_r(pf.get('archivedRealizedPnl')),'archivedTrades':pf.get('archivedTrades'),'riskLocked':pf.get('riskLocked'),'maxDrawdownUsd':_r(pf.get('maxDrawdownUsd'))},
         'edge':{'mode':edge.get('mode'),'promoted':edge.get('promotedStrategy'),'strategies':strategies,
                 'maker':{k:(edge.get('maker') or {}).get(k) for k in ('bets','rounds','wins','winRatePct','meanReturnPerDollar','meanMinus2SE','gatePassed')},'calibration':edge.get('calibration'),'modelTrust':edge.get('modelTrust'),
                 'pendingRounds':edge.get('pendingRounds'),'errors':edge.get('errors'),
@@ -57,7 +57,7 @@ def _line(label,value):return f'{label:<22}{value}'
 def text(rep):
     out=[f"POLY/EDGE developer report · {rep['generatedAtUtc']} UTC · revision {rep['revision']}",'='*78]
     pf=rep['portfolio'];out+=[_line('Portfolio equity',f"${pf['equity']}  total P&L {pf['totalPnl']}  realized {pf['realizedPnl']}  trades {pf['trades']}  locked {pf['riskLocked']}"),
-        _line('Lifetime',f"realized {pf['lifetimeRealizedPnl']}  trades {pf['lifetimeTrades']}  max drawdown ${pf['maxDrawdownUsd']}"),
+        _line('Lifetime',f"realized {pf['lifetimeRealizedPnl']}  trades {pf['lifetimeTrades']}  max drawdown ${pf['maxDrawdownUsd']}"+(f"  (since fresh start {time.strftime('%Y-%m-%d %H:%M',time.gmtime(pf['epochStart']))} UTC; earlier {pf.get('archivedTrades')} trades {pf.get('archivedRealizedPnl')} archived)" if pf.get('epochStart') else '')),
         _line('Storage',json.dumps(rep['storage'])),'']
     e=rep['edge'];out+=[f"EDGELAB · mode {e['mode']} · promoted {e['promoted']} · pending rounds {e['pendingRounds']} · errors {e['errors']}"]
     for k,s in e['strategies'].items():out.append(_line('  '+k,json.dumps(s)))

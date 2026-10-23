@@ -73,7 +73,10 @@
  function wallet(s){
   const p=s.portfolio||{},e=s.edge||{},tr=e.flows||[];const n=tr.reduce((a,f)=>a+f.trades,0),w=tr.reduce((a,f)=>a+f.wins,0),pnl=tr.reduce((a,f)=>a+f.pnl,0);
   const life=(p.lifetimeRealizedPnl||0)+((p.totalPnl||0)-(p.realizedPnl||0));
-  set('lifePnl',signed(life),'big '+cls(life));set('lifeSub',`${p.lifetimeTrades??'—'} closed trades · started $${p.startingBalance||200} paper`);
+  set('lifePnl',signed(life),'big '+cls(life));
+  const since=p.epochStart?new Date(p.epochStart*1000).toISOString().slice(5,16).replace('T',' ')+' UTC':null;
+  set('lifeLabel',since?'PAPER P&L SINCE FRESH START':'ALL-TIME PAPER P&L');
+  set('lifeSub',`${p.lifetimeTrades??'—'} closed trades · $${p.startingBalance||200} paper${since?' since '+since:''}`+(p.archivedTrades?` · earlier ${p.archivedTrades} trades ${signed(p.archivedRealizedPnl)} kept for analysis`:''));
   set('equity',money(p.equity));set('sessPnl',signed(p.totalPnl),cls(p.totalPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
   set('maxDd',money(p.maxDrawdownUsd));const open=LANES.filter(l=>s.assets?.[l]?.paper?.position).length;set('openPos',open+' / '+LANES.length);
   rules(s.rulesScorecard);

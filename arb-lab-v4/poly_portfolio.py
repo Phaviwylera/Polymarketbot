@@ -16,6 +16,13 @@ ALLOCATIONS={k:v[2] for k,v in LANES.items()}
 LANE_STOP_FLOOR=.30   # spread + both taker fees on 5 shares near 50c is ~$0.22; a smaller stop blocks entries
 TOTAL_BALANCE=sum(ALLOCATIONS.values())
 PORTFOLIO_LOSS_LIMIT=6.0
+# Overnight guards measured from the fresh start (realized P&L across every session since it):
+# - stop new entries for good if it falls to -$8 (owner decides what happens next);
+# - once it has reached +$4, pause entries for an hour whenever half the peak gain is given back.
+EPOCH_LOSS_LIMIT=8.0
+GIVEBACK_ARM_USD=4.0
+GIVEBACK_FRACTION=0.5
+GIVEBACK_PAUSE_SEC=3600.
 AUTO_CYCLE=os.environ.get('POLY_AUTO_CYCLE','1').strip()!='0'
 LANE_LOCK_COOLDOWN_SEC=1800.
 PORTFOLIO_LOCK_COOLDOWN_SEC=3600.
@@ -44,7 +51,7 @@ def merge_release_recovery(checkpoint,live):
 
 class PaperPortfolio:
     def __init__(self):
-        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.started=False;self.research=None;self.ledger_history={a:{} for a in ASSETS+RETIRED}
+        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.epoch=0.;self.epoch_peak=0.;self.guard_until=0.;self.guard_reason=None;self.started=False;self.research=None;self.ledger_history={a:{} for a in ASSETS+RETIRED}
         from poly_attribution import Attribution
         self.attribution=Attribution();self.storage=None;self.durable_recovery=None
         self.data_root=Path(os.environ.get('POLY_DATA_DIR','/tmp'));self.data_root.mkdir(parents=True,exist_ok=True)
@@ -58,7 +65,7 @@ class PaperPortfolio:
         self.boot_id=uuid.uuid4().hex;self.boot_at=time.time();self.yielded=False
         self.lock_seen={};self.cycle_task=None;self.cycles=[]
         for lane in self.engines.values():
-            lane.trade_observer=self._observe_trade;lane.edge=self.edge;lane.loss_budget=self.loss_budget
+            lane.trade_observer=self._observe_trade;lane.edge=self.edge;lane.loss_budget=self.loss_budget;lane.entry_pause=self.pause_reason
         self._restore_edge_file()
     def _observe_trade(self,row):
         self.attribution.add(row);self.edge.on_trade(row)
@@ -134,10 +141,29 @@ class PaperPortfolio:
                 self._archive(asset,p);e._new_session();self.lock_seen.pop(asset,None);actions.append(asset)
         if actions:self._save_history()
         return actions
+    def fresh_start_due(self):
+        """Owner-requested fresh start (POLY_FRESH_START_AT, unix seconds): the paper account restarts at
+        $200 and the headline P&L counts only trades after it. Earlier sessions stay in the ledger history
+        for analysis (trade CSV, backtests, readiness evidence). Applied once, only when flat."""
+        try:at=float(os.environ.get('POLY_FRESH_START_AT') or 0)
+        except ValueError:return 0.
+        return at if at>self.epoch+1 else 0.
+    def apply_fresh_start(self,now=None):
+        at=self.fresh_start_due()
+        if not at or any(self._exposed(e) for e in self.engines.values()):return False
+        self.locked=False;self.peak=TOTAL_BALANCE;self.max_drawdown=0.;self.lock_seen.clear()
+        for asset,e in self.engines.items():self._archive(asset,e.paper or {});e._new_session()
+        self.epoch=at;self.epoch_peak=0.;self.guard_until=0.;self.guard_reason=None;self._save_history()
+        print('POLY_FRESH_START',at,flush=True)
+        return True
+    def _in_epoch(self,session):
+        return float(session.get('startedAt') or 0)>=self.epoch
     async def cycle_worker(self):
         while True:
             await asyncio.sleep(30)
             try:
+                if self.fresh_start_due() and self.apply_fresh_start():
+                    self.cycles=(self.cycles+[{'at':time.time(),'lanes':['fresh-start']}])[-50:]
                 done=self.auto_cycle()
                 if done:
                     self.cycles=(self.cycles+[{'at':time.time(),'lanes':done}])[-50:]
@@ -152,6 +178,25 @@ class PaperPortfolio:
         self.peak=max(self.peak,equity);self.max_drawdown=max(self.max_drawdown,self.peak-equity)
         if min(realized,equity-TOTAL_BALANCE)<=-PORTFOLIO_LOSS_LIMIT:self.locked=True
         return not self.locked
+    def pause_reason(self):
+        """Overnight guard: blocks new entries without locking lanes; open positions keep their exits."""
+        realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
+        return None if self._epoch_guard(realized) else self.guard_reason
+    def epoch_pnl(self,realized=None):
+        if realized is None:realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
+        current={(e.paper or {}).get('sessionId') for e in self.engines.values()}
+        return realized+sum(float(s.get('realizedPnl') or 0) for h in self.ledger_history.values() for sid,s in h.items() if sid not in current and self._in_epoch(s))
+    def _epoch_guard(self,realized,now=None):
+        if not self.epoch:return True
+        now=time.time() if now is None else now;pnl=self.epoch_pnl(realized);self.epoch_peak=max(self.epoch_peak,pnl)
+        if pnl<=-EPOCH_LOSS_LIMIT:
+            self.guard_reason=f'overnight loss limit reached ({pnl:+.2f} since fresh start); entries stopped';return False
+        if self.epoch_peak>=GIVEBACK_ARM_USD and pnl<=self.epoch_peak*GIVEBACK_FRACTION and now>=self.guard_until:
+            self.guard_until=now+GIVEBACK_PAUSE_SEC;self.epoch_peak=pnl   # re-arm from the new level after the pause
+            self.guard_reason=f'gave back half of the peak gain; entries paused 60 min at {pnl:+.2f}'
+            print('POLY_GIVEBACK_PAUSE',round(pnl,4),flush=True)
+        if now<self.guard_until:return False
+        self.guard_reason=None;return True
     @property
     def feed(self):return {asset:dict(e.feed) for asset,e in self.engines.items()}
     async def start(self):
@@ -202,6 +247,10 @@ class PaperPortfolio:
         self.locked=bool((recovery.get('portfolio') or {}).get('riskLocked',False))
         self.max_drawdown=max(self.max_drawdown,float((recovery.get('portfolio') or {}).get('maxDrawdownUsd') or 0))
         self.peak=max(self.peak,float((recovery.get('portfolio') or {}).get('peakEquity') or (recovery.get('portfolio') or {}).get('equity') or TOTAL_BALANCE))
+        self.epoch=max(self.epoch,float((recovery.get('portfolio') or {}).get('epochStart') or 0))
+        pf0=recovery.get('portfolio') or {}
+        if self.epoch and float(pf0.get('epochStart') or 0)==self.epoch:
+            self.epoch_peak=max(self.epoch_peak,float(pf0.get('epochPeakPnl') or 0));self.guard_until=float((pf0.get('guard') or {}).get('pausedUntil') or 0)
         if recovery.get('strategyConfig'):self.update_config(recovery['strategyConfig'])
         for asset in RETIRED:   # keep the final session of a retired lane in the lifetime ledger
             self._archive(asset,((recovery.get('assets') or {}).get(asset) or {}).get('paper') or {})
@@ -303,8 +352,10 @@ class PaperPortfolio:
                 'pairTarget':self.engines[a].pair_target,'residual':self.engines[a]._inventory_has_residual()})
         equity=sum(l['equity'] for l in lanes)
         selected=dict(snaps[asset])
-        prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values())
-        prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values())
+        prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values() if self._in_epoch(p))
+        prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values() if self._in_epoch(p))
+        arch_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values() if not self._in_epoch(p))
+        arch_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values() if not self._in_epoch(p))
         selected['ledgerHistory']=copy.deepcopy(self.ledger_history)
         selected['strategyConfig']=self.get_config()
         selected['infrastructure']=self.storage.status() if self.storage else {'backend':'local_only','configured':False}
@@ -321,6 +372,8 @@ class PaperPortfolio:
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
             'priorSessionRealizedPnl':prior_pnl,'lifetimeRealizedPnl':prior_pnl+sum(l['realizedPnl'] for l in lanes),'lifetimeTrades':prior_trades+sum(l['trades'] for l in lanes),
+            'epochStart':self.epoch or None,'epochPnl':self.epoch_pnl() if self.epoch else None,'epochPeakPnl':self.epoch_peak if self.epoch else None,
+            'guard':{'reason':self.guard_reason,'pausedUntil':self.guard_until or None,'lossLimitUsd':EPOCH_LOSS_LIMIT,'givebackArmUsd':GIVEBACK_ARM_USD,'givebackFraction':GIVEBACK_FRACTION},'archivedRealizedPnl':arch_pnl,'archivedTrades':arch_trades,
             'sessionLossLimitUsd':PORTFOLIO_LOSS_LIMIT,'riskLocked':self.locked,
             'maxDrawdownUsd':self.max_drawdown,'peakEquity':self.peak,'allocations':dict(ALLOCATIONS),
             'assets':lanes,'retiredLanes':list(RETIRED),'scope':'crypto-updown BTC/ETH 5m and 15m','strategy':'promoted calibrated-mispricing and research-model strategies first, then fee-aware momentum and executable complete sets; one entry per asset per round'}
