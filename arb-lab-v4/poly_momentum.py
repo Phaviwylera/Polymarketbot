@@ -13,6 +13,8 @@ MIN_EDGE=.12
 # chronological halves (older n=18 +$0.50/trade, newer n=13 +$0.52) while 45-55c lost in both
 # (older n=23 -$0.08, newer n=29 -$0.09): fees and spread consume the target near 50c.
 MAX_ENTRY_PRICE=.45
+# When the current rule set (12c edge floor + 45c ceiling) went live: V17.1 deploy, 2026-10-23 15:38 UTC.
+RULES_LIVE_AT=1792769880.0
 
 def fee(price):return round(.07*price*(1-price),5)
 

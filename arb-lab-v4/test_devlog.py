@@ -20,3 +20,18 @@ class DevLogTests(unittest.TestCase):
             self.assertNotIn('postgres',body.lower().replace('postgresql',''))
             for e in pf.engines.values():e.close()
 if __name__=='__main__':unittest.main()
+
+class RulesScorecardTests(unittest.TestCase):
+    def test_splits_history_backtest_and_forward(self):
+        import poly_devlog,poly_momentum as pm
+        live=pm.RULES_LIVE_AT
+        rows=[{'pnl':.5,'entry':.40,'estEdge':.15,'entryAt':live-900,'exitAt':live-890},    # matches rules, before live
+              {'pnl':-.3,'entry':.50,'estEdge':.20,'entryAt':live-800,'exitAt':live-790},   # above the ceiling
+              {'pnl':-.4,'entry':.40,'estEdge':.05,'entryAt':live-700,'exitAt':live-690},   # below the edge floor
+              {'pnl':.7,'entry':.30,'estEdge':.25,'entryAt':live+60,'exitAt':live+70},
+              {'pnl':-.5,'entry':.42,'estEdge':.13,'entryAt':live+120,'exitAt':live+130}]
+        s=poly_devlog.rules_scorecard(None,rows)
+        self.assertEqual(s['allHistory']['trades'],5);self.assertEqual(s['matchingCurrentRules']['trades'],3)
+        self.assertEqual(s['sinceRulesLive']['trades'],2);self.assertEqual(s['sinceRulesLive']['winRatePct'],50.)
+        m=s['matchingCurrentRules'];self.assertAlmostEqual(m['netPnlUsd'],.7);self.assertAlmostEqual(m['profitFactor'],1.2/.5,places=3)
+        self.assertEqual(poly_devlog._metrics([])['trades'],0)

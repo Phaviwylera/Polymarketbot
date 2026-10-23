@@ -309,6 +309,12 @@ class PaperPortfolio:
         selected['strategyConfig']=self.get_config()
         selected['infrastructure']=self.storage.status() if self.storage else {'backend':'local_only','configured':False}
         selected['attribution']=self.attribution.summary()
+        now=time.time();cache=getattr(self,'_rules_cache',None)
+        if cache is None or now-cache[0]>5:
+            import poly_devlog
+            try:cache=self._rules_cache=(now,poly_devlog.rules_scorecard(self))
+            except Exception:cache=(now,None)
+        selected['rulesScorecard']=cache[1]
         selected['edge']={**self.edge.snapshot(TOTAL_BALANCE),'autoCycle':{'enabled':AUTO_CYCLE,'laneLockCooldownSec':LANE_LOCK_COOLDOWN_SEC,'portfolioLockCooldownSec':PORTFOLIO_LOCK_COOLDOWN_SEC,'recent':self.cycles[-10:]}}
         selected['research']=self.research.snapshot() if self.research else {'mode':'SHADOW_ONLY','executionEnabled':False,'training':{'state':'starting'}}
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,

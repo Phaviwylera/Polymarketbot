@@ -50,7 +50,7 @@ def report(engine,now=None):
         'researchModel':{'state':training.get('state'),'samples':training.get('samples') or research.get('labelledSamples'),'rounds':research.get('independentRounds'),
                          'selectedModel':training.get('selectedModel'),'evidenceGatePassed':training.get('evidenceGatePassed'),'reason':training.get('reason')},
         'closedTrades':{'total':(att.get('total') or {}),'recent':[{k:t.get(k) for k in ('asset','strategy','side','entryPrice','exitPrice','netPnlUsd','holdSec','exitReason')} for t in (att.get('recent') or [])[:10]]},
-        'lanes':lanes}
+        'lanes':lanes,'rulesScorecard':snap.get('rulesScorecard') or rules_scorecard(engine)}
 
 def _line(label,value):return f'{label:<22}{value}'
 
@@ -67,6 +67,11 @@ def text(rep):
           _line('  auto-cycle',json.dumps((e['autoCycle'] or {}).get('recent'))),'',
           _line('RESEARCH MODEL',json.dumps(rep['researchModel'])),'',
           _line('CLOSED TRADES',json.dumps({k:rep['closedTrades']['total'].get(k) for k in ('trades','netPnlUsd','winRatePct','expectancyUsd','profitFactor')}))]
+    rs=rep.get('rulesScorecard') or {}
+    if rs:
+        r=rs['rules'];out+=['',f"CURRENT RULES · entry < {r['maxEntryPrice']*100:.0f}c · estimated edge >= {r['minEstimatedEdge']*100:.0f}c · live since {r['liveSinceUtc']} UTC"]
+        for k,label in (('sinceRulesLive','  since live'),('matchingCurrentRules','  backtest'),('allHistory','  all history')):
+            v=rs[k];out.append(_line(label,f"trades {v['trades']}  win {v['winRatePct']}%  net ${v['netPnlUsd']}  avg {v['avgPnlUsd']}  avg win {v['avgWinUsd']}  avg loss {v['avgLossUsd']}  PF {v['profitFactor']}  mean-2SE {v['meanMinus2SE']}  maxDD ${v['maxDrawdownUsd']}"))
     for t in rep['closedTrades']['recent']:out.append('  '+json.dumps(t))
     for asset,l in rep['lanes'].items():
         out+=['',f"--- {asset} · {l['status']} · {l['mode']} · {l['market']} ({l['secondsLeft']}s left) · equity ${l['equity']} realized {l['realizedPnl']} trades {l['trades']} ({l['wins']}W/{l['losses']}L)",
@@ -91,6 +96,8 @@ def compact_lines(rep):
     head={k:rep[k] for k in ('generatedAtUtc','revision','storage','portfolio','researchModel')}
     e=rep['edge'];head['edge']={k:e.get(k) for k in ('mode','promoted','strategies','modelTrust','calibration','pendingRounds','errors')}
     head['wallets']={k:(e['wallets'] or {}).get(k) for k in ('walletsTracked','roundsStudied','skilledWallets','errors','lastError')}
+    rs=rep.get('rulesScorecard') or {}
+    head['rules']={k:{x:(rs.get(k) or {}).get(x) for x in ('trades','winRatePct','netPnlUsd','avgPnlUsd','profitFactor')} for k in ('sinceRulesLive','matchingCurrentRules','allHistory')}
     head['readiness']=[(c['check'][:24],c['value'],c['pass']) for c in (e['readiness'] or {}).get('checks',[])]
     out=['POLY_DEV_REPORT '+json.dumps(head,separators=(',',':'),default=str)]
     for asset,l in rep['lanes'].items():
@@ -135,3 +142,33 @@ def edge_bets_csv(edge):
         if isinstance(v,float):return f'{v:.5g}'
         return '' if v is None else str(v).replace(',',' ')
     return ','.join(EDGE_COLS)+'\n'+''.join(','.join(cell(r.get(c)) for c in EDGE_COLS)+'\n' for r in rows)
+
+import math as _math,statistics as _st
+def _metrics(pnls):
+    n=len(pnls)
+    if not n:return {'trades':0,'wins':0,'losses':0,'winRatePct':None,'netPnlUsd':0.,'avgPnlUsd':None,'avgWinUsd':None,'avgLossUsd':None,
+                     'profitFactor':None,'meanMinus2SE':None,'maxDrawdownUsd':0.,'bestUsd':None,'worstUsd':None}
+    w=[x for x in pnls if x>0];l=[x for x in pnls if x<=0];mean=_st.mean(pnls);se=_st.stdev(pnls)/_math.sqrt(n) if n>1 else None
+    eq=peak=dd=0.
+    for x in pnls:eq+=x;peak=max(peak,eq);dd=max(dd,peak-eq)
+    return {'trades':n,'wins':len(w),'losses':len(l),'winRatePct':round(100*len(w)/n,1),'netPnlUsd':round(sum(pnls),4),'avgPnlUsd':round(mean,4),
+            'avgWinUsd':round(_st.mean(w),4) if w else None,'avgLossUsd':round(_st.mean(l),4) if l else None,
+            'profitFactor':round(sum(w)/-sum(l),3) if l and sum(l)<0 else None,'meanMinus2SE':round(mean-2*se,4) if se is not None else None,
+            'maxDrawdownUsd':round(dd,4),'bestUsd':round(max(pnls),4),'worstUsd':round(min(pnls),4)}
+
+def rules_scorecard(engine,rows=None):
+    """Closed momentum trades judged against the rule set running now.
+    allHistory: every closed trade. matchingCurrentRules: older trades the current rules would also have taken
+    (entry below the ceiling, estimated edge at or above the floor) - a backtest on real paper fills.
+    sinceRulesLive: trades actually taken under the current rules."""
+    import poly_momentum as pm
+    rows=trade_rows(engine) if rows is None else rows
+    rows=[r for r in rows if r.get('pnl') is not None]
+    match=lambda r:r.get('entry') is not None and float(r['entry'])<pm.MAX_ENTRY_PRICE and r.get('estEdge') is not None and float(r['estEdge'])>=pm.MIN_EDGE-1e-9
+    live=[r for r in rows if float(r.get('entryAt') or r.get('exitAt') or 0)>=pm.RULES_LIVE_AT]
+    return {'rules':{'maxEntryPrice':pm.MAX_ENTRY_PRICE,'minEstimatedEdge':pm.MIN_EDGE,'liveSince':pm.RULES_LIVE_AT,
+                     'liveSinceUtc':time.strftime('%Y-%m-%d %H:%M',time.gmtime(pm.RULES_LIVE_AT))},
+            'allHistory':_metrics([float(r['pnl']) for r in rows]),
+            'matchingCurrentRules':_metrics([float(r['pnl']) for r in rows if match(r)]),
+            'sinceRulesLive':_metrics([float(r['pnl']) for r in live]),
+            'note':'matchingCurrentRules is a backtest on earlier real paper fills; sinceRulesLive is the forward test.'}

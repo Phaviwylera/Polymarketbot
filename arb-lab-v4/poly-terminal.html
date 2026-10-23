@@ -24,6 +24,8 @@ main{padding:10px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .ph .badge.live{border-color:#2f6b4c;color:var(--green)}.ph .badge.warn{border-color:#6b5a2f;color:var(--amber)}.ph .badge.bad{border-color:#6b2f37;color:var(--red)}
 .pb{padding:10px;flex:1;min-height:0;position:relative}
 .big{font:600 34px/1.05 var(--mono);letter-spacing:-.02em}.pos{color:var(--green)}.neg{color:var(--red)}.mut{color:var(--dim)}
+.rules{margin-top:10px;border-top:1px solid rgba(101,213,255,.14);padding-top:8px}.rules .rh{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:9px;letter-spacing:.08em;color:var(--dim)}.rules .rh span{white-space:nowrap}.rules .rh em{font-style:normal;color:var(--dim);letter-spacing:0}
+.rules table{width:100%;border-collapse:collapse;margin-top:5px;font-size:11px}.rules th{font-weight:500;color:var(--dim);font-size:8.5px;letter-spacing:.07em;text-align:right;padding:2px 3px}.rules th:first-child,.rules td:first-child{text-align:left}.rules td{text-align:right;padding:3px 3px;font-variant-numeric:tabular-nums}.rules tr.hl td{font-weight:650}.rules td:first-child{color:var(--dim);font-size:9.5px;letter-spacing:.04em}
 .kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.kv div span{display:block;color:var(--dim);font-size:9px;letter-spacing:.07em}.kv div b{font-size:12.5px;font-weight:600}
 .bars{margin-top:12px;display:grid;gap:7px}.bar span{display:flex;justify-content:space-between;color:var(--dim2);font-size:9.5px}.bar div{height:6px;background:#132024;border-radius:3px;overflow:hidden;display:flex}.bar i{display:block;height:100%}
 canvas{display:block;width:100%}
@@ -56,6 +58,7 @@ canvas{display:block;width:100%}
   <div class="mut" style="font-size:9px;letter-spacing:.08em">ALL-TIME PAPER P&amp;L</div><div class="big" id="lifePnl">—</div>
   <div class="mut" id="lifeSub" style="margin-top:3px">—</div>
   <div class="kv"><div><span>EQUITY</span><b id="equity">—</b></div><div><span>SESSION P&amp;L</span><b id="sessPnl">—</b></div><div><span>WIN RATE</span><b id="winRate">—</b></div><div><span>AVG TRADE</span><b id="avgTrade">—</b></div><div><span>MAX DD</span><b id="maxDd">—</b></div><div><span>OPEN</span><b id="openPos">—</b></div></div>
+  <div class="rules"><div class="rh"><span>CURRENT RULES</span><em id="rulesDesc">—</em></div><table id="rulesTbl"><thead><tr><th></th><th>TRADES</th><th>WIN</th><th>AVG</th><th>NET</th><th>PF</th></tr></thead><tbody></tbody></table></div>
   <div class="bars" id="exposure"></div></div></article>
  <article class="p"><div class="ph"><span>◷ <b id="priceTitle">BTC</b> price · 10s candles</span><div class="tabs" id="laneTabs"></div></div><div class="pb"><div class="price"><canvas id="candles" style="height:206px"></canvas><div class="ladder" id="ladder"></div></div></div></article>
  <div class="stack">

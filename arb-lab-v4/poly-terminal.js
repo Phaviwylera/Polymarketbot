@@ -76,10 +76,21 @@
   set('lifePnl',signed(life),'big '+cls(life));set('lifeSub',`${p.lifetimeTrades??'—'} closed trades · started $${p.startingBalance||200} paper`);
   set('equity',money(p.equity));set('sessPnl',signed(p.totalPnl),cls(p.totalPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
   set('maxDd',money(p.maxDrawdownUsd));const open=LANES.filter(l=>s.assets?.[l]?.paper?.position).length;set('openPos',open+' / '+LANES.length);
+  rules(s.rulesScorecard);
   const b=$('walletBadge');b.textContent=p.riskLocked?'PORTFOLIO LOCK':'PAPER ONLY';b.className='badge '+(p.riskLocked?'bad':'live');
   $('exposure').innerHTML=(p.assets||[]).map(a=>{const pos=s.assets?.[a.asset]?.paper?.position,cost=pos?Number(pos.entryTotalCost||0):0,eq=Number(a.equity||0),alloc=Number(a.allocation||1);
    const used=Math.min(100,100*cost/alloc),gain=Math.max(-100,Math.min(100,100*(eq-alloc)/alloc));
    return `<div class="bar"><span><b style="color:${COL[a.asset]}">${NAME[a.asset]}</b><span>${money(eq)} / ${money(alloc,0)} · ${a.status}</span></span><div><i style="width:${Math.max(1,used)}%;background:${COL[a.asset]}"></i><i style="width:${Math.abs(gain)}%;background:${gain>=0?C.green:C.red};opacity:.55"></i></div></div>`;}).join('');
+ }
+
+ function rules(r){
+  const tb=document.querySelector('#rulesTbl tbody');if(!tb)return;
+  if(!r||!r.rules){tb.innerHTML='<tr><td colspan="6">collecting…</td></tr>';return;}
+  set('rulesDesc',`buy < ${(r.rules.maxEntryPrice*100).toFixed(0)}¢ · edge ≥ ${(r.rules.minEstimatedEdge*100).toFixed(0)}¢ · since ${r.rules.liveSinceUtc.slice(5)} UTC`);
+  const row=(label,m,hl)=>{if(!m||!m.trades)return `<tr${hl?' class="hl"':''}><td>${label}</td><td>0</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+   const wr=m.winRatePct,wc=wr>=70?'pos':wr<50?'neg':'';
+   return `<tr${hl?' class="hl"':''}><td>${label}</td><td>${m.trades}</td><td class="${wc}">${wr.toFixed(0)}%</td><td class="${cls(m.avgPnlUsd)}">${signed(m.avgPnlUsd,2)}</td><td class="${cls(m.netPnlUsd)}">${signed(m.netPnlUsd,2)}</td><td>${m.profitFactor==null?'—':m.profitFactor.toFixed(2)}</td></tr>`;};
+  tb.innerHTML=row('LIVE',r.sinceRulesLive,true)+row('BACKTEST',r.matchingCurrentRules)+row('ALL TIME',r.allHistory);
  }
 
  // ---------- price candles + ladder ----------
