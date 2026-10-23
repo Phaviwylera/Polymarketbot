@@ -14,7 +14,7 @@ class GuardTests(unittest.TestCase):
         c={'model':{'impulse5Bps':0},'fast':{'binance':2.0}}
         self.assertIn('binance',adverse(c,'down',0));self.assertIsNone(adverse(c,'up',0))
         self.assertIsNone(adverse({'model':{'impulse5Bps':-.3},'fast':{}},'up',0))   # inside threshold
-    def test_policy_is_versioned(self):self.assertIn('v2-guard',POLICY)
+    def test_policy_is_versioned(self):self.assertIn('v3-guard',POLICY)
 
 class PairGuardTests(unittest.TestCase):
     def setUp(self):self.events=[];self.p=PairShadow('BTC',60,lambda k,r:self.events.append((k,r)))
@@ -121,3 +121,19 @@ class HardeningTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(sorted(r['id'] for r in pf.research.rows),['a','b'])
                 await pf.research.close()
             for e in pf.engines.values():e.close()
+
+class PairAttemptTests(unittest.TestCase):
+    def c(self,t):
+        c=context(t);c['market']['slug']='btc-pair';c['model']={**c['model'],'impulse5Bps':.3};c['fast']={}
+        for s,(bid,ask) in zip(('up','down'),((.4,.42),(.54,.55))):
+            c['bbo'][s]={'bid':bid,'ask':ask};c['depth'][s]={'bids':[{'price':bid,'size':10}],'asks':[{'price':ask,'size':100}]}
+        return c
+    def test_requotes_after_ttl_up_to_the_round_limit(self):
+        import poly_pair_shadow as ps
+        p=PairShadow('BTC',60,lambda k,r:None);t=NOW
+        for i in range(ps.MAX_ATTEMPTS_PER_ROUND):
+            p.step(self.c(t),t);self.assertIsNotNone(p.active,f'attempt {i}')
+            for k in range(1,int(ps.QUOTE_TTL_SEC)+2,2):p.step(self.c(t+k),t+k)   # no prints: TTL expiry
+            self.assertIsNone(p.active);t+=ps.QUOTE_TTL_SEC+3
+        p.step(self.c(t),t);self.assertIsNone(p.active);self.assertIn('attempts this round',p.reason)
+        self.assertEqual(p.counts['quotes'],ps.MAX_ATTEMPTS_PER_ROUND)

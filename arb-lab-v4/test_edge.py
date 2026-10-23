@@ -243,13 +243,15 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         for x in pnls:self.e.edge.trades.append({'pnl':x,'at':0,'strategy':'MOMENTUM_SCALP'})
     def test_minimum_edge_is_five_cents(self):
         import poly_momentum
-        self.assertEqual(poly_momentum.MIN_EDGE,.05)
+        self.assertEqual(poly_momentum.MIN_EDGE,.12)
         e=self.e;now=time.time()
         e._ingest_book('up',{'bids':[{'price':'.47','size':'60'}],'asks':[{'price':'.48','size':'60'}]})
         e.book_history.clear();e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.455,'down':.53,'upBid':.46})
         self.m['fairUp']=.55;self.m['fairDown']=.45   # edge = .55-.48-fees-.01 = 2.5c: passed the old 2c floor
-        c,reason=e._momentum_signal(self.m);self.assertIsNone(c);self.assertIn('5-cent',reason)
-        self.m['fairUp']=.60;self.m['fairDown']=.40
+        c,reason=e._momentum_signal(self.m);self.assertIsNone(c);self.assertIn('12-cent',reason)
+        self.m['fairUp']=.60;self.m['fairDown']=.40   # 7.6c: passed the 5c floor, fails the 12c floor
+        self.assertIsNone(e._momentum_signal(self.m)[0])
+        self.m['fairUp']=.70;self.m['fairDown']=.30
         self.assertIsNotNone(e._momentum_signal(self.m)[0])
     async def test_unearned_record_keeps_minimum_size(self):
         self.record([.5,-.6]*15)

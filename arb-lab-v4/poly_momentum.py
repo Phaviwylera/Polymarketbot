@@ -3,7 +3,10 @@ import math
 
 # 43 closed paper trades (Oct 18-23): estimated edge below 0.05 lost money in both
 # chronological halves; edge correlated with net P&L (r=0.36). Raised from 0.02.
-MIN_EDGE=.05
+# V16.9: raised to 12c. Chosen on the 43 older trades (below 12c: mean -$0.12/trade at 5 shares) and
+# validated on 38 newer trades it never saw (below 12c: -$0.07; 12c+: +$0.39, 81% wins, n=16).
+# Estimated edge vs outcome across 70 trades: r=0.37, t=3.2.
+MIN_EDGE=.12
 # Entries at 55c or more: 7 lifetime trades, all net losses (-$3.88). Payoff is asymmetric (at 63c the
 # upside is 37c, the downside 63c) and late flips gap through stops. Ceiling lowered from 0.65.
 MAX_ENTRY_PRICE=.55
@@ -41,7 +44,7 @@ def signal(context,history,allow_weak_impulse=False):
     prior_bid=prior[-1].get(side+'Bid',float(prior[-1][side])-tick/2)
     if prior_bid is None or bid-float(prior_bid)<tick-1e-9:return reject('best bid has not risen a full tick')
     edge=fair-ask-fee(ask)-fee(fair)-.01
-    if not math.isfinite(edge) or edge<MIN_EDGE:return reject('model advantage below fees plus 5-cent buffer')
+    if not math.isfinite(edge) or edge<MIN_EDGE:return reject('model advantage below fees plus 12-cent buffer')
     # A net stop includes crossing the spread and both taker fees. Reserve at
     # least one tick and 25% of the stop for adverse movement after entry.
     stop=float(c.get('stopLossUsd',.30))

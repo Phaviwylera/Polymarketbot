@@ -40,7 +40,9 @@ class PairTests(unittest.TestCase):
         expected=5*(1-.4-.55-fee(.55));self.assertAlmostEqual(self.p.realized,expected)
         self.assertAlmostEqual(self.p.cash,60+expected);self.assertAlmostEqual(self.p.fees,5*fee(.55))
         self.assertAlmostEqual(self.p.observed,self.p.realized);self.assertEqual(self.p.censored,0)
-        self.p.step(self.c(NOW+5),NOW+5);self.assertIsNone(self.p.active)
+        first=self.events and [r for k,r in self.events if k=='PAIR_OUTCOME'][-1]['id']
+        self.p.step(self.c(NOW+5),NOW+5)   # v3: a completed cycle may re-quote within the round, up to the attempt limit
+        self.assertIsNotNone(self.p.active);self.assertNotEqual(self.p.active['id'],first);self.assertEqual(self.p.counts['quotes'],2)
     def test_changed_hedge_price_after_fill_is_exposure_not_free_cancel(self):
         self.seed();c=self.c(NOW+.8,down=(.64,.65));c['tradePrints']=[self.print(NOW+.8)]
         self.p.step(c,NOW+.8);self.assertEqual(self.p.active['phase'],'hedge');self.assertEqual(self.p.cash,58)

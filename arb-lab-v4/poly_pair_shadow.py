@@ -6,7 +6,9 @@ hypothetical $1 credit, not an actual merge, redemption or funded paper trade.
 import copy,math,uuid
 from collections import Counter,deque
 from poly_features import number,walk
-POLICY='pair-maker-queue-taker-hedge-v2-guard'
+POLICY='pair-maker-queue-taker-hedge-v3-guard'
+QUOTE_TTL_SEC=20.        # v2 used 10s: 52 quotes in 2h, zero queue fills before expiry
+MAX_ATTEMPTS_PER_ROUND=4 # v2 allowed one; more attempts gather evidence faster under the same fill rules
 LATENCY=.35
 GUARD_IMPULSE_BPS=.5     # 5s oracle impulse against the quoted side
 GUARD_FAST_BPS=1.0       # 5s Binance/Coinbase move against the quoted side
@@ -30,7 +32,7 @@ class PairShadow:
         self.active=None;self.last_market=None;self.reason='warming';self.last_check=0.;self.recent=deque(maxlen=200)
         self.residual_cap=min(3.25,self.balance*.05);self.cycle_cap=min(8.,self.balance*.2)
         self.stop=min(.4,self.balance*.005);self.loss_limit=self.balance*.03
-        self.markouts=deque(maxlen=200)
+        self.markouts=deque(maxlen=200);self.attempts={}
     def event(self,kind,now,**data):
         self.emit('PAIR_'+kind,{'policy':POLICY,'asset':self.asset,'at':now,'executionEnabled':False,**data})
     def block(self,reason):self.reason=reason;self.reasons[reason]+=1
@@ -79,7 +81,7 @@ class PairShadow:
             if not book:self.reason=why;return
             q=a['quantity'];side=a['side'];opposite='down' if side=='up' else 'up'
             if a['phase']=='quote':
-                if now-a['createdAt']>=10:self.cancel(now,'quote TTL');return
+                if now-a['createdAt']>=QUOTE_TTL_SEC:self.cancel(now,'quote TTL');return
                 bad=adverse(c,side,now)
                 if bad:self.counts['guardCancels']+=1;self.cancel(now,'adverse-selection guard: '+bad);return
                 if now-a['createdAt']<LATENCY:return
@@ -138,7 +140,7 @@ class PairShadow:
         self.last_check=now
         if not book:self.block(why);return
         if self.realized<=-self.loss_limit:self.block('shadow loss budget reached');return
-        if m['slug']==self.last_market:self.block('one shadow attempt per round');return
+        if self.attempts.get(m['slug'],0)>=MAX_ATTEMPTS_PER_ROUND:self.block(f'{MAX_ATTEMPTS_PER_ROUND} shadow attempts this round');return
         if now-number(m['startTs'])<20 or number(m['endTs'])-now<=75:self.block('outside pair entry window');return
         q=max(5.,number(m.get('minOrderSize')));choices=[]
         for side in ('up','down'):
@@ -157,6 +159,7 @@ class PairShadow:
                 if queue>0:choices.append((cost,side,price,queue))
         if not choices:self.block('no executable pair margin within exposure budget');return
         cost,side,price,queue=min(choices);self.last_market=m['slug']
+        self.attempts={m['slug']:self.attempts.get(m['slug'],0)+1}
         self.active={'id':uuid.uuid4().hex,'marketSlug':m['slug'],'start':m['startTs'],'end':m['endTs'],
             'createdAt':now,'lastSeenAt':now,'phase':'quote','side':side,'quantity':q,'price':price,'queueAhead':queue,'consumed':0.,
             'lastSeq':max([number(p.get('seq')) for p in c.get('tradePrints',[])]+[0.])}
@@ -186,7 +189,7 @@ class PairShadow:
             'adverseSelection':{'guard':{'oracleImpulseBps':GUARD_IMPULSE_BPS,'exchangeReturnBps':GUARD_FAST_BPS},'markoutSec':MARKOUT_SEC,
                 'fillsMeasured':len(self.markouts),'meanMarkout':(sum(self.markouts)/len(self.markouts)) if self.markouts else None,
                 'note':'Mid-price change on the filled side 5s after a first-leg fill; negative means fills were picked off.'},
-            'limits':{'cycleCapUsd':self.cycle_cap,'residualCapUsd':self.residual_cap,'stopUsd':self.stop,'lossLimitUsd':self.loss_limit,'maxUnhedgedSec':15,'quoteTtlSec':10,'maxPairCost':.98},
+            'limits':{'cycleCapUsd':self.cycle_cap,'residualCapUsd':self.residual_cap,'stopUsd':self.stop,'lossLimitUsd':self.loss_limit,'maxUnhedgedSec':15,'quoteTtlSec':QUOTE_TTL_SEC,'attemptsPerRound':MAX_ATTEMPTS_PER_ROUND,'maxPairCost':.98},
             'assumptions':{'makerFee':0,'takerFee':'0.07*p*(1-p), assumed per share','rebates':0,'latencySec':LATENCY,'partialFills':False,'queueModel':'displayed queue plus full quantity consumed by fresh sell prints'},
             'note':'Isolated hypothetical cash; censored loss bounds are not observed losses. No promotion or real execution.'}
 
