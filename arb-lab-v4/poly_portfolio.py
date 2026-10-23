@@ -214,10 +214,7 @@ class PaperPortfolio:
             if use_saved and p.get('version')==14 and p.get('startingBalance')==e.balance:
                 e.state_file.write_text(json.dumps(saved))
         if self.handover_edge and not self.durable_recovery and not self.edge.restored:self.edge.restore(self.handover_edge)
-        encoded=os.environ.get('POLY_EDGE_BETS_B64','')
-        if encoded:
-            try:print('POLY_EDGE_BETS_RESTORED',self.edge.import_bets(json.loads(gzip.decompress(base64.b64decode(encoded,validate=True)))),flush=True)
-            except Exception as exc:print('POLY_EDGE_BETS_INVALID',type(exc).__name__,flush=True)
+        self.import_edge_archive()
         await asyncio.gather(*(e.start() for e in self.engines.values()))
         self.edge.start()
         if self.cycle_task is None:self.cycle_task=asyncio.create_task(self.cycle_worker(),name='auto-cycle')
@@ -231,6 +228,13 @@ class PaperPortfolio:
         for asset,e in self.engines.items():self.ledger_history[asset].pop((e.paper or {}).get('sessionId'),None)
         self._save_history()
         self._seed_trade_record()  # after archived ledgers are merged: they hold the full history
+
+    def import_edge_archive(self):
+        """Owner archive of settled shadow bets; idempotent, so it is re-applied after any later state restore."""
+        encoded=os.environ.get('POLY_EDGE_BETS_B64','')
+        if not encoded:return
+        try:print('POLY_EDGE_BETS_RESTORED',self.edge.import_bets(json.loads(gzip.decompress(base64.b64decode(encoded,validate=True)))),flush=True)
+        except Exception as exc:print('POLY_EDGE_BETS_INVALID',type(exc).__name__,flush=True)
 
     def _save_history(self):
         if not self.started:return

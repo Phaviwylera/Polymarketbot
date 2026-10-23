@@ -76,6 +76,7 @@ class DurableStore:
         edge=getattr(self.engine,'edge',None)
         raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='edge'")
         if edge is not None and raw:edge.restore(json.loads(raw) if isinstance(raw,str) else raw)
+        if hasattr(self.engine,'import_edge_archive'):self.engine.import_edge_archive()  # DB row may predate the archive
         bootstrap=[]
         encoded=os.getenv('POLY_RESEARCH_BOOTSTRAP_B64','') or ''.join(os.getenv('POLY_RESEARCH_BOOTSTRAP_'+str(i),'') for i in range(1,9))
         if not self.engine.durable_recovery and encoded:
