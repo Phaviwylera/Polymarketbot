@@ -392,7 +392,7 @@ class EdgeLab:
                         self.intel.live_flow(asset,self.intel.parse(rows),now,skilled)
             except asyncio.CancelledError:raise
             except Exception as exc:self.intel.errors+=1;self.intel.last_error=type(exc).__name__
-            await asyncio.sleep(10)
+            await asyncio.sleep(20)   # was 10 s: fewer large JSON parses on the small CPU
     def start(self):
         if self.tasks:return
         self.tasks=[asyncio.create_task(self.resolver(),name='edge-resolver'),

@@ -9,6 +9,15 @@ from poly_research_model import infer
 from poly_semantic import SemanticResearch
 from poly_pair_shadow import PairShadow,POLICY as PAIR_POLICY
 
+import os as _os
+# The research model is shadow-only (never trades); retraining every 3 min in a full-priority child
+# process was the main CPU load on the 0.1-CPU instance. Retrain every 30 min, at low priority.
+TRAIN_INTERVAL_SEC=float(_os.getenv('POLY_TRAIN_INTERVAL_SEC','1800'))
+RESEARCH_STEP_SEC=0.5
+def _low_priority():
+    try:_os.nice(15)
+    except Exception:pass
+
 class ShadowLane:
     def __init__(self,asset,emit,artifact=lambda:None):
         self.asset=asset;self.emit=emit;self.artifact=artifact;self.pending=[];self.last_seed={};self.counts=Counter();self.last={};self.reason='warming'
@@ -124,14 +133,17 @@ class ResearchHub:
             try:self.step(time.time())
             except asyncio.CancelledError:raise
             except Exception as exc:self.errors+=1;self.journal.append('RESEARCH_ERROR',error=type(exc).__name__)
-            await asyncio.sleep(.25)
+            await asyncio.sleep(RESEARCH_STEP_SEC)
     async def training_cycle(self):
         rows=list(self.rows)
         if len(rows)<120:
             self.training={'state':'collecting_data','samples':len(rows),'executionEnabled':False,'reason':'Need 120 labelled samples across at least five complete UTC rounds.'};return
         source=self.directory/'poly_v16_train_input.json';target=self.directory/'poly_v16_shadow_model.json'
         await asyncio.to_thread(source.write_text,json.dumps(rows,separators=(',',':')))
-        self.child=await asyncio.create_subprocess_exec(sys.executable,str(Path(__file__).with_name('poly_research_train.py')),str(source),'--output',str(target),stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+        # Low priority: on the 0.1-CPU host a full-priority trainer starved the trading loop, so order-book
+        # messages were handled late, judged stale, and the feeds reconnected in a loop.
+        self.child=await asyncio.create_subprocess_exec(sys.executable,str(Path(__file__).with_name('poly_research_train.py')),str(source),'--output',str(target),
+            stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL,preexec_fn=_low_priority)
         try:
             await asyncio.wait_for(self.child.wait(),60)
             if self.child.returncode:raise RuntimeError('trainer failed')
@@ -146,7 +158,7 @@ class ResearchHub:
             try:await self.training_cycle()
             except asyncio.CancelledError:raise
             except Exception as exc:self.training={'state':'training_error','reason':type(exc).__name__,'executionEnabled':False}
-            await asyncio.sleep(180)
+            await asyncio.sleep(TRAIN_INTERVAL_SEC)
     def start(self):
         if self.tasks:return
         self.external.start();self.tasks=[asyncio.create_task(self.worker(),name='v16-shadow'),asyncio.create_task(self.semantic.worker(),name='v16-semantic'),asyncio.create_task(self.trainer(),name='v16-trainer')]
