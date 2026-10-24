@@ -59,6 +59,32 @@ canvas{display:block;width:100%}
  #auditTbl td:first-child{font-size:9px;letter-spacing:.08em}.rules td,.rules th{padding:4px 3px}
  .ph{font-size:10px;padding:8px 10px}.foot{padding:8px max(10px,env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom));gap:8px 14px}
  .grid .tile{min-height:36px;padding:4px 2px}}
+/* ---- 3D cards: raised bevel, pointer tilt, lift on hover, press on tap, bump when values change ---- */
+main{perspective:1400px}
+.p{--tx:0deg;--ty:0deg;--lift:0px;--glow:rgba(101,213,255,0);
+ background:linear-gradient(160deg,#111e23 0%,#0b1418 42%,#091013 100%);border-color:#1f3036;border-top-color:#2b4148;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.55),0 5px 0 -1px #060b0d,0 6px 0 -1px #1b2c32,0 8px 6px -2px rgba(0,0,0,.7),0 22px 40px -18px rgba(0,0,0,.95),0 0 0 1px var(--glow);margin-bottom:6px;
+ transform:translateY(var(--lift)) rotateX(var(--tx)) rotateY(var(--ty));transform-style:preserve-3d;
+ transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s,border-color .35s}
+.p>.ph{background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,0));box-shadow:inset 0 -1px 0 rgba(0,0,0,.4)}
+@media(hover:hover) and (pointer:fine){.p:hover{--lift:-4px;--glow:rgba(101,213,255,.18);border-top-color:#3a5862;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -1px 0 rgba(0,0,0,.55),0 9px 0 -1px #060b0d,0 10px 0 -1px #24414a,0 14px 12px -4px rgba(0,0,0,.75),0 34px 60px -26px rgba(0,0,0,.95),0 0 0 1px var(--glow),0 0 30px -6px rgba(101,213,255,.22)}
+ .p.tilting{transition:transform .08s linear,box-shadow .35s,border-color .35s}}
+.p:active{--lift:3px}.p:active:not(:hover){box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 0 -1px #060b0d,0 3px 0 -1px #1b2c32,0 4px 6px -2px rgba(0,0,0,.7)}
+.p.bump{animation:bump .6s cubic-bezier(.2,.9,.25,1.25)}
+@keyframes bump{0%{transform:translateY(var(--lift)) rotateX(var(--tx)) rotateY(var(--ty)) scale(1)}
+ 30%{transform:translateY(calc(var(--lift) - 5px)) rotateX(var(--tx)) rotateY(var(--ty)) scale(1.012);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(103,243,162,.45),0 0 30px -4px rgba(103,243,162,.35),0 22px 40px -18px rgba(0,0,0,.9)}
+ 100%{transform:translateY(var(--lift)) rotateX(var(--tx)) rotateY(var(--ty)) scale(1)}}
+.p.bump.down{animation-name:bumpd}
+@keyframes bumpd{0%{transform:translateY(var(--lift)) scale(1)}30%{transform:translateY(calc(var(--lift) - 5px)) scale(1.012);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 0 0 1px rgba(255,119,134,.45),0 0 30px -4px rgba(255,119,134,.3),0 22px 40px -18px rgba(0,0,0,.9)}100%{transform:translateY(var(--lift)) scale(1)}}
+.chip,.kv>div,.inp,.tile,.tabs button,.ph .badge{box-shadow:inset 0 1px 0 rgba(255,255,255,.05),inset 0 -1px 0 rgba(0,0,0,.45),0 3px 8px -4px rgba(0,0,0,.8)}
+.chip{background:linear-gradient(165deg,#12212a,#0a1317);transition:transform .2s}.chip:hover{transform:translateY(-2px)}
+.kv>div{background:linear-gradient(165deg,#13232a,#0a1215);border:1px solid #1c3038;border-top-color:#28434c;border-radius:7px;padding:6px 8px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 3px 0 -1px #050a0c,0 4px 0 -1px #18292f,0 6px 8px -4px rgba(0,0,0,.8)!important}
+.chip{box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 3px 0 -1px #050a0c,0 4px 0 -1px #18292f,0 6px 8px -4px rgba(0,0,0,.8)!important}
+.tile.up,.tile.down,.tile.live{box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 4px 12px -6px currentColor}
+.tabs button.on{box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 3px 10px -3px rgba(101,213,255,.6)}
+.big{text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 18px currentColor}
+@media(prefers-reduced-motion:reduce){.p,.p:hover,.p.bump{transform:none!important;animation:none!important}}
 @media(prefers-reduced-motion:reduce){.tape{animation:none;padding-left:0}.tile.live{animation:none}}
 </style></head><body>
 <header class="top"><div class="brand"><div class="logo">PE</div><div><b>POLY/EDGE // PAPER BOT</b><small id="sub">BTC · ETH · 5M + 15M UP/DOWN · PAPER ONLY</small></div></div>
@@ -92,5 +118,5 @@ canvas{display:block;width:100%}
 </section>
 </main>
 <footer class="foot" id="foot">Loading…</footer>
-<script src="/poly-terminal.js?v=18.0" defer></script>
+<script src="/poly-terminal.js?v=18.1" defer></script>
 </body></html>

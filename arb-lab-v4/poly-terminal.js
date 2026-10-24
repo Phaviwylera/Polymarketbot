@@ -13,7 +13,13 @@
  const cents=v=>ok(v)?Math.round(v*100)+'¢':'—';
  const pct=v=>ok(v)?(v*100).toFixed(1)+'%':'—';
  const cls=v=>!ok(v)||v===0?'':v>0?'pos':'neg';
- const set=(id,t,c)=>{const e=$(id);if(!e)return;e.textContent=t;if(c!==undefined)e.className=c;};
+ // Values whose change makes their card "bump" (green for gains, red for losses).
+ const BUMP={lifePnl:1,equity:1,sessPnl:1,openPos:1,lifeBadge:1,resBadge:1,flowBadge:1,shellBadge:1,matrixBadge:1};
+ const set=(id,t,c)=>{const e=$(id);if(!e)return;const prev=e.textContent;e.textContent=t;if(c!==undefined)e.className=c;
+  if(BUMP[id]&&prev&&prev!=='—'&&prev!==t)bump(e.closest('.p'),/^[−-]/.test(String(t))&&id!=='openPos');};
+ const bumpAt=new WeakMap();
+ function bump(el,down){if(!el||matchMedia('(prefers-reduced-motion:reduce)').matches)return;const now=Date.now();if(now-(bumpAt.get(el)||0)<1500)return;bumpAt.set(el,now);
+  el.classList.remove('bump','down');void el.offsetWidth;el.classList.add('bump');if(down)el.classList.add('down');setTimeout(()=>el.classList.remove('bump','down'),650);}
  let S=null,lane='BTC',busy=false;
  const buf={};LANES.forEach(l=>buf[l]={lead:[],impulse:[],spread:[],imbalance:[],vol:[],edge:[],smart:[],decision:[]});
  const MAXB=160;
@@ -283,6 +289,14 @@
    if(!now)requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));}));
   (small.addEventListener?small.addEventListener('change',apply):small.addListener(apply));apply();
  }
- build();foldable();setInterval(clock,1000);clock();poll();requestAnimationFrame(shellFrame);
+ // ---------- 3D tilt toward the pointer (mouse/trackpad only; phones get the tap press) ----------
+ function tilt(){
+  if(!matchMedia('(hover:hover) and (pointer:fine)').matches||matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  document.querySelectorAll('main .p').forEach(el=>{let raf=0;
+   el.addEventListener('pointermove',ev=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;const r=el.getBoundingClientRect(),x=(ev.clientX-r.left)/r.width-.5,y=(ev.clientY-r.top)/r.height-.5;
+    const k=Math.min(1,520/Math.max(r.width,r.height));el.classList.add('tilting');el.style.setProperty('--ty',(x*5*k).toFixed(2)+'deg');el.style.setProperty('--tx',(-y*5*k).toFixed(2)+'deg');});});
+   el.addEventListener('pointerleave',()=>{el.classList.remove('tilting');el.style.setProperty('--tx','0deg');el.style.setProperty('--ty','0deg');});});
+ }
+ build();foldable();tilt();setInterval(clock,1000);clock();poll();requestAnimationFrame(shellFrame);
  let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,120);});
 })();
