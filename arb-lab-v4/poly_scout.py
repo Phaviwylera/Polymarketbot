@@ -74,7 +74,8 @@ class AssetScout:
         self.tracks={f'{c}-{tag}':MarketTrack(c,iv,tag) for c in COINS for iv,tag in INTERVALS}
         self.task=None;self.client=None;self.errors=0;self.last_error=None;self.started_at=None;self.last_report=0.
     def active_keys(self):
-        return {f'{e.asset.lower()}-{e.tag}' for e in self.engines.values()}
+        # A paused lane (no feeds) is measured like any other market, by polling.
+        return {f'{e.asset.lower()}-{e.tag}' for e in self.engines.values() if not (getattr(e,'paused',False) and not getattr(e,'tasks',None))}
     async def _get(self,url,params):
         import httpx
         if self.client is None:self.client=httpx.AsyncClient(timeout=8,headers={'User-Agent':'POLY-EDGE-SCOUT/1'})

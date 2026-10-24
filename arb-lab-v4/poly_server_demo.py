@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="17.6-no-chase"
+ENGINE_REVISION="17.7-lean"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 import os as _os
 # V17.1: the profit target rests as a paper maker sell (zero fee) instead of a taker exit.
@@ -176,18 +176,35 @@ class PolyServerDemo:
     def __del__(self):
         self.close()
 
+    def _http(self):
+        """One keep-alive client per lane and event loop. A new client per request paid a full TLS
+        handshake each time; on the 0.1-CPU host that starved the order-book websocket."""
+        loop=asyncio.get_running_loop();c=getattr(self,'_http_client',None)
+        if c is None or c[0] is not loop or c[1].is_closed:
+            c=self._http_client=(loop,httpx.AsyncClient(timeout=12,follow_redirects=False,limits=httpx.Limits(max_keepalive_connections=4,max_connections=8)))
+        return c[1]
+
     async def _get(self,url,params=None,headers=None):
-        async with httpx.AsyncClient(timeout=12,follow_redirects=False) as c:
-            r=await c.get(url,params=params,headers=headers)
+        r=await self._http().get(url,params=params,headers=headers)
         self._diagnostic('REST_RESPONSE',url=url,params=params,status=r.status_code,body=r.text)
         r.raise_for_status()
         return r.json()
 
     async def start(self):
         if self.started: return
-        self.started=True
+        self.started=True;restored=False
+        if getattr(self,'paused',False):
+            # Owner switch (POLY_PAUSED_LANES): keep the lane's ledger but open no feeds and place no
+            # orders. A lane holding a position or inventory still starts so its exits run.
+            if not self._restore_saved():self._new_session()
+            restored=True
+            p=self.paper or {}
+            if not (p.get('position') or p.get('maker') or self._inventory_has_residual()):
+                self.feed={k:'paused' for k in self.feed};self.tasks=[]
+                self.latest_reason=self.momentum_decision='lane paused (POLY_PAUSED_LANES); no feeds, no entries'
+                print('POLY_LANE_PAUSED',self.lane,flush=True);return
         await self._seed_sigma()
-        if not self._restore_saved():
+        if not restored and not self._restore_saved():
             self._new_session()
         self._diagnostic('ENGINE_START',profile={'allocation':self.balance,'pairTarget':self.pair_target,'residualCap':self.residual_cap,'sessionLossLimit':self.session_loss_limit})
         self.tasks=[

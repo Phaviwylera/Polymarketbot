@@ -62,8 +62,9 @@
   LANES.forEach(l=>{const a=s.assets?.[l];if(!a)return;const b=a.bbo||{},left=a.market?.endTs?Math.max(0,a.market.endTs-Date.now()/1000):null;
    chips.push(`<div class="chip"><span style="color:${COL[l]}">${NAME[l]} · ${ok(left)?Math.floor(left/60)+':'+String(Math.floor(left%60)).padStart(2,'0'):'—'}</span><b class="pos">${cents(b.up?.ask)}</b> <b class="neg">${cents(b.down?.ask)}</b></div>`);});
   $('chips').innerHTML=chips.join('');
-  const live=LANES.filter(l=>['market','clob','rtds'].every(k=>s.assets?.[l]?.feed?.[k]==='live')).length;
-  const tag=$('feedTag');tag.textContent=live===LANES.length?'LIVE FEED':`FEED ${live}/${LANES.length}`;tag.className='tag'+(live===LANES.length?' ok':'');
+  const paused=(s.portfolio?.pausedLanes)||[],run=LANES.filter(l=>!paused.includes(l));
+  const live=run.filter(l=>['market','clob','rtds'].every(k=>s.assets?.[l]?.feed?.[k]==='live')).length;
+  const tag=$('feedTag');tag.textContent=(live===run.length?'LIVE FEED':`FEED ${live}/${run.length}`)+(paused.length?` · ${paused.length} PAUSED`:'');tag.className='tag'+(live===run.length?' ok':'');
   const ev=LANES.flatMap(l=>(s.assets?.[l]?.paper?.events||[]).slice(0,12).map(e=>({...e,lane:l}))).filter(e=>e.action!=='CORE').sort((a,b)=>b.t-a.t).slice(0,24);
   const parts=ev.map(e=>{const t=new Date(e.t*1000).toISOString().slice(11,19),pn=ok(e.pnl)?` <span class="${e.pnl>=0?'u':'d'}">${signed(e.pnl)}</span>`:'';
    return `<b>${t}</b> <span style="color:${COL[e.lane]}">${NAME[e.lane]}</span> <em>${e.action}</em> ${e.side||''} ${ok(e.price)?cents(e.price):''}${pn} · ${String(e.detail||'').slice(0,70)}`;});
@@ -77,7 +78,7 @@
   const since=p.epochStart?new Date(p.epochStart*1000).toISOString().slice(5,16).replace('T',' ')+' UTC':null;
   set('lifeLabel',since?'PAPER P&L SINCE FRESH START':'ALL-TIME PAPER P&L');
   set('lifeSub',`${p.lifetimeTrades??'—'} closed trades · $${p.startingBalance||200} paper${since?' since '+since:''}`+(p.archivedTrades?` · earlier ${p.archivedTrades} trades ${signed(p.archivedRealizedPnl)} kept for analysis`:''));
-  set('equity',money(p.equity));set('sessPnl',signed(p.totalPnl),cls(p.totalPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
+  const acctEq=p.accountEquity??p.equity,acctPnl=p.accountPnl??p.totalPnl;set('equity',money(acctEq));set('sessPnl',signed(acctPnl),cls(acctPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
   set('maxDd',money(p.maxDrawdownUsd));const open=LANES.filter(l=>s.assets?.[l]?.paper?.position).length;set('openPos',open+' / '+LANES.length);
   rules(s.rulesScorecard);
   const b=$('walletBadge');b.textContent=p.riskLocked?'PORTFOLIO LOCK':'PAPER ONLY';b.className='badge '+(p.riskLocked?'bad':'live');
@@ -248,7 +249,7 @@
 
  function render(){if(!S)return;header(S);wallet(S);candles(S);lifecycle(S);resgrid(S);shellPanel(S);matrix(S);sankey(S);footer(S);}
  async function poll(){if(busy)return;busy=true;try{const r=await fetch('/api/poly/demo/server?all_assets=true',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);S=await r.json();ingest(S);render();}
-  catch(e){const t=$('feedTag');t.textContent='RECONNECTING';t.className='tag';}finally{busy=false;setTimeout(poll,document.hidden?4000:1300);}}
+  catch(e){const t=$('feedTag');t.textContent='RECONNECTING';t.className='tag';}finally{busy=false;setTimeout(poll,document.hidden?15000:2500);}}
  function clock(){const d=new Date();set('clock',d.toISOString().slice(11,19));set('clock2','UTC · '+d.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour12:false})+' IST');}
  build();setInterval(clock,1000);clock();poll();requestAnimationFrame(shellFrame);
  let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,120);});

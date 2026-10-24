@@ -178,12 +178,20 @@ class ResearchHub:
             'observedProxyPnlUsd':sum(p.observed for p in self.pairs.values()),'censoredLossBoundUsd':sum(p.censored for p in self.pairs.values()),
             'unhedgedCostUsd':sum(p.active.get('entryCost',0.) for p in self.pairs.values() if p.active),
             'comparison':'Non-overlapping virtual inventory strategy; no contribution to funded paper equity.'}
+    def _row_stats(self):
+        # Two full passes over up to 12,000 rows ran on every dashboard poll and checkpoint; recount
+        # only when the label set changed.
+        key=(len(self.rows),self.rows[-1].get('id') if self.rows else None,self.rows[0].get('id') if self.rows else None)
+        c=getattr(self,'_row_stats_cache',None)
+        if c is None or c[0]!=key:
+            c=self._row_stats_cache=(key,Counter(r.get('labelStatus','unknown') for r in self.rows),len({r['roundStart'] for r in self.rows}))
+        return c[1],c[2]
     def quality(self):
-        counts=Counter(r.get('labelStatus','unknown') for r in self.rows)
+        counts=self._row_stats()[0]
         return {'retainedLabelStatusCounts':dict(counts),'censoredFraction':counts['censored_loss']/max(1,len(self.rows)),
             'note':'Censored labels use full entry-cost loss bounds; they are not observed exit losses. They remain in conservative training targets.'}
     def snapshot(self):
         return {'version':'16.1','schema':SCHEMA,'policy':POLICY,'mode':'SHADOW_ONLY','executionEnabled':False,'lastStepAt':self.last_step,
             'sampleAgeSec':time.time()-self.last_step if self.last_step else None,'errors':self.errors,'labelledSamples':len(self.rows),
-            'independentRounds':len({r['roundStart'] for r in self.rows}),'training':self.training,'externalFeeds':self.external.snapshot(),
+            'independentRounds':self._row_stats()[1],'training':self.training,'externalFeeds':self.external.snapshot(),
             'semantic':self.semantic.snapshot(),'labelQuality':self.quality(),'pairShadow':self.pair_snapshot(),'assets':{a:lane.snapshot() for a,lane in self.lanes.items()},'journal':self.journal.status()}

@@ -24,6 +24,9 @@ GIVEBACK_ARM_USD=4.0
 GIVEBACK_FRACTION=0.5
 GIVEBACK_PAUSE_SEC=3600.
 AUTO_CYCLE=os.environ.get('POLY_AUTO_CYCLE','1').strip()!='0'
+# Owner switch: lanes listed here keep their ledger but run no feeds and take no entries (they still
+# start if they hold a position). Used to keep the 0.1-CPU free host from starving the busier lanes.
+PAUSED_LANES=frozenset(x.strip().upper() for x in os.environ.get('POLY_PAUSED_LANES','').split(',') if x.strip())
 LANE_LOCK_COOLDOWN_SEC=1800.
 PORTFOLIO_LOCK_COOLDOWN_SEC=3600.
 
@@ -69,6 +72,7 @@ class PaperPortfolio:
         self.lock_seen={};self.cycle_task=None;self.cycles=[]
         for lane in self.engines.values():
             lane.trade_observer=self._observe_trade;lane.edge=self.edge;lane.loss_budget=self.loss_budget;lane.entry_pause=self.pause_reason
+        for key,lane in self.engines.items():lane.paused=key in PAUSED_LANES
         self._restore_edge_file()
         from poly_scout import AssetScout
         self.scout=AssetScout(self.engines,ledger=self._lane_results)   # read-only market-finding agent
@@ -382,8 +386,9 @@ class PaperPortfolio:
                 'pairTarget':self.engines[a].pair_target,'residual':self.engines[a]._inventory_has_residual()})
         equity=sum(l['equity'] for l in lanes)
         selected=dict(snaps[asset])
-        prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values() if self._in_epoch(p))
-        prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values() if self._in_epoch(p))
+        live={(e.paper or {}).get('sessionId') for e in self.engines.values()}   # never count a running session twice
+        prior_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for sid,p in h.items() if sid not in live and self._in_epoch(p))
+        prior_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for sid,p in h.items() if sid not in live and self._in_epoch(p))
         arch_pnl=sum(float(p.get('realizedPnl') or 0) for h in self.ledger_history.values() for p in h.values() if not self._in_epoch(p))
         arch_trades=sum(int(p.get('trades') or 0) for h in self.ledger_history.values() for p in h.values() if not self._in_epoch(p))
         selected['ledgerHistory']=copy.deepcopy(self.ledger_history)
@@ -402,6 +407,10 @@ class PaperPortfolio:
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
             'realizedPnl':sum(l['realizedPnl'] for l in lanes),'trades':sum(l['trades'] for l in lanes),
+            # Headline account since the fresh start: earlier sessions in this period plus the live ones.
+            # 'equity'/'totalPnl' above stay per running session (risk limits use them).
+            'accountEquity':TOTAL_BALANCE+prior_pnl+(equity-TOTAL_BALANCE),'accountPnl':prior_pnl+(equity-TOTAL_BALANCE),
+            'pausedLanes':sorted(k for k,e in self.engines.items() if getattr(e,'paused',False) and not e.tasks),
             'priorSessionRealizedPnl':prior_pnl,'lifetimeRealizedPnl':prior_pnl+sum(l['realizedPnl'] for l in lanes),'lifetimeTrades':prior_trades+sum(l['trades'] for l in lanes),
             'epochStart':self.epoch or None,'epochPnl':self.epoch_pnl() if self.epoch else None,'epochPeakPnl':self.epoch_peak if self.epoch else None,
             'guard':{'reason':self.guard_reason,'pausedUntil':self.guard_until or None,'lossLimitUsd':EPOCH_LOSS_LIMIT,'givebackArmUsd':GIVEBACK_ARM_USD,'givebackFraction':GIVEBACK_FRACTION},'archivedRealizedPnl':arch_pnl,'archivedTrades':arch_trades,

@@ -1,0 +1,25 @@
+# Keeps the free Render web service awake. Render spins a free service down after ~15 min without
+# inbound requests, and the in-process self-ping did not prevent that (it stopped at 04:27 UTC on
+# 2026-10-24). GitHub's scheduler can run late, so each run pings for ~9 minutes and runs overlap.
+# Public repository: Actions minutes are free. Reads /health only; no secrets involved.
+name: keepalive
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Ping /health every 3 minutes
+        run: |
+          for i in 1 2 3 4; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 https://arb-lab-v4-unified.onrender.com/health || echo 000)
+            echo "$(date -u +%H:%M:%S) health=$code"
+            [ "$i" -lt 4 ] && sleep 180
+          done
+          exit 0

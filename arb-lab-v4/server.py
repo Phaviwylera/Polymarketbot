@@ -431,9 +431,15 @@ async def poly_demo_event(body:PolyDemoEvent):
     _save_demo_sessions()
     return {'status':'ok','events':len(session['events'])}
 
+_snapshot_cache={}
 @app.get('/api/poly/demo/server')
 async def poly_demo_server(asset:Literal['BTC','ETH','BTC15','ETH15']='BTC',all_assets:bool=False):
-    return poly_storage.snapshot(asset,include_assets=all_assets)
+    # Several open dashboard tabs each polling every couple of seconds rebuilt the full snapshot every
+    # time; on the 0.1-CPU host that competed with the order-book feeds. Serve one build per second.
+    key=(asset,all_assets);now=time.monotonic();hit=_snapshot_cache.get(key)
+    if hit and now-hit[0]<1.0:return hit[1]
+    snap=poly_storage.snapshot(asset,include_assets=all_assets);_snapshot_cache[key]=(now,snap)
+    return snap
 
 @app.post('/api/poly/demo/server/reset')
 async def poly_demo_server_reset():
