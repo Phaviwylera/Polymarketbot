@@ -38,7 +38,7 @@ INVENTORY_MAX_FIRST_PRICE=0.20
 INVENTORY_MAX_RESIDUAL_USD=0.50
 INVENTORY_MAX_HOLD_SEC=15.0
 INVENTORY_STOP_LOSS_USD=0.15
-ENGINE_REVISION="17.3-fresh-start"
+ENGINE_REVISION="17.5-memory"
 SCALP_MODES=("MOMENTUM_SCALP","MODEL_SCALP")
 import os as _os
 # V17.1: the profit target rests as a paper maker sell (zero fee) instead of a taker exit.

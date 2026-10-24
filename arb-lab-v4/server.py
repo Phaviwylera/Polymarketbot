@@ -141,10 +141,13 @@ async def _keepalive(url):
     # Free Render instances sleep after ~15 idle minutes, which stops the paper
     # engine. A periodic external request keeps it awake while enabled.
     async with httpx.AsyncClient(timeout=20) as client:
+        await asyncio.sleep(30)
         while True:
-            await asyncio.sleep(600)
+            # Every 4 min: the host sleeps after ~15 idle minutes, and a 10-min ping left too
+            # little margin after an unplanned restart (the service slept at 00:02 UTC).
             try:await client.get(url+'/health')
             except Exception as exc:print('POLY_KEEPALIVE_FAILED',type(exc).__name__,flush=True)
+            await asyncio.sleep(240)
 
 async def _successor_watch(url):
     # During a zero-downtime deploy the old instance keeps running for a while. Once the public URL

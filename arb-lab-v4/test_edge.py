@@ -257,6 +257,7 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         self.m['impulse5Bps']=.5;c,reason=self.e._momentum_signal(self.m)
         self.assertIsNone(c);self.assertIn('1.0 bps',reason)
         self.m['impulse5Bps']=1.2;self.assertIsNotNone(self.e._momentum_signal(self.m)[0])
+        self.m['impulse5Bps']=.6;self.assertIsNone(self.e._momentum_signal(self.m,True)[0])   # execution re-check too
     async def test_unearned_record_keeps_minimum_size(self):
         self.record([.5,-.6]*15)
         c,_=self.e._momentum_signal(self.m);c=self.e._momentum_size(c)

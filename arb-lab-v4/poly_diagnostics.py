@@ -2,10 +2,17 @@
 from __future__ import annotations
 import json,sqlite3,time,uuid
 
+import os
+# The journal lives on the instance's ephemeral disk, which on the free host is RAM-backed: journaling
+# every raw order-book message (100k rows/lane) plus 20k context-heavy rows grew memory ~100 MB per
+# 10 min until the 512 MB limit OOM-killed the server about once an hour. Raw messages are now off by
+# default (POLY_RAW_JOURNAL=1 turns them back on) and the other budgets are small.
+RAW_JOURNAL=os.getenv('POLY_RAW_JOURNAL','0')=='1'
+RAW_KINDS={'CLOB_MESSAGE','RTDS_MESSAGE','REST_RESPONSE'}
 class DiagnosticLog:
-    MAX_ROWS=100000
-    MAX_STATE_ROWS=20000
-    MAX_CRITICAL_ROWS=20000
+    MAX_ROWS=5000
+    MAX_STATE_ROWS=3000
+    MAX_CRITICAL_ROWS=4000
     MAX_EVENT_BYTES=262144
     def __init__(self,path,asset):
         self.path=path;self.asset=asset;self.boot=uuid.uuid4().hex;self.db=None;self.on_event=None
@@ -26,6 +33,7 @@ class DiagnosticLog:
         print('POLY_DIAGNOSTIC_ERROR',self.asset,self.last_error,flush=True)
     def append(self,kind,**data):
         if self.db is None:return
+        if kind in RAW_KINDS and not RAW_JOURNAL:return
         try:
             now=time.time();event={'t':now,'kind':kind,'asset':self.asset,'bootId':self.boot,**data}
             payload=json.dumps(event,separators=(',',':'),allow_nan=False)
@@ -35,7 +43,7 @@ class DiagnosticLog:
             priority=0 if kind in {'CLOB_MESSAGE','RTDS_MESSAGE','REST_RESPONSE'} else 1 if kind=='STATE' else 2
             cur=self.db.execute('INSERT INTO events(t,payload,priority) VALUES (?,?,?)',(now,payload,priority));self.written+=1;self.pending+=1
             if self.on_event:self.on_event({**event,'journalSeq':cur.lastrowid})
-            if self.written%1000==0:
+            if self.written%250==0:
                 for category,limit in ((0,self.MAX_ROWS),(1,self.MAX_STATE_ROWS),(2,self.MAX_CRITICAL_ROWS)):
                     cur=self.db.execute('DELETE FROM events WHERE priority=? AND seq <= (SELECT seq FROM events WHERE priority=? ORDER BY seq DESC LIMIT 1 OFFSET ?)',(category,category,limit))
                     self.pruned+=cur.rowcount;self.pruned_by_priority[category]+=cur.rowcount

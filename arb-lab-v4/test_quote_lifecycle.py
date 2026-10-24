@@ -8,6 +8,7 @@ from poly_audit_export import diagnostic_response
 
 class QuoteLifecycleTests(unittest.TestCase):
     def setUp(self):
+        import poly_diagnostics;p=patch.object(poly_diagnostics,'RAW_JOURNAL',True);p.start();self.addCleanup(p.stop)
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.e=PolyServerDemo('ETH',80,state_file=Path(self.tmp.name)/'state.json',risk_profile={'walletQuotes':True,'residualCap':2,'firstPriceCap':.6,'sessionLossLimit':4})
         e=self.e;e._save=lambda:None;e._new_session();now=time.time()

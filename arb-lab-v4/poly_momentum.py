@@ -34,7 +34,9 @@ def signal(context,history,allow_weak_impulse=False):
     side='up' if m.get('leadBps',0)>=0 else 'down';direction=1 if side=='up' else -1
     if m.get('leadBps',0)*direction<.2:return reject('oracle lead below 0.20 bps')
     if m.get('impulse5Bps',0)*direction<(-.05 if allow_weak_impulse else .05):return reject('oracle impulse does not confirm direction')
-    if not allow_weak_impulse and m.get('impulse5Bps',0)*direction<MIN_IMPULSE_BPS:return reject('oracle impulse below 1.0 bps')
+    # Applied to the execution-time re-check too: the evidence for the floor came from the impulse
+    # recorded at execution, and two overnight losses entered with 0.44 and 0.64 bps at fill time.
+    if m.get('impulse5Bps',0)*direction<MIN_IMPULSE_BPS:return reject('oracle impulse below 1.0 bps')
     if c.get('bookAges',{}).get(side,1e9)>3:return reject('executable book older than 3 seconds')
     b=c['bbo'][side];ask=b.get('ask');bid=b.get('bid');tick=max(.001,float(market.get('minTickSize') or .01))
     if ask is None or bid is None:return reject('bid or ask missing')

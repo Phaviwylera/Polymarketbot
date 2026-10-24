@@ -75,7 +75,7 @@ class ShadowLane:
 
 class ResearchHub:
     def __init__(self,engines,path='/tmp/poly_v16_research.sqlite3'):
-        self.engines=engines;self.journal=DiagnosticLog(path,'RESEARCH');self.journal.MAX_CRITICAL_ROWS=100000;self.external=ExchangeFeeds();self.semantic=SemanticResearch(engines,self.journal)
+        self.engines=engines;self.journal=DiagnosticLog(path,'RESEARCH');self.journal.MAX_CRITICAL_ROWS=8000;self.external=ExchangeFeeds();self.semantic=SemanticResearch(engines,self.journal)
         self.rows=deque(maxlen=12000);self.artifact=None;self.training={'state':'collecting_data','executionEnabled':False};self.errors=0;self.last_step=0.;self.tasks=[]
         self.lanes={a:ShadowLane(a,self.emit,lambda:self.artifact) for a in engines};self.child=None;self.directory=Path(path).parent
         self.pairs={a:PairShadow(a,e.balance,self.emit) for a,e in engines.items()};self.pair_errors=Counter()
