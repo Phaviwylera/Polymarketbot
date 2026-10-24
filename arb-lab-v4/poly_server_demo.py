@@ -424,6 +424,7 @@ class PolyServerDemo:
                 self._diagnostic('FEED_ERROR',feed='clob',error=repr(e))
                 self.feed['clob']='error:'+type(e).__name__
                 now=time.time()
+                self.clob_reconnect_times=[t for t in getattr(self,'clob_reconnect_times',[]) if now-t<=3600]+[now]
                 if now-getattr(self,'_clob_err_logged',0)>=60:
                     self._clob_err_logged=now;print('POLY_DEMO_CLOB_RECONNECT',self.lane,type(e).__name__,str(e)[:120],flush=True)
                 await asyncio.sleep(1)
@@ -1619,6 +1620,13 @@ class PolyServerDemo:
         side=candidate['side'];key=side.lower();shares=candidate['shares'];tick=float(market.get('minTickSize') or .01)
         max_price=candidate['ask']+tick
         submitted=time.time()
+        # Shadow experiment B (depth-aware entry gate): evaluated on the order-time book, recorded only.
+        try:
+            import poly_experiments as px,poly_strategy as ps
+            gate=px.gate_b(self._bid_levels(key),shares,float(candidate.get('entryTotalCost') or shares*(candidate['ask']+_fee_per_share(candidate['ask']))),
+                           float(candidate.get('stopLossUsd') or .30),tick,ps.EXPERIMENTS['B'])
+            gate['id']=ps.EXPERIMENTS['B']['id']
+        except Exception as exc:gate={'id':'B','error':type(exc).__name__}
         self.pending=True;p['executionAttempts']+=1;p['momentumOrders']=int(p.get('momentumOrders',0))+1
         self._record('ORDER',side=side,price=candidate['ask'],detail=f'MOMENTUM_SCALP marketable paper order; {shares:.2f} shares; max {max_price:.3f}')
         self._diagnostic('MOMENTUM_ORDER',signal=candidate,context=self._diagnostic_context())
@@ -1651,7 +1659,13 @@ class PolyServerDemo:
                            'modelFair':fresh['fair'],'entryNetEdge':fresh['modelEdgeEstimate'],
                            'entryFrictionUsd':fresh['entryFrictionUsd'],'adverseMoveBudgetUsd':fresh['adverseMoveBudgetUsd'],
                            'stopLossUsd':candidate.get('stopLossUsd',fresh['stopLossUsd']),'takeProfitUsd':candidate.get('takeProfitUsd',fresh['takeProfitUsd']),'maxHoldSec':fresh['maxHoldSec'],
-                           'sizeMultiplier':candidate.get('sizeMultiplier',1.)}
+                           'sizeMultiplier':candidate.get('sizeMultiplier',1.),'entryBid':fresh.get('bid'),
+                           'signalAt':candidate.get('signalAt'),'orderAt':submitted,
+                           'signalToOrderMs':round((submitted-float(candidate['signalAt']))*1000,1) if candidate.get('signalAt') else None,
+                           'experiments':{'B':gate}}
+            try:
+                import poly_strategy as ps;p['position'].update(ps.stamp())
+            except Exception:pass
             self._record('BUY',side=side,price=ask,detail=f'MOMENTUM_SCALP; {shares:.2f} shares; confirmed depth; fee {fee:.5f}; estimated edge {fresh["modelEdgeEstimate"]:.4f}')
             return True
         finally:self.pending=False
@@ -1663,6 +1677,11 @@ class PolyServerDemo:
         if not pos or pos.get('mode') not in SCALP_MODES or self.pending:return
         if not self.market or pos['marketSlug']!=self.market['slug']:return
         side=pos['side'].lower();bid=self.bbo[side].get('bid');now=time.time();age=now-pos['entryAt']
+        if pos.get('mode')=='MOMENTUM_SCALP' and now-self.book_observed.get(side,0)<=3:
+            try:
+                import poly_experiments as px,poly_strategy as ps
+                px.step_a(pos,self._bid_levels(side),bid,(m or {}).get('leadBps'),now,float(self.market.get('minTickSize') or .01),ps.EXPERIMENTS['A'])
+            except Exception:pass
         if self._maker_exit_step(pos,now):return
         reason=pos.get('exitRequestedReason')
         if p.get('status')!='running' or now>=p['endsAt']:reason='momentum risk/session exit'
@@ -1674,6 +1693,9 @@ class PolyServerDemo:
             elif net>=pos['takeProfitUsd']:reason='momentum net profit target'
             elif m and max(now-self.spot_ts,now-self.twap_ts)<5 and age>=5 and m.get('leadBps',0)*(1 if side=='up' else -1)<-.2:reason='momentum oracle direction reversed'
         if reason:
+            if 'exitRequestedAt' not in pos:   # evidence for stop forensics: the book when the exit was decided
+                pos['exitTriggerBid']=bid;pos['exitTriggerBookAgeSec']=round(now-self.book_observed.get(side,0),3)
+                pos['exitTriggerBids']=[[l['price'],round(l['size'],2)] for l in self._bid_levels(side)[:5]]
             pos.setdefault('exitRequestedAt',now);pos.setdefault('exitRequestedReason',reason)
             reason=pos['exitRequestedReason']
             if now-self.book_observed.get(side,0)>3:
@@ -1914,6 +1936,7 @@ class PolyServerDemo:
                 p['nofills']+=1;self._record('NOFILL',side=pos['side'],detail='exit rejected: book older than 3 seconds after latency');return False
             fill=_walk_book(self._bid_levels(key),pos['shares'],False,min_price)
             if not fill:
+                pos['exitRetries']=int(pos.get('exitRetries') or 0)+1
                 p['nofills']+=1;self._record('NOFILL',side=pos['side'],detail='exit depth moved during latency');return False
             self._diagnostic('EXIT_ATTEMPT',filled=True,reason=reason,elapsedSec=time.time()-submitted,requestedAt=pos.get('exitRequestedAt'),context=self._diagnostic_context())
             fee=pos['shares']*fill['feePerShare']

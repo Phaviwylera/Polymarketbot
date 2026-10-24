@@ -277,8 +277,17 @@ def gather(engine):
     bets={n:[dict(b) for b in rec.bets] for n,rec in (getattr(edge,'strategies',{}) or {}).items()}
     sessions=[{'lane':a,'live':False,'paper':copy.deepcopy(p)} for a,h in (getattr(engine,'ledger_history',{}) or {}).items() for p in h.values()]
     sessions+=[{'lane':a,'live':True,'paper':copy.deepcopy(e.paper)} for a,e in engine.engines.items() if e.paper]
+    now=time.time();lanes=[]
+    for a,e in engine.engines.items():
+        pos=(e.paper or {}).get('position')
+        lanes.append({'lane':a,'paused':bool(getattr(e,'paused',False) and not getattr(e,'tasks',None)),'feed':dict(e.feed),
+                      'bookAgeSec':now-min(e.book_observed.values()) if e.book_observed and min(e.book_observed.values())>0 else None,
+                      'clobReconnectsLastHour':sum(1 for t in getattr(e,'clob_reconnect_times',[]) if now-t<=3600),
+                      'position':copy.deepcopy(pos) if pos else None,'stopLossUsd':getattr(e,'inventory_stop',None)})
+    storage=engine.storage.status() if getattr(engine,'storage',None) else {}
     return {'sessions':sessions,'epoch':float(getattr(engine,'epoch',0) or 0),'rows':poly_devlog.trade_rows(engine),'attribution':[dict(r) for r in list(getattr(getattr(engine,'attribution',None),'rows',[]) or [])],
-            'bets':bets,'rules':(pm.MAX_ENTRY_PRICE,pm.MIN_EDGE),'rulesLiveAt':pm.RULES_LIVE_AT}
+            'bets':bets,'rules':(pm.MAX_ENTRY_PRICE,pm.MIN_EDGE),'rulesLiveAt':pm.RULES_LIVE_AT,
+            'state':{'lanes':lanes,'storage':storage},'laneStops':{l['lane']:l['stopLossUsd'] for l in lanes}}
 
 class _Bets:
     def __init__(self,bets):self.bets=bets
@@ -298,7 +307,16 @@ def analyse(inp):
             'breakdowns':{'outOfSample':breakdowns(oos_rows),'liveRules':breakdowns(live_rows)},
             'liveRules':{'metrics':metrics(live),'bootstrap':bootstrap_mean(live)},
             'modelVsMarket':calibration(_Edge(inp['bets'])),'about':__doc__.strip().split('\n\n')[0]}
-    rep['verdict']=verdict(wf,rep['execution'],rep['ledger']);return rep
+    rep['verdict']=verdict(wf,rep['execution'],rep['ledger'])
+    import poly_forensics as pf,poly_strategy as ps
+    stops=pf.reconstruct_stops(inp.get('sessions',[]),inp['attribution'],lambda lane:(inp.get('laneStops') or {}).get(lane) or .30)
+    rep['stopForensics']={'summary':pf.stop_summary(stops),'stops':stops[-40:]}
+    rep['experiments']=pf.experiments_report(inp['attribution'])
+    rep['latency']=pf.latency_report(inp['attribution'])
+    rep['strategyVersion']=pf.version_report(inp['attribution'],ps.identity())
+    rep['bands']=pf.bands(inp['attribution'])
+    rep['alerts']=pf.alerts(inp.get('state') or {},rep['ledger'],rep['execution'])
+    return rep
 
 def audit_report(engine):
     return analyse(gather(engine))
@@ -317,4 +335,8 @@ def compact(rep):
             'errorIds':{k:v[:3] for k,v in (ex.get('flaggedIds') or {}).items() if k in ERROR_FLAGS},
             'errorTrades':ex.get('errorTrades',[])[:4],
             'ledgerProblems':[[r['lane'],r['sessionId'],r['live'],r['trades'],r['realizedPnl'],r['problems']] for r in rep['ledger'].get('problems',[])[:3]],
+            'stops':{k:(rep.get('stopForensics') or {}).get('summary',{}).get(k) for k in ('stops','overshootsAbove5c','overshootShareFromGapBeforeTriggerPct','overshootShareAfterTriggerPct','withEntryChase','causeCounts')},
+            'expA':{k:((rep.get('experiments') or {}).get('A') or {}).get(k) for k in ('trades','meanDifferencePerTrade','exitedEarlier','missedRecoveries','savedOnStops')},
+            'expB':{k:((rep.get('experiments') or {}).get('B') or {}).get(k) for k in ('trades','rejectRatePct','rejectedStops')},
+            'config':(rep.get('strategyVersion') or {}).get('current'),'alerts':(rep.get('alerts') or [])[:6],
             'model':[mm.get('bets'),(mm.get('model') or {}).get('brier'),(mm.get('marketPrice') or {}).get('brier'),mm.get('brierSkillVsMarket')]}

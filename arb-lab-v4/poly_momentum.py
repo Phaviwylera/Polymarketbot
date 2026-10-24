@@ -73,4 +73,4 @@ def signal(context,history,allow_weak_impulse=False):
     return {'side':side.upper(),'ask':ask,'bid':bid,'shares':shares,'fair':fair,'roundTripNet':edge,
             'modelEdgeEstimate':edge,'entryFrictionUsd':friction,'adverseMoveBudgetUsd':stop-friction,
             'stopLossUsd':stop,'takeProfitUsd':max(.18,stop),'maxHoldSec':30,'entryTotalCost':total,'notionalCap':cap,'bookMove':move,
-            'leadBps':m['leadBps'],'impulse5Bps':m['impulse5Bps'],'marketSlug':market['slug']},'OPPORTUNITY_MOMENTUM'
+            'leadBps':m['leadBps'],'impulse5Bps':m['impulse5Bps'],'marketSlug':market['slug'],'signalAt':now},'OPPORTUNITY_MOMENTUM'

@@ -36,4 +36,19 @@ def closed_trade(asset,session,pos,exit_price,exit_fee,reason,now=None,latency_m
             'holdSec':max(0,now-pos['entryAt']),'exitReason':reason,'stopOvershootUsd':max(0,-net-stop) if 'stop' in reason and stop else 0,
             'entryLatencyMs':pos.get('entryLatencyMs',0),'exitLatencyMs':latency_ms,
             'entrySlippageUsd':qty*(entry-pos.get('requestedAsk',entry)),
-            'entryFeatures':pos.get('entryFeatures',{}),'accountingErrorUsd':net-(gross-fees)}
+            'entryFeatures':pos.get('entryFeatures',{}),'accountingErrorUsd':net-(gross-fees),
+            # identity, latency intervals and stop evidence (added 2026-10-25; absent on older trades)
+            'strategyVersion':pos.get('strategyVersion'),'configHash':pos.get('configHash'),'experimentsHash':pos.get('experimentsHash'),
+            'stopLossUsd':pos.get('stopLossUsd'),'takeProfitUsd':pos.get('takeProfitUsd'),'entryBid':pos.get('entryBid'),
+            'signalToOrderMs':pos.get('signalToOrderMs'),
+            'exitTriggerToFillMs':round((now-float(pos['exitRequestedAt']))*1000,1) if pos.get('exitRequestedAt') else None,
+            'exitRetries':int(pos.get('exitRetries') or 0),'exitTriggerBid':pos.get('exitTriggerBid'),
+            'exitTriggerBookAgeSec':pos.get('exitTriggerBookAgeSec'),'exitTriggerBids':pos.get('exitTriggerBids'),
+            'experiments':_experiments(pos,net)}
+
+def _experiments(pos,net):
+    if not pos.get('experiments'):return None
+    try:
+        import poly_experiments
+        return poly_experiments.finalize(pos,net)
+    except Exception as exc:return {'error':type(exc).__name__}

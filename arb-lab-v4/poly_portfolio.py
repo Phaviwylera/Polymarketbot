@@ -79,7 +79,8 @@ class PaperPortfolio:
     def _observe_trade(self,row):
         self.attribution.add(row);self.edge.on_trade(row)
         try:
-            keep=('asset','strategy','side','entryAt','closedAt','quantity','entryPrice','exitPrice','netPnlUsd','feesUsd','holdSec','exitReason','stopOvershootUsd','entryLatencyMs','exitLatencyMs','entrySlippageUsd','entryFeatures')
+            keep=('asset','strategy','side','entryAt','closedAt','quantity','entryPrice','exitPrice','netPnlUsd','feesUsd','holdSec','exitReason','stopOvershootUsd','entryLatencyMs','exitLatencyMs','entrySlippageUsd','entryFeatures',
+                  'configHash','stopLossUsd','signalToOrderMs','exitTriggerToFillMs','exitRetries','exitTriggerBid','exitTriggerBookAgeSec','exitTriggerBids','experiments')
             print('POLY_TRADE',json.dumps({k:row.get(k) for k in keep},separators=(',',':'),default=str),flush=True)
         except Exception:pass
     def loss_budget(self):
