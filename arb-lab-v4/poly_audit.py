@@ -57,8 +57,9 @@ def bootstrap_mean(pnls,samples=BOOTSTRAP_SAMPLES,seed=SEED):
             'probMeanAbove0':round(sum(m>0 for m in means)/samples,3),'samples':samples,'seed':seed}
 
 # ---------------------------------------------------------------- 1. execution audit
-ERROR_FLAGS=('feeMismatch','latencyTooFast','accountingError','holdTooLong','priceOutOfRange')
-RISK_FLAGS=('stopOvershoot','adverseSlippage','heldToSettlement')
+ERROR_FLAGS=('feeMismatch','latencyTooFast','accountingError','priceOutOfRange')
+# exitDelayed: a scalp held past 35 s because the simulator correctly refused a stale or thin book.
+RISK_FLAGS=('stopOvershoot','adverseSlippage','heldToSettlement','exitDelayed')
 
 def _settled(t):
     return 'settlement' in str(t.get('exitReason') or '').lower()
@@ -75,7 +76,8 @@ def execution_audit(trades):
             q=float(t['quantity']);e=float(t['entryPrice']);x=float(t['exitPrice']);tid=t.get('id')
         except (KeyError,TypeError,ValueError):continue
         settled=_settled(t)
-        expected=q*(fee(e)+(0. if settled else fee(x)));paid=float(t.get('feesUsd') or 0);fees+=paid;gross+=float(t.get('grossPnlUsd') or 0)
+        maker='maker' in str(t.get('exitReason') or '').lower()   # resting maker exits pay no fee on Polymarket
+        expected=q*(fee(e)+(0. if settled or maker else fee(x)));paid=float(t.get('feesUsd') or 0);fees+=paid;gross+=float(t.get('grossPnlUsd') or 0)
         # VWAP exits pay the fee per filled level, so allow one tick of price difference plus rounding.
         if abs(paid-expected)>q*FEE_RATE*TICK+1e-4:flags['feeMismatch'].append(tid)
         ms=float(t.get('entryLatencyMs') or 0)
@@ -88,7 +90,7 @@ def execution_audit(trades):
         if abs(float(t.get('accountingErrorUsd') or 0))>1e-6:flags['accountingError'].append(tid)
         scalp=str(t.get('strategy'))=='MOMENTUM_SCALP'
         if scalp and settled:flags['heldToSettlement'].append(tid)
-        elif scalp and float(t.get('holdSec') or 0)>MAX_HOLD_SEC+5:flags['holdTooLong'].append(tid)
+        elif scalp and float(t.get('holdSec') or 0)>MAX_HOLD_SEC+5:flags['exitDelayed'].append(tid)
         if not (0<e<1 and (0<=x<=1 if settled else 0<x<1)):flags['priceOutOfRange'].append(tid)
         if any(tid in flags[k] for k in ERROR_FLAGS):
             errs.append({'id':tid,'reason':str(t.get('exitReason'))[:40],'q':q,'entry':e,'exit':x,'fees':round(paid,5),'expected':round(expected,5),'holdSec':round(float(t.get('holdSec') or 0),1),'latencyMs':round(ms)})
@@ -100,7 +102,7 @@ def execution_audit(trades):
             'latencyMs':{'median':round(sorted(lat)[len(lat)//2],1) if lat else None,'max':round(max(lat),1) if lat else None},
             'clean':n>0 and not any(flags[k] for k in ERROR_FLAGS),'errorTrades':errs[:20],
             'checks':'errors: fee = C*0.07*p*(1-p) per leg (no exit fee at settlement), entry latency >= 350 ms, net = gross - fees, '
-                     'momentum hold <= 35 s unless settled, prices in range; market risk: stop overshoot > $0.05, slippage > 1 tick, scalp held to settlement'}
+                     'prices in range (maker exits pay no fee); market risk: stop overshoot > $0.05, slippage > 1 tick, scalp held to settlement, scalp exit delayed past 35 s'}
 
 # ---------------------------------------------------------------- 1b. ledger reconciliation
 def ledger_reconcile(sessions,epoch,rules_live_at):
@@ -110,7 +112,8 @@ def ledger_reconcile(sessions,epoch,rules_live_at):
     out=[];bad=0
     for s in sessions:
         p=s.get('paper') or {};ev=p.get('events') or []
-        closes=[e for e in ev if e.get('action') in ('SELL','SETTLE') and e.get('pnl') is not None]
+        import poly_devlog
+        closes=[e for e in ev if e.get('action') in poly_devlog.CLOSE_ACTIONS and e.get('pnl') is not None]
         complete=len(ev)<500
         row={'lane':s['lane'],'sessionId':p.get('sessionId'),'live':bool(s.get('live')),'startedAt':p.get('startedAt'),
              'trades':int(p.get('trades') or 0),'realizedPnl':round(float(p.get('realizedPnl') or 0),5),'eventLogComplete':complete,'problems':[]}

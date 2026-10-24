@@ -12,11 +12,11 @@ class ExecutionAuditTests(unittest.TestCase):
         self.assertTrue(r['clean']);self.assertEqual(sum(r['flagCounts'].values()),0)
     def test_each_unrealistic_fill_is_flagged(self):
         r=pa.execution_audit([trade(id='fee',feesUsd=0.),trade(id='fast',entryLatencyMs=50.),trade(id='slip',entrySlippageUsd=.2),
-                              trade(id='over',stopOvershootUsd=.2),trade(id='acct',accountingErrorUsd=.01),trade(id='hold',holdSec=90.),
+                              trade(id='over',stopOvershootUsd=.2),trade(id='acct',accountingErrorUsd=.01),
                               trade(id='px',exitPrice=1.2,feesUsd=5*(pa.fee(.3)+pa.fee(1.2)))])
         self.assertFalse(r['clean'])
         for k,tid in (('feeMismatch','fee'),('latencyTooFast','fast'),('adverseSlippage','slip'),('stopOvershoot','over'),
-                      ('accountingError','acct'),('holdTooLong','hold'),('priceOutOfRange','px')):
+                      ('accountingError','acct'),('priceOutOfRange','px')):
             self.assertIn(tid,r['flaggedIds'][k],k)
 
 class WalkForwardTests(unittest.TestCase):
@@ -90,5 +90,30 @@ class AuditV2Tests(unittest.TestCase):
         self.assertEqual(v['status'],'FAIL');self.assertTrue(any('execution' in r for r in v['reasons']));self.assertTrue(any('ledger' in r for r in v['reasons']))
         wf['stressOutOfSample']={'exitWorseBy1Tick':{'avgPnlUsd':-.01}}
         self.assertTrue(any('1 tick worse' in r for r in pa.verdict(wf)['reasons']))
+
+class AuditV3Tests(unittest.TestCase):
+    def test_maker_exit_pays_no_exit_fee(self):
+        r=pa.execution_audit([trade(exitReason='momentum maker profit target',feesUsd=5*pa.fee(.30))])
+        self.assertTrue(r['clean'])
+    def test_delayed_exit_is_market_risk(self):
+        r=pa.execution_audit([trade(holdSec=60.)])
+        self.assertTrue(r['clean']);self.assertEqual(r['marketRisk']['exitDelayed'],1)
+    def test_pair_closes_count_in_ledger(self):
+        p={'sessionId':'s','startedAt':1,'trades':2,'realizedPnl':.7,'events':[{'action':'INV_MERGE','pnl':.2},{'action':'SELL','pnl':.5},{'action':'BUY'}]}
+        self.assertEqual(pa.ledger_reconcile([{'lane':'ETH','live':False,'paper':p}],0.,0.)['sessionsWithProblems'],0)
+
+class TradeRowsTests(unittest.TestCase):
+    def test_pair_closes_are_in_history_but_not_in_momentum_scorecard(self):
+        import poly_devlog
+        class L:paper=None
+        class E:
+            engines={'ETH':L()};ledger_history={'ETH':{'s':{'sessionId':'s','events':[
+                {'t':300,'action':'SELL','pnl':.5,'side':'UP','price':.4,'detail':'momentum net profit target'},
+                {'t':290,'action':'BUY','price':.3,'detail':'MOMENTUM_SCALP; 5 shares; estimated edge 0.1500'},
+                {'t':200,'action':'INV_MERGE','pnl':.2,'detail':'5 complete sets'}]}}}
+        rows=poly_devlog.trade_rows(E())
+        self.assertEqual([r['mode'] for r in rows],['INV_MERGE','MOMENTUM_SCALP'])
+        sc=poly_devlog.rules_scorecard(E(),rows)
+        self.assertEqual(sc['allHistory']['trades'],2)
 
 if __name__=='__main__':unittest.main()

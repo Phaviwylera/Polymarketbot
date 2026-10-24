@@ -112,8 +112,18 @@ def compact_lines(rep):
 
 import re
 _EDGE=re.compile(r'(?:estimated edge|edge)\s+(-?[0-9.]+)')
+# Every engine event that closes a trade (the engine increments paper['trades'] for each). Pair and
+# inventory closes have no BUY event; they were missing from the history before 2026-10-25.
+SCALP_CLOSES=('SELL','SETTLE')
+PAIR_CLOSES=('INV_MERGE','INV_RISK_EXIT','INV_RECOVERY_EXIT','INV_RESIDUAL_SETTLE','MAKER_RESIDUAL_EXIT','MAKER_MERGE',
+             'MAKER_RESIDUAL_SETTLE','PAIR_MERGE','PAIR_HEDGE_MERGE')
+CLOSE_ACTIONS=SCALP_CLOSES+PAIR_CLOSES
+
+def is_scalp(r):return r.get('mode') not in PAIR_CLOSES
+
 def trade_rows(engine):
-    """Closed trades rebuilt from every retained session ledger (archived + current), oldest first."""
+    """Closed trades rebuilt from every retained session ledger (archived + current), oldest first.
+    Pair/inventory closes appear with mode = their event name and no entry price."""
     rows=[]
     for asset,lane in engine.engines.items():
         sessions=list((getattr(engine,'ledger_history',{}) or {}).get(asset,{}).values())
@@ -130,6 +140,10 @@ def trade_rows(engine):
                         'pnl':_r(ev.get('pnl'),5),'holdSec':_r(float(ev['t'])-float(buy['t']),1) if buy else None,
                         'estEdge':float(m.group(1)) if m else None,'reason':str(ev.get('detail','')).split(';')[0][:60]})
                     buy=None
+                elif a in PAIR_CLOSES and ev.get('pnl') is not None:
+                    rows.append({'asset':asset,'session':s.get('sessionId'),'entryAt':_r(ev.get('t'),1),'exitAt':_r(ev.get('t'),1),
+                        'mode':a,'side':ev.get('side'),'entry':None,'exit':ev.get('price'),'pnl':_r(ev.get('pnl'),5),'holdSec':None,
+                        'estEdge':None,'reason':str(ev.get('detail','')).split(';')[0][:60]})
     rows.sort(key=lambda r:r['exitAt'] or 0)
     return rows
 
@@ -171,7 +185,7 @@ def rules_scorecard(engine,rows=None):
     rows=trade_rows(engine) if rows is None else rows
     rows=[r for r in rows if r.get('pnl') is not None]
     match=lambda r:r.get('entry') is not None and float(r['entry'])<pm.MAX_ENTRY_PRICE and r.get('estEdge') is not None and float(r['estEdge'])>=pm.MIN_EDGE-1e-9
-    live=[r for r in rows if float(r.get('entryAt') or r.get('exitAt') or 0)>=pm.RULES_LIVE_AT]
+    live=[r for r in rows if is_scalp(r) and float(r.get('entryAt') or r.get('exitAt') or 0)>=pm.RULES_LIVE_AT]
     return {'rules':{'maxEntryPrice':pm.MAX_ENTRY_PRICE,'minEstimatedEdge':pm.MIN_EDGE,'liveSince':pm.RULES_LIVE_AT,
                      'liveSinceUtc':time.strftime('%Y-%m-%d %H:%M',time.gmtime(pm.RULES_LIVE_AT))},
             'allHistory':_metrics([float(r['pnl']) for r in rows]),
