@@ -93,4 +93,24 @@ class SamplerTests(unittest.TestCase):
         self.assertEqual(r['samples'],30);self.assertTrue(any('hot' in k for k,_ in r['self']))
         self.assertEqual(s.samples,0)   # counters reset after each report
 
+class WalletScoringSpeedTests(unittest.TestCase):
+    def test_float_stats_match_statistics(self):
+        import statistics,math,random
+        from poly_edge import mean_se
+        xs=[random.uniform(-3,3) for _ in range(60)]
+        m,se=mean_se(xs)
+        self.assertAlmostEqual(m,statistics.mean(xs),places=12)
+        self.assertAlmostEqual(se,statistics.stdev(xs)/math.sqrt(60),places=12)
+        self.assertEqual(mean_se([]),(0.,None));self.assertEqual(mean_se([2.]),(2.,None))
+    def test_skilled_is_cached_until_results_change(self):
+        from poly_edge import WalletIntel,SKILL_MIN_ROUNDS
+        w=WalletIntel()
+        w.wallets['0xa']={'rounds':SKILL_MIN_ROUNDS+1,'pnl':5.,'recent':[1.,1.2,.9,1.1,1.0,1.3,.8,1.1][:max(SKILL_MIN_ROUNDS+1,2)]*3,'buys':1,'buyUsd':1.,'entrySec':[],'prices':[],'bothSides':0,'winnerBuys':1}
+        w.version+=1
+        first=w.skilled();self.assertIn('0xa',first)
+        with patch.object(WalletIntel,'_skilled',side_effect=AssertionError('re-scored')):
+            self.assertIs(w.skilled(),first);w.profile();w.profile()
+        w.learn_round([],'up',0)          # new results invalidate the cache
+        self.assertIsNot(w.skilled(),first)
+
 if __name__=='__main__':unittest.main()

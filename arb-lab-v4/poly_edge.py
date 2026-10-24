@@ -90,13 +90,23 @@ class Calibrator:
         for k,v in ((state or {}).get('brier') or {}).items():
             if k in self.brier and isinstance(v,list) and len(v)==2:self.brier[k]=[float(v[0]),int(v[1])]
 
+def mean_se(xs):
+    """Float mean and standard error (sample stdev / sqrt n). statistics.mean/stdev compute with exact
+    Fractions; on the 0.1-CPU host scoring 4,000 wallets that way took two thirds of all CPU."""
+    n=len(xs)
+    if not n:return 0.,None
+    m=math.fsum(xs)/n
+    if n<2:return m,None
+    var=math.fsum((x-m)*(x-m) for x in xs)/(n-1)
+    return m,math.sqrt(max(0.,var)/n)
+
 class StrategyRecord:
     """Shadow (virtual) hold-to-resolution bets: one per asset per round."""
     def __init__(self,name):self.name=name;self.bets=deque(maxlen=2000)
     def add(self,bet):self.bets.append(bet)
     def stats(self,window=GATE_WINDOW):
         rows=list(self.bets)[-window:];r=[b['returnPerDollar'] for b in rows]
-        n=len(r);mean=statistics.mean(r) if r else 0.;se=statistics.stdev(r)/math.sqrt(n) if n>1 else 1.
+        n=len(r);mean,se=mean_se(r);se=se if se is not None else 1.
         rounds=len({b['roundStart'] for b in rows});wins=sum(b['won'] for b in rows)
         passed=bool(n>=GATE_MIN_BETS and rounds>=GATE_MIN_ROUNDS and mean-2*se>0)
         return {'strategy':self.name,'bets':n,'lifetimeBets':len(self.bets),'rounds':rounds,'wins':wins,
@@ -133,7 +143,7 @@ class WalletIntel:
         self.wallets={}                 # wallet -> aggregate
         self.studied=deque(maxlen=3000);self.studied_set=set()
         self.live={}                    # asset -> {'up':flow,'down':flow,'at':t,'trades':n}
-        self.errors=0;self.last_error=None;self.last_study=0.
+        self.errors=0;self.last_error=None;self.last_study=0.;self.version=0
     @staticmethod
     def parse(rows):
         out=[]
@@ -147,6 +157,7 @@ class WalletIntel:
                             'tx':str(t.get('transactionHash') or t.get('transaction_hash') or '')})
         return out
     def learn_round(self,trades,winner,round_start):
+        self.version+=1
         per=defaultdict(lambda:{'pnl':0.,'buys':0,'buyUsd':0.,'entrySec':[],'prices':[],'outcomes':set(),'winnerBuys':0})
         for t in trades:
             w=per[t['wallet']];win=1. if t['outcome']==winner else 0.
@@ -168,9 +179,14 @@ class WalletIntel:
     def score(a):
         x=a['recent'];n=len(x)
         if n<SKILL_MIN_ROUNDS:return None
-        mean=statistics.mean(x);se=statistics.stdev(x)/math.sqrt(n) if n>1 else abs(mean) or 1.
+        mean,se=mean_se(x);se=se if se is not None else (abs(mean) or 1.)
         return mean-se if a['pnl']>0 else None
     def skilled(self,limit=150):
+        # Re-scored only when wallet results change (learn_round/restore), not on every snapshot.
+        key=(self.version,len(self.wallets),limit);c=getattr(self,'_skilled_cache',None)
+        if c is not None and c[0]==key:return c[1]
+        out=self._skilled(limit);self._skilled_cache=(key,out);return out
+    def _skilled(self,limit):
         scored=[(s,w) for w,a in self.wallets.items() if (s:=self.score(a)) is not None and s>0]
         return dict((w,s) for s,w in sorted(scored,reverse=True)[:limit])
     def live_flow(self,asset,trades,now,skilled):
@@ -180,6 +196,10 @@ class WalletIntel:
                 flow[t['outcome']]+=t['size']*(1 if t['side']=='BUY' else -1);count+=1
         self.live[asset]={**flow,'at':now,'skilledTrades':count}
     def profile(self):
+        key=(self.version,len(self.wallets),len(self.studied));c=getattr(self,'_profile_cache',None)
+        if c is None or c[0]!=key:c=self._profile_cache=(key,self._profile())
+        return {**c[1],'live':self.live,'errors':self.errors,'lastError':self.last_error}
+    def _profile(self):
         skilled=self.skilled()
         rows=[self.wallets[w] for w in skilled]
         def med(key):
@@ -198,6 +218,7 @@ class WalletIntel:
         keep=dict(sorted(self.wallets.items(),key=lambda kv:-kv[1]['rounds'])[:4000])
         return {'wallets':keep,'studied':list(self.studied)[-2000:]}
     def restore(self,state):
+        self.version+=1
         for w,a in ((state or {}).get('wallets') or {}).items():
             if isinstance(a,dict) and 'recent' in a:self.wallets[w]=a
         for cid in (state or {}).get('studied') or []:
