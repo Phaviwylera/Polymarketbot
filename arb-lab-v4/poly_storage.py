@@ -129,6 +129,14 @@ class DurableStore:
                 self.engine.research.artifact=model;self.engine.research.training=model['report']
         for r in reversed(records):self.engine.attribution.add((json.loads(r['payload']) if isinstance(r['payload'],str) else r['payload'])['trade'])
         self.active=True;self.attach();await self.flush()
+        rec=os.getenv('POLY_RECONCILE_FROM_URL','')
+        if rec and rec!=self.url and not getattr(self,'_reconciled',False):
+            self._reconciled=True
+            async def _run():
+                try:
+                    import poly_reconcile;await poly_reconcile.reconcile(rec,self)
+                except Exception as exc:print('POLY_RECONCILE_ERROR',type(exc).__name__,flush=True)
+            asyncio.create_task(_run())
         for r in bootstrap:
             self.enqueue({'bootId':'v16-import','journalSeq':r['id'],'t':r['labelAt'],'asset':r['asset'],'kind':'SHADOW_OUTCOME','row':r})
         known={r['id'] for r in self.engine.research.rows}
