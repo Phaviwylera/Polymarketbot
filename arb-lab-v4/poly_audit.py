@@ -69,7 +69,7 @@ def execution_audit(trades):
     (a stop that fills worse than its level after the 350 ms latency, a scalp that could not exit and
     was held to settlement). Settled trades close at exactly 0 or 1 with no exit fee."""
     flags={k:[] for k in ERROR_FLAGS+RISK_FLAGS}
-    fees=slip=over=gross=0.;lat=[]
+    fees=slip=over=gross=0.;lat=[];errs=[]
     for t in trades:
         try:
             q=float(t['quantity']);e=float(t['entryPrice']);x=float(t['exitPrice']);tid=t.get('id')
@@ -90,13 +90,15 @@ def execution_audit(trades):
         if scalp and settled:flags['heldToSettlement'].append(tid)
         elif scalp and float(t.get('holdSec') or 0)>MAX_HOLD_SEC+5:flags['holdTooLong'].append(tid)
         if not (0<e<1 and (0<=x<=1 if settled else 0<x<1)):flags['priceOutOfRange'].append(tid)
+        if any(tid in flags[k] for k in ERROR_FLAGS):
+            errs.append({'id':tid,'reason':str(t.get('exitReason'))[:40],'q':q,'entry':e,'exit':x,'fees':round(paid,5),'expected':round(expected,5),'holdSec':round(float(t.get('holdSec') or 0),1),'latencyMs':round(ms)})
     n=len(trades)
     return {'trades':n,'flagCounts':{k:len(v) for k,v in flags.items()},'flaggedIds':{k:v[:10] for k,v in flags.items() if v},
             'errors':{k:len(flags[k]) for k in ERROR_FLAGS},'marketRisk':{k:len(flags[k]) for k in RISK_FLAGS},
             'totals':{'feesUsd':round(fees,4),'grossPnlUsd':round(gross,4),'feesShareOfGrossPct':round(100*fees/abs(gross),1) if gross else None,
                       'entrySlippageUsd':round(slip,4),'stopOvershootUsd':round(over,4)},
             'latencyMs':{'median':round(sorted(lat)[len(lat)//2],1) if lat else None,'max':round(max(lat),1) if lat else None},
-            'clean':n>0 and not any(flags[k] for k in ERROR_FLAGS),
+            'clean':n>0 and not any(flags[k] for k in ERROR_FLAGS),'errorTrades':errs[:20],
             'checks':'errors: fee = C*0.07*p*(1-p) per leg (no exit fee at settlement), entry latency >= 350 ms, net = gross - fees, '
                      'momentum hold <= 35 s unless settled, prices in range; market risk: stop overshoot > $0.05, slippage > 1 tick, scalp held to settlement'}
 
@@ -309,4 +311,7 @@ def compact(rep):
             'folds':f"{wf['foldsNonNegative']}/{wf['foldsTraded']}",
             'live':[rep['liveRules']['metrics']['trades'],rep['liveRules']['metrics']['avgPnlUsd'],(rep['liveRules']['bootstrap'] or {}).get('lower95')],
             'exec':{'trades':ex['trades'],'clean':ex['clean'],'errors':{k:v for k,v in ex['errors'].items() if v},'risk':{k:v for k,v in ex['marketRisk'].items() if v}},
+            'errorIds':{k:v[:3] for k,v in (ex.get('flaggedIds') or {}).items() if k in ERROR_FLAGS},
+            'errorTrades':ex.get('errorTrades',[])[:4],
+            'ledgerProblems':[[r['lane'],r['sessionId'],r['live'],r['trades'],r['realizedPnl'],r['problems']] for r in rep['ledger'].get('problems',[])[:3]],
             'model':[mm.get('bets'),(mm.get('model') or {}).get('brier'),(mm.get('marketPrice') or {}).get('brier'),mm.get('brierSkillVsMarket')]}
