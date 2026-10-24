@@ -416,7 +416,7 @@ class PolyServerDemo:
                             except Exception: continue
                             msgs=data if isinstance(data,list) else [data]
                             for msg in msgs:self._handle_clob(msg)
-                            if self._clob_resync_needed:raise RuntimeError('stale order-book backlog; reconnect for current snapshot')
+                            if self._clob_resync_needed:raise RuntimeError('stale order-book backlog ('+getattr(self,'_resync_detail','')+'); reconnect')
                             await asyncio.sleep(0)
                     finally:
                         pt.cancel()
@@ -425,7 +425,7 @@ class PolyServerDemo:
                 self.feed['clob']='error:'+type(e).__name__
                 now=time.time()
                 if now-getattr(self,'_clob_err_logged',0)>=60:
-                    self._clob_err_logged=now;print('POLY_DEMO_CLOB_RECONNECT',self.lane,type(e).__name__,str(e)[:80],flush=True)
+                    self._clob_err_logged=now;print('POLY_DEMO_CLOB_RECONNECT',self.lane,type(e).__name__,str(e)[:120],flush=True)
                 await asyncio.sleep(1)
 
     def _handle_clob(self,m):
@@ -451,7 +451,8 @@ class PolyServerDemo:
                 if received-self._last_stale_log>=1:
                     self._last_stale_log=received
                     self._diagnostic('STALE_BOOK_MESSAGE',lagSeconds=lag,eventType=et,totalRejected=self.stale_book_messages,sample=m)
-                if self._stale_book_run>=50 or lag>15:self._clob_resync_needed=True
+                if self._stale_book_run>=50 or lag>15:
+                    self._clob_resync_needed=True;self._resync_detail=f'lag {lag:.1f}s {et} run {self._stale_book_run} rejected {self.stale_book_messages}'
                 return
             self._stale_book_run=0
             self._diagnostic('CLOB_MESSAGE',message=m)
