@@ -852,6 +852,30 @@ async def _dev_report_printer():
 async def start_dev_report_printer():
     if POLY_ENGINE_ROLE!='frontend':asyncio.create_task(_dev_report_printer());asyncio.create_task(_print_trade_history())
 
+_audit_cache={'at':0.,'report':None}
+async def _audit(force=False):
+    """Research audit (poly_audit): computed in a worker thread so the bootstrap never blocks the feeds."""
+    import poly_audit
+    if force or _audit_cache['report'] is None or time.time()-_audit_cache['at']>600:
+        _audit_cache['report']=await asyncio.to_thread(poly_audit.analyse,poly_audit.gather(poly_server_engine));_audit_cache['at']=time.time()
+    return _audit_cache['report']
+
+@app.get("/api/poly/audit")
+async def poly_audit_endpoint():
+    return await _audit()
+
+async def _audit_printer():
+    import poly_audit
+    await asyncio.sleep(240)
+    while True:
+        try:print('POLY_AUDIT '+json.dumps(poly_audit.compact(await _audit(force=True)),separators=(',',':'),default=str),flush=True)
+        except Exception as exc:print('POLY_AUDIT_ERROR',type(exc).__name__,str(exc)[:120],flush=True)
+        await asyncio.sleep(3600)
+
+@app.on_event('startup')
+async def start_audit_printer():
+    if POLY_ENGINE_ROLE!='frontend':asyncio.create_task(_audit_printer())
+
 @app.get("/api/poly/edge")
 async def poly_edge():
     return poly_server_engine.edge.snapshot(200.)

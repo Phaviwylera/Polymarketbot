@@ -80,7 +80,7 @@
   set('lifeSub',`${p.lifetimeTrades??'—'} closed trades · $${p.startingBalance||200} paper${since?' since '+since:''}`+(p.archivedTrades?` · earlier ${p.archivedTrades} trades ${signed(p.archivedRealizedPnl)} kept for analysis`:''));
   const acctEq=p.accountEquity??p.equity,acctPnl=p.accountPnl??p.totalPnl;set('equity',money(acctEq));set('sessPnl',signed(acctPnl),cls(acctPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
   set('maxDd',money(p.maxDrawdownUsd));const open=LANES.filter(l=>s.assets?.[l]?.paper?.position).length;set('openPos',open+' / '+LANES.length);
-  rules(s.rulesScorecard);
+  rules(s.rulesScorecard);audit();
   const b=$('walletBadge');b.textContent=p.riskLocked?'PORTFOLIO LOCK':'PAPER ONLY';b.className='badge '+(p.riskLocked?'bad':'live');
   $('exposure').innerHTML=(p.assets||[]).map(a=>{const pos=s.assets?.[a.asset]?.paper?.position,cost=pos?Number(pos.entryTotalCost||0):0,eq=Number(a.equity||0),alloc=Number(a.allocation||1);
    const used=Math.min(100,100*cost/alloc),gain=Math.max(-100,Math.min(100,100*(eq-alloc)/alloc));
@@ -95,6 +95,23 @@
    const wr=m.winRatePct,wc=wr>=70?'pos':wr<50?'neg':'';
    return `<tr${hl?' class="hl"':''}><td>${label}</td><td>${m.trades}</td><td class="${wc}">${wr.toFixed(0)}%</td><td class="${cls(m.avgPnlUsd)}">${signed(m.avgPnlUsd,2)}</td><td class="${cls(m.netPnlUsd)}">${signed(m.netPnlUsd,2)}</td><td>${m.profitFactor==null?'—':m.profitFactor.toFixed(2)}</td></tr>`;};
   tb.innerHTML=row('LIVE',r.sinceRulesLive,true)+row('BACKTEST',r.matchingCurrentRules)+row('ALL TIME',r.allHistory);
+ }
+
+ // ---------- research audit (poly_audit, refreshed every 10 min) ----------
+ let auditAt=0;
+ async function audit(){
+  if(Date.now()-auditAt<600000)return;auditAt=Date.now();
+  try{const a=await (await fetch('/api/poly/audit',{cache:'no-store'})).json(),tb=document.querySelector('#auditTbl tbody');if(!tb)return;
+   const v=a.verdict||{},wf=a.walkForward||{},o=wf.outOfSample||{},b=wf.outOfSampleBootstrap||{},ex=a.execution||{},mm=a.modelVsMarket||{};
+   const ci=b.lower95==null?'—':`${signed(b.lower95,2)} … ${signed(b.upper95,2)}`;
+   const flags=Object.entries(ex.flagCounts||{}).filter(([k,n])=>n).map(([k,n])=>`${k} ${n}`).join(', ')||'none';
+   tb.innerHTML=[['VERDICT',`<b class="${v.status==='PASS'?'pos':'neg'}">${v.status||'—'}</b> ${(v.reasons||[])[0]||'all pre-set criteria met'}`],
+    ['OUT-OF-SAMPLE',`${o.trades||0} trades · avg ${signed(o.avgPnlUsd,2)} · 95% ${ci} · folds ${wf.foldsNonNegative??'—'}/${wf.foldsTraded??'—'} ≥ 0`],
+    ['TAKE-ALL BASE',`${wf.baselineTakeAll?.trades||0} trades · avg ${signed(wf.baselineTakeAll?.avgPnlUsd,2)}`],
+    ['MODEL vs MARKET',mm.bets?`Brier ${mm.model.brier} vs ${mm.marketPrice.brier} · skill ${(100*mm.brierSkillVsMarket).toFixed(0)}% ${mm.modelBeatsMarket?'(model better)':'(market better)'}`:'collecting'],
+    ['FILL AUDIT',`${ex.trades||0} trades · fees ${ex.totals?.feesShareOfGrossPct??'—'}% of gross · flags: ${flags}`]]
+    .map(([k,x])=>`<tr><td>${k}</td><td style="text-align:left">${x}</td></tr>`).join('');
+  }catch(e){auditAt=Date.now()-540000;}
  }
 
  // ---------- price candles + ladder ----------
