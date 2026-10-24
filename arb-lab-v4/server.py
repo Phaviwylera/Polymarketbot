@@ -621,7 +621,36 @@ async def continuous_market_worker():
 
 @app.on_event('startup')
 async def start_market_worker():
-    asyncio.create_task(continuous_market_worker())
+    # Legacy Solana route scanner (home page). Three Jupiter quotes per ~10 s scan, every scan a
+    # REJECT, sharing the 0.1-CPU host with the Polymarket feeds. Opt-in: ARB_LIVE_SCAN=1.
+    global market_live_status
+    if os.getenv('ARB_LIVE_SCAN','0')=='1':asyncio.create_task(continuous_market_worker())
+    else:market_live_status='disabled (set ARB_LIVE_SCAN=1 to run the Solana scanner)';print('ARB_LIVE_SCAN_DISABLED',flush=True)
+
+_gc_last={'gen2Sec':0.,'at':0.}
+def _gc_timer(phase,info):
+    if info.get('generation')!=2:return
+    if phase=='start':_gc_last['t0']=time.perf_counter()
+    else:_gc_last['gen2Sec']=time.perf_counter()-_gc_last.get('t0',time.perf_counter());_gc_last['at']=time.time()
+
+async def _loop_watchdog():
+    """Logs event-loop freezes. Lanes resyncing their order-book sockets at the same instant pointed
+    to whole-process stalls; this names how long they are and the last full-GC time."""
+    import gc
+    gc.callbacks.append(_gc_timer)
+    await asyncio.sleep(90)
+    gc.collect();gc.freeze()   # long-lived restored state stops being rescanned by every full GC
+    print('POLY_GC_FROZEN',gc.get_freeze_count(),flush=True)
+    last_log=0.
+    while True:
+        t=time.monotonic();await asyncio.sleep(.5);lag=time.monotonic()-t-.5
+        if lag>1.0 and time.monotonic()-last_log>=30:
+            last_log=time.monotonic()
+            print(f"POLY_LOOP_STALL {lag:.2f}s lastGen2Gc={_gc_last['gen2Sec']:.2f}s gen2Age={time.time()-_gc_last['at'] if _gc_last['at'] else -1:.0f}s",flush=True)
+
+@app.on_event('startup')
+async def start_loop_watchdog():
+    asyncio.create_task(_loop_watchdog())
 
 @app.on_event('startup')
 async def verify_jito_block_engine():
