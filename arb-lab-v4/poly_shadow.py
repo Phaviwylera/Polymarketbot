@@ -13,7 +13,7 @@ import os as _os
 # The research model is shadow-only (never trades); retraining every 3 min in a full-priority child
 # process was the main CPU load on the 0.1-CPU instance. Retrain every 30 min, at low priority.
 TRAIN_INTERVAL_SEC=float(_os.getenv('POLY_TRAIN_INTERVAL_SEC','1800'))
-RESEARCH_STEP_SEC=0.5
+RESEARCH_STEP_SEC=1.0   # shadow research sampling; was 0.25 s, CPU-bound host
 def _low_priority():
     try:_os.nice(15)
     except Exception:pass

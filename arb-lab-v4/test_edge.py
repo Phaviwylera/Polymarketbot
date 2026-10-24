@@ -258,6 +258,11 @@ class MomentumTuningTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(c);self.assertIn('1.0 bps',reason)
         self.m['impulse5Bps']=1.2;self.assertIsNotNone(self.e._momentum_signal(self.m)[0])
         self.m['impulse5Bps']=.6;self.assertIsNone(self.e._momentum_signal(self.m,True)[0])   # execution re-check too
+    def test_does_not_chase_a_large_book_move(self):
+        import poly_momentum;self.assertEqual(poly_momentum.MAX_BOOK_MOVE,.05)
+        e=self.e;now=time.time()
+        e.book_history.clear();e.book_history.append({'t':now-3,'marketSlug':'eth-test','up':.33,'down':.66,'upBid':.32})  # mid now .395: +6.5c
+        c,reason=e._momentum_signal(self.m);self.assertIsNone(c);self.assertIn('not chasing',reason)
     async def test_unearned_record_keeps_minimum_size(self):
         self.record([.5,-.6]*15)
         c,_=self.e._momentum_signal(self.m);c=self.e._momentum_size(c)

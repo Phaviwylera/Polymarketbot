@@ -18,6 +18,10 @@ MAX_ENTRY_PRICE=.45
 # older 32 (n=11) and -$0.46 on the newer 33 (n=11, 9% wins), while 1 bps+ made +$0.30 and +$0.28.
 # Within the current price/edge rules: below 1 bps n=7, 14% wins, -$0.37; 1 bps+ n=23, 83% wins, +$0.59.
 MIN_IMPULSE_BPS=1.0
+# V17.6: skip entries that chase a token price that already jumped. 69 trades with logged features,
+# split by time; cut chosen on the older half (book move < 5c: +$0.27/trade, 74% wins; >= 5c: +$0.01)
+# and validated on the newer half (< 5c: +$0.12, 53% wins; >= 5c: -$0.27, 25% wins).
+MAX_BOOK_MOVE=0.05
 # When the current rule set (12c edge floor + 45c ceiling) went live: V17.1 deploy, 2026-10-23 15:38 UTC.
 RULES_LIVE_AT=1792769880.0
 
@@ -52,6 +56,7 @@ def signal(context,history,allow_weak_impulse=False):
     if not prior:return reject('collecting two-second book confirmation')
     move=(ask+bid)/2-float(prior[-1][side])
     if move<tick/2-1e-9:return reject('token book does not confirm oracle momentum')
+    if move>=MAX_BOOK_MOVE-1e-9:return reject('token already moved 5c or more; not chasing')
     fair=float(m['fairUp'] if side=='up' else m['fairDown'])
     if fair<.55:return reject('estimated round direction does not confirm scalp direction')
     prior_bid=prior[-1].get(side+'Bid',float(prior[-1][side])-tick/2)
