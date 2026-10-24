@@ -515,3 +515,14 @@ class DrawdownEpochTests(unittest.TestCase):
         self.assertEqual(merge_release_recovery(old,live)['portfolio']['maxDrawdownUsd'],0.)
         same={**old,'portfolio':{'maxDrawdownUsd':3.33,'epochStart':100.}}
         self.assertEqual(merge_release_recovery(same,live)['portfolio']['maxDrawdownUsd'],3.33)
+
+class ClobSnapshotTests(unittest.TestCase):
+    def test_old_timestamp_book_snapshot_does_not_force_reconnect(self):
+        d=tempfile.TemporaryDirectory();self.addCleanup(d.cleanup)
+        e=mod.PolyServerDemo('ETH',80,state_file=Path(d.name)/'s.json');e._save=lambda:None;e._new_session();self.addCleanup(e.close)
+        e.market={'slug':'eth-t','upToken':'u','downToken':'d','startTs':time.time()-60,'endTs':time.time()+240}
+        old=str(int((time.time()-120)*1000));e._clob_connected_at=time.time()
+        e._handle_clob({'event_type':'book','asset_id':'u','timestamp':old,'bids':[{'price':'.40','size':'50'}],'asks':[{'price':'.41','size':'50'}]})
+        self.assertFalse(e._clob_resync_needed);self.assertEqual(e.bbo['up']['ask'],.41)
+        e._handle_clob({'event_type':'price_change','timestamp':old,'price_changes':[]})
+        self.assertGreater(e.stale_book_messages,0)        # stale incremental updates are still rejected

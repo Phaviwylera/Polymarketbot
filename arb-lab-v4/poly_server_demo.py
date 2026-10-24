@@ -384,7 +384,7 @@ class PolyServerDemo:
             try:
                 async with websockets.connect(CLOB_WS,ping_interval=None,close_timeout=2,max_size=2_000_000) as ws:
                     await ws.send(json.dumps({'type':'market','assets_ids':[up,down],'initial_dump':True,'custom_feature_enabled':True}))
-                    self.feed['clob']='live';self._clob_resync_needed=False;self._stale_book_run=0
+                    self.feed['clob']='live';self._clob_resync_needed=False;self._stale_book_run=0;self._clob_connected_at=time.time()
                     print('POLY_DEMO_CLOB_CONNECTED',self.market.get('slug'),flush=True)
                     async def pinger():
                         while True:
@@ -406,6 +406,9 @@ class PolyServerDemo:
             except Exception as e:
                 self._diagnostic('FEED_ERROR',feed='clob',error=repr(e))
                 self.feed['clob']='error:'+type(e).__name__
+                now=time.time()
+                if now-getattr(self,'_clob_err_logged',0)>=60:
+                    self._clob_err_logged=now;print('POLY_DEMO_CLOB_RECONNECT',self.lane,type(e).__name__,str(e)[:80],flush=True)
                 await asyncio.sleep(1)
 
     def _handle_clob(self,m):
@@ -421,7 +424,12 @@ class PolyServerDemo:
                 ts=float(m.get('timestamp') or received*1000);ts=ts/1000 if ts>1e12 else ts
                 lag=received-ts
             except Exception:lag=0.
-            if lag>5 or lag< -1:
+            # The 'book' snapshots sent right after subscribing carry the time the book last changed,
+            # routinely >15 s old in a quiet market. Treating that initial dump as a stale backlog forced a
+            # reconnect whose new dump was "stale" again: a reconnect loop every ~10-15 s. Snapshots in the
+            # first 5 s after connecting are current state; later delayed snapshots are still rejected.
+            initial_dump=et=='book' and received-getattr(self,'_clob_connected_at',0)<=5
+            if not initial_dump and (lag>5 or lag< -1):
                 self.stale_book_messages+=1;self._stale_book_run+=1
                 if received-self._last_stale_log>=1:
                     self._last_stale_log=received
