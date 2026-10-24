@@ -84,7 +84,8 @@
   const b=$('walletBadge');b.textContent=p.riskLocked?'PORTFOLIO LOCK':'PAPER ONLY';b.className='badge '+(p.riskLocked?'bad':'live');
   $('exposure').innerHTML=(p.assets||[]).map(a=>{const pos=s.assets?.[a.asset]?.paper?.position,cost=pos?Number(pos.entryTotalCost||0):0,eq=Number(a.equity||0),alloc=Number(a.allocation||1);
    const used=Math.min(100,100*cost/alloc),gain=Math.max(-100,Math.min(100,100*(eq-alloc)/alloc));
-   return `<div class="bar"><span><b style="color:${COL[a.asset]}">${NAME[a.asset]}</b><span>${money(eq)} / ${money(alloc,0)} · ${a.status}</span></span><div><i style="width:${Math.max(1,used)}%;background:${COL[a.asset]}"></i><i style="width:${Math.abs(gain)}%;background:${gain>=0?C.green:C.red};opacity:.55"></i></div></div>`;}).join('');
+   const paused=(p.pausedLanes||[]).includes(a.asset);
+   return `<div class="bar"${paused?' style="opacity:.5"':''}><span><b style="color:${COL[a.asset]}">${NAME[a.asset]}</b><span>${money(eq)} / ${money(alloc,0)} · ${paused?'paused':a.status}</span></span><div><i style="width:${Math.max(1,used)}%;background:${COL[a.asset]}"></i><i style="width:${Math.abs(gain)}%;background:${gain>=0?C.green:C.red};opacity:.55"></i></div></div>`;}).join('');
  }
 
  function rules(r){
@@ -271,6 +272,17 @@
  async function poll(){if(busy)return;busy=true;try{const r=await fetch('/api/poly/demo/server?all_assets=true',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);S=await r.json();ingest(S);render();}
   catch(e){const t=$('feedTag');t.textContent='RECONNECTING';t.className='tag';}finally{busy=false;setTimeout(poll,document.hidden?15000:2500);}}
  function clock(){const d=new Date();set('clock',d.toISOString().slice(11,19));set('clock2','UTC · '+d.toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour12:false})+' IST');}
- build();setInterval(clock,1000);clock();poll();requestAnimationFrame(shellFrame);
+ // ---------- phones: tap a panel header to fold it; heavy visuals start folded; choice remembered per viewer ----------
+ function foldable(){
+  const small=matchMedia('(max-width:820px)'),KEY='polyFold',HEAVY=['pGrid','pShell','pMatrix','pFlow'];
+  let saved=null;try{saved=JSON.parse(localStorage.getItem(KEY)||'null');}catch(e){}
+  const apply=()=>document.querySelectorAll('main .p[id]').forEach(el=>{const want=small.matches&&(saved&&el.id in saved?saved[el.id]:HEAVY.includes(el.id));el.classList.toggle('collapsed',want);});
+  document.querySelectorAll('main .p[id]>.ph').forEach(h=>h.addEventListener('click',ev=>{
+   if(!small.matches||ev.target.closest('button,a'))return;const el=h.parentElement,now=!el.classList.contains('collapsed');el.classList.toggle('collapsed',now);
+   saved=saved||{};saved[el.id]=now;try{localStorage.setItem(KEY,JSON.stringify(saved));}catch(e){}
+   if(!now)requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));}));
+  (small.addEventListener?small.addEventListener('change',apply):small.addListener(apply));apply();
+ }
+ build();foldable();setInterval(clock,1000);clock();poll();requestAnimationFrame(shellFrame);
  let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,120);});
 })();
