@@ -58,4 +58,37 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(c['bets'],100);self.assertFalse(c['modelBeatsMarket']);self.assertLess(c['brierSkillVsMarket'],0)
         self.assertEqual(c['model']['reliability'][0]['actualWinPct'],30.)
 
+class AuditV2Tests(unittest.TestCase):
+    def test_settled_trades_are_not_fee_or_price_errors(self):
+        t=trade(id='set',exitPrice=1.0,exitReason='verified settlement',holdSec=200.,feesUsd=5*pa.fee(.30))
+        r=pa.execution_audit([t])
+        self.assertTrue(r['clean']);self.assertEqual(r['marketRisk']['heldToSettlement'],1)
+    def test_stop_overshoot_is_market_risk_not_an_error(self):
+        r=pa.execution_audit([trade(stopOvershootUsd=.4)])
+        self.assertTrue(r['clean']);self.assertEqual(r['marketRisk']['stopOvershoot'],1)
+    def test_ledger_reconcile_catches_drift(self):
+        ok={'sessionId':'a','startedAt':10,'trades':1,'realizedPnl':.5,'startingBalance':60,'cash':60.5,'events':[{'action':'SELL','pnl':.5}]}
+        bad={'sessionId':'b','startedAt':10,'trades':2,'realizedPnl':.9,'startingBalance':60,'cash':60.0,'events':[{'action':'SELL','pnl':.5}]}
+        r=pa.ledger_reconcile([{'lane':'BTC','live':True,'paper':ok},{'lane':'ETH','live':True,'paper':bad}],0.,0.)
+        self.assertEqual(r['sessionsWithProblems'],1);self.assertEqual(r['problems'][0]['sessionId'],'b');self.assertEqual(len(r['problems'][0]['problems']),3)
+    def test_window_counts_explain_the_24_vs_29_gap(self):
+        rows=[{'entryAt':t,'pnl':.1} for t in (100,150,210,260,300)]
+        w=pa.window_counts(rows,epoch=200,rules_live_at=120)
+        self.assertEqual((w['sinceFreshStart'],w['sinceRulesLive'],w['betweenTheTwoTimes']),(3,4,1));self.assertTrue(w['explained'])
+    def test_block_bootstrap_keeps_a_round_together(self):
+        rows=[{'entryAt':r*300+k,'pnl':1. if r%2 else -1.} for r in range(10) for k in range(3)]
+        b=pa.block_bootstrap_mean(rows);self.assertEqual(b['blocks'],10);self.assertEqual(b['trades'],30)
+    def test_stress_makes_exits_worse(self):
+        st=pa.stress([{'pnl':.3,'exit':.4},{'pnl':-.2,'exit':.2},{'pnl':.6,'exit':1.0}])
+        self.assertLess(st['exitWorseBy1Tick']['netPnlUsd'],st['exitWorseBy0Tick']['netPnlUsd'])
+        self.assertLess(st['exitWorseBy2Tick']['netPnlUsd'],st['exitWorseBy1Tick']['netPnlUsd'])
+    def test_verdict_blocks_on_fragile_edge_and_errors(self):
+        rows=[{'entryAt':i*300,'entry':.3,'estEdge':.2,'pnl':.4 if i%4 else -.2,'exit':.4,'mode':'MOMENTUM_SCALP'} for i in range(200)]
+        wf=pa.walk_forward(rows);oos=wf.pop('_oosRows');wf['outOfSampleBlockBootstrap']=pa.block_bootstrap_mean(oos);wf['stressOutOfSample']=pa.stress(oos)
+        self.assertEqual(pa.verdict(wf,{'clean':True,'errors':{}},{'sessionsWithProblems':0})['status'],'PASS')
+        v=pa.verdict(wf,{'clean':False,'errors':{'feeMismatch':1}},{'sessionsWithProblems':2})
+        self.assertEqual(v['status'],'FAIL');self.assertTrue(any('execution' in r for r in v['reasons']));self.assertTrue(any('ledger' in r for r in v['reasons']))
+        wf['stressOutOfSample']={'exitWorseBy1Tick':{'avgPnlUsd':-.01}}
+        self.assertTrue(any('1 tick worse' in r for r in pa.verdict(wf)['reasons']))
+
 if __name__=='__main__':unittest.main()

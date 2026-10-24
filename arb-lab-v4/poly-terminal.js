@@ -104,12 +104,15 @@
   try{const a=await (await fetch('/api/poly/audit',{cache:'no-store'})).json(),tb=document.querySelector('#auditTbl tbody');if(!tb)return;
    const v=a.verdict||{},wf=a.walkForward||{},o=wf.outOfSample||{},b=wf.outOfSampleBootstrap||{},ex=a.execution||{},mm=a.modelVsMarket||{};
    const ci=b.lower95==null?'—':`${signed(b.lower95,2)} … ${signed(b.upper95,2)}`;
-   const flags=Object.entries(ex.flagCounts||{}).filter(([k,n])=>n).map(([k,n])=>`${k} ${n}`).join(', ')||'none';
+   const list=o2=>Object.entries(o2||{}).filter(([k,n])=>n).map(([k,n])=>`${k} ${n}`).join(', ')||'none';
+   const lg=a.ledger||{},tw=lg.tradeWindows||{},bb=wf.outOfSampleBlockBootstrap||{},st=(wf.stressOutOfSample||{}).exitWorseBy1Tick||{};
    tb.innerHTML=[['VERDICT',`<b class="${v.status==='PASS'?'pos':'neg'}">${v.status||'—'}</b> ${(v.reasons||[])[0]||'all pre-set criteria met'}`],
     ['OUT-OF-SAMPLE',`${o.trades||0} trades · avg ${signed(o.avgPnlUsd,2)} · 95% ${ci} · folds ${wf.foldsNonNegative??'—'}/${wf.foldsTraded??'—'} ≥ 0`],
     ['TAKE-ALL BASE',`${wf.baselineTakeAll?.trades||0} trades · avg ${signed(wf.baselineTakeAll?.avgPnlUsd,2)}`],
     ['MODEL vs MARKET',mm.bets?`Brier ${mm.model.brier} vs ${mm.marketPrice.brier} · skill ${(100*mm.brierSkillVsMarket).toFixed(0)}% ${mm.modelBeatsMarket?'(model better)':'(market better)'}`:'collecting'],
-    ['FILL AUDIT',`${ex.trades||0} trades · fees ${ex.totals?.feesShareOfGrossPct??'—'}% of gross · flags: ${flags}`]]
+    ['ROBUSTNESS',`block 95% ${bb.lower95==null?'—':signed(bb.lower95,2)+' … '+signed(bb.upper95,2)} (${bb.blocks||0} rounds) · exits 1 tick worse: avg ${signed(st.avgPnlUsd,2)}`],
+    ['FILL AUDIT',`${ex.trades||0} trades · fees ${ex.totals?.feesShareOfGrossPct??'—'}% of gross · errors: ${list(ex.errors)} · market risk: ${list(ex.marketRisk)}`],
+    ['LEDGER',`${lg.sessions||0} sessions · ${lg.sessionsWithProblems||0} don't reconcile · since reset ${tw.sinceFreshStart??'—'} trades, since rules ${tw.sinceRulesLive??'—'} (gap ${tw.betweenTheTwoTimes??'—'} ${tw.explained?'explained':'UNEXPLAINED'})`]]
     .map(([k,x])=>`<tr><td>${k}</td><td style="text-align:left">${x}</td></tr>`).join('');
   }catch(e){auditAt=Date.now()-540000;}
  }
