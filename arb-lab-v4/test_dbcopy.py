@@ -35,4 +35,20 @@ class CopyTests(unittest.IsolatedAsyncioTestCase):
         # the next copy restores the missing row but cannot repair a changed one: verification fails loudly
         r=await poly_dbcopy.copy_database(SRC,DST,SCHEMA,log=lambda *_:None);self.assertFalse(r['ok']);self.assertIn('SHADOW_OUTCOME',r['mismatchedKinds'])
 
+    async def test_epoch_timestamps_and_rows_written_during_the_copy(self):
+        await self.src.execute('DELETE FROM poly_v161_events')
+        await self.src.executemany('INSERT INTO poly_v161_events VALUES($1,$2,$3,$4,$5::jsonb)',
+            [(f'e:{i}',1792882228.3167875+i*0.0137,'ETH','DECISION_SAMPLE','{}') for i in range(30000)])
+        r=await poly_dbcopy.copy_database(SRC,DST,SCHEMA,log=lambda *_:None);self.assertTrue(r['ok'],r['mismatchedKinds'])
+        # a row the live bot writes after the copy's horizon does not fail verification of what was copied
+        await self.src.execute("INSERT INTO poly_v161_events VALUES('late',1792999999,'ETH','DECISION_SAMPLE','{}')")
+        a=await poly_dbcopy._summary(self.src,r['verifiedUpToT']);b=await poly_dbcopy._summary(self.dst,r['verifiedUpToT'])
+        self.assertEqual(a['events'],b['events'])
+
+    async def test_source_retention_pruning_is_mirrored(self):
+        await poly_dbcopy.copy_database(SRC,DST,SCHEMA,log=lambda *_:None)
+        await self.src.execute("DELETE FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' AND t<1100")   # the bot's prune
+        r=await poly_dbcopy.copy_database(SRC,DST,SCHEMA,log=lambda *_:None)
+        self.assertTrue(r['ok'],r['mismatchedKinds']);self.assertGreater(r['prunedToMatchSource'],0)
+
 if __name__=='__main__':unittest.main()

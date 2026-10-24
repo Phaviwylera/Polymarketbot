@@ -20,10 +20,14 @@ async def _connect(url):
     import asyncpg
     return await asyncpg.connect(url,timeout=20,command_timeout=60)
 
-async def _summary(conn):
+async def _summary(conn,cutoff=None):
+    """Exact per-kind checksums. sum(t) is taken as NUMERIC (float sums of ~30k epoch timestamps differ in
+    the last digits with row order) and only over events at or before `cutoff`, because the live bot keeps
+    writing new events while the copy runs."""
     states={r['name']:float(r['updated_at']) for r in await conn.fetch('SELECT name,updated_at FROM poly_v161_state')}
-    kinds={r['kind']:{'rows':int(r['n']),'sumT':round(float(r['s'] or 0),3),'maxT':round(float(r['m'] or 0),3)}
-           for r in await conn.fetch('SELECT kind,count(*) n,sum(t) s,max(t) m FROM poly_v161_events GROUP BY kind')}
+    q='SELECT kind,count(*) n,sum(t::numeric) s,max(t) m FROM poly_v161_events'+(' WHERE t<=$1' if cutoff is not None else '')+' GROUP BY kind'
+    rows=await conn.fetch(q,cutoff) if cutoff is not None else await conn.fetch(q)
+    kinds={r['kind']:{'rows':int(r['n']),'sumT':str(round(r['s'] or 0,3)),'maxT':float(r['m'] or 0)} for r in rows}
     return {'stateRows':states,'events':kinds,'eventRows':sum(k['rows'] for k in kinds.values())}
 
 async def _portfolio(conn):
@@ -49,6 +53,7 @@ async def copy_database(source_url,target_url,schema,log=print):
     started=time.time();src=await _connect(source_url);dst=await _connect(target_url)
     try:
         await dst.execute(schema)
+        cutoff=float(await src.fetchval('SELECT coalesce(max(t),0) FROM poly_v161_events'))   # verification horizon
         states=await src.fetch('SELECT name,updated_at,payload::text AS payload FROM poly_v161_state')
         async with dst.transaction():
             for r in states:
@@ -62,14 +67,19 @@ async def copy_database(source_url,target_url,schema,log=print):
                                   [(r['id'],r['t'],r['asset'],r['kind'],r['payload']) for r in rows])
             copied+=len(rows);last_t=float(rows[-1]['t']);last_id=rows[-1]['id']
             await asyncio.sleep(.05)
-        a=await _summary(src);b=await _summary(dst)
+        # Mirror the bot's retention pruning: per kind, drop target rows older than the oldest the source keeps.
+        pruned=0
+        for r in await src.fetch('SELECT kind,min(t) m FROM poly_v161_events GROUP BY kind'):
+            res=await dst.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t<$2',r['kind'],r['m'])
+            pruned+=int(res.split()[-1]) if res.startswith('DELETE') else 0
+        a=await _summary(src,cutoff);b=await _summary(dst,cutoff)
         mismatched=[k for k,v in a['events'].items() if b['events'].get(k)!=v]
         missing_state=[k for k in a['stateRows'] if k not in b['stateRows']]
         pa=await _portfolio(src);pb=await _portfolio(dst)
         restore=await restore_check(dst)
         ok=not mismatched and not missing_state and pa==pb and all(v!='absent' for k,v in restore.items() if k=='paper')
-        report={'ok':ok,'at':time.time(),'seconds':round(time.time()-started,1),'stateRows':len(a['stateRows']),'eventRows':a['eventRows'],
-                'eventRowsTarget':b['eventRows'],'copiedEventRows':copied,'mismatchedKinds':mismatched,'missingStateRows':missing_state,
+        report={'ok':ok,'at':time.time(),'verifiedUpToT':cutoff,'seconds':round(time.time()-started,1),'stateRows':len(a['stateRows']),'eventRows':a['eventRows'],
+                'eventRowsTarget':b['eventRows'],'copiedEventRows':copied,'prunedToMatchSource':pruned,'mismatchedKinds':mismatched,'missingStateRows':missing_state,
                 'portfolioMatches':pa==pb,'portfolio':pa,'restoreCheck':restore}
         log('POLY_BACKUP '+json.dumps(report,separators=(',',':'),default=str))
         return report
