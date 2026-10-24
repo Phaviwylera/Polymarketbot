@@ -315,7 +315,10 @@ class PaperPortfolio:
                 known={r.get('id') for r in self.research.rows}
                 for r in self.handover_rows:
                     if isinstance(r,dict) and r.get('id') and r['id'] not in known:known.add(r['id']);self.research.rows.append(r)
-            self.research.start()
+            # POLY_RESEARCH=0 keeps the research data (labels, model, maker record) but runs none of its
+            # background work: it never trades, and on the 0.1-CPU host it competed with the trading loop.
+            if os.environ.get('POLY_RESEARCH','1')!='0':self.research.start()
+            else:print('POLY_RESEARCH_PAUSED',flush=True)
 
     def _lane_results(self):
         """Closed-trade results per traded market since the fresh start, keyed like the scout ('btc-5m')."""

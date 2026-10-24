@@ -531,3 +531,16 @@ class ClobSnapshotTests(unittest.TestCase):
         self.assertFalse(e._clob_resync_needed);self.assertEqual(e.bbo['up']['ask'],.41)
         e._handle_clob({'event_type':'price_change','timestamp':old,'price_changes':[]})
         self.assertGreater(e.stale_book_messages,0)        # stale incremental updates are still rejected
+
+class PauseFlagTests(unittest.IsolatedAsyncioTestCase):
+    async def test_research_and_wallet_study_can_be_paused_without_breaking_snapshots(self):
+        import os,poly_portfolio
+        d=tempfile.TemporaryDirectory();self.addCleanup(d.cleanup)
+        with patch.dict(os.environ,{'POLY_DATA_DIR':d.name,'POLY_RESEARCH':'0','POLY_WALLET_STUDY':'0'}):
+            p=poly_portfolio.PaperPortfolio();p.data_root=Path(d.name)
+            for e in p.engines.values():e._save=lambda:None;e._new_session()
+            p.start_research();self.assertEqual(p.research.tasks,[])
+            p.edge.start();self.addAsyncCleanup(p.edge.close)
+            self.assertEqual([t.get_name() for t in p.edge.tasks],['edge-resolver'])
+            self.assertIn('research',p.snapshot());p.research.restore_pairs({})
+            await p.research.close()

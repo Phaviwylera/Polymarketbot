@@ -395,9 +395,11 @@ class EdgeLab:
             await asyncio.sleep(20)   # was 10 s: fewer large JSON parses on the small CPU
     def start(self):
         if self.tasks:return
-        self.tasks=[asyncio.create_task(self.resolver(),name='edge-resolver'),
-                    asyncio.create_task(self.studier(),name='edge-studier'),
-                    asyncio.create_task(self.watcher(),name='edge-watcher')]
+        import os
+        self.tasks=[asyncio.create_task(self.resolver(),name='edge-resolver')]   # settles shadow bets: always on
+        # POLY_WALLET_STUDY=0 pauses the wallet study (large trade-history downloads); smart-flow inputs read 0.
+        if os.environ.get('POLY_WALLET_STUDY','1')!='0':
+            self.tasks+=[asyncio.create_task(self.studier(),name='edge-studier'),asyncio.create_task(self.watcher(),name='edge-watcher')]
     async def close(self):
         for t in self.tasks:t.cancel()
         await asyncio.gather(*self.tasks,return_exceptions=True);self.tasks=[]
