@@ -1,30 +1,30 @@
 {
- "at": 1792885267.0810585,
- "atUtc": "2026-10-24 23:41:07",
- "uptimeSec": 120,
+ "at": 1792886171.8486686,
+ "atUtc": "2026-10-24 23:56:11",
+ "uptimeSec": 1025,
  "host": "aws-ec2-t4g.small",
  "revision": "27bb484",
  "hostStats": {
   "loadAvg": [
-   0.14,
-   0.24,
-   0.11
+   0.17,
+   0.15,
+   0.1
   ],
   "memTotalMb": 1835,
-  "memAvailableMb": 1395,
-  "processRssMb": 65,
+  "memAvailableMb": 1240,
+  "processRssMb": 230,
   "cpuCount": 2
  },
  "portfolio": {
-  "accountEquity": 0.0,
-  "accountPnl": -200.0,
-  "equity": 0,
-  "realizedPnl": 0,
+  "accountEquity": 195.44375,
+  "accountPnl": -4.556249999999999,
+  "equity": 200.0,
+  "realizedPnl": 0.0,
   "trades": 0,
-  "lifetimeRealizedPnl": 0,
-  "lifetimeTrades": 0,
-  "epochPnl": null,
-  "maxDrawdownUsd": 0.0,
+  "lifetimeRealizedPnl": -4.556249999999999,
+  "lifetimeTrades": 26,
+  "epochPnl": -4.556249999999999,
+  "maxDrawdownUsd": 3.333200000000005,
   "riskLocked": false,
   "guard": {
    "reason": null,
@@ -39,56 +39,56 @@
  "lanes": {
   "BTC": {
    "feed": {
-    "market": "warming",
-    "clob": "warming",
-    "rtds": "warming"
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
    },
    "paused": false,
-   "decision": "warming momentum data",
+   "decision": "oracle lead below 0.20 bps",
    "position": null
   },
   "ETH": {
    "feed": {
-    "market": "warming",
-    "clob": "warming",
-    "rtds": "warming"
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
    },
    "paused": false,
-   "decision": "warming momentum data",
+   "decision": "oracle impulse below 1.0 bps",
    "position": null
   },
   "BTC15": {
    "feed": {
-    "market": "warming",
-    "clob": "warming",
-    "rtds": "warming"
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
    },
    "paused": false,
-   "decision": "warming momentum data",
+   "decision": "oracle lead below 0.20 bps",
    "position": null
   },
   "ETH15": {
    "feed": {
-    "market": "warming",
-    "clob": "warming",
-    "rtds": "warming"
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
    },
    "paused": false,
-   "decision": "warming momentum data",
+   "decision": "oracle impulse below 1.0 bps",
    "position": null
   }
  },
  "storage": {
   "configured": true,
   "backend": "postgresql",
-  "state": "standby",
-  "writer": false,
-  "active": false,
-  "checkpointAt": null,
-  "checkpointAgeSec": null,
+  "state": "healthy",
+  "writer": true,
+  "active": true,
+  "checkpointAt": 1792886166.6394184,
+  "checkpointAgeSec": 5.218739986419678,
   "queuedEvents": 0,
-  "lastFlushSec": 0.0,
-  "eventsSavedThisBoot": 0,
+  "lastFlushSec": 0.043,
+  "eventsSavedThisBoot": 276,
   "errors": 0,
   "lastError": null,
   "droppedEvents": 0,
@@ -99,76 +99,87 @@
   "backupConfigured": false,
   "lastBackupAt": null,
   "lastBackupOk": null,
-  "baselineStored": false
+  "baselineStored": true
  },
  "audit": {
   "verdict": "FAIL",
   "why": [
-   "only 0 out-of-sample trades (need 60)",
-   "out-of-sample mean None is not above 0",
-   "bootstrap 95% lower bound None is not above 0"
+   "only 51 out-of-sample trades (need 60)",
+   "block bootstrap 95% lower bound -0.003 is not above 0",
+   "3/6 folds non-negative (need 60%)"
   ],
   "oos": [
-   0,
-   null,
-   0.0,
-   null,
-   null
+   51,
+   0.2455,
+   12.5182,
+   -0.0067,
+   0.5031
   ],
   "oosBlock": [
-   null,
-   null,
-   null
+   -0.003,
+   0.4929,
+   45
   ],
-  "stress1tick": null,
+  "stress1tick": 0.1971,
   "ledger": [
-   0,
+   44,
    0,
    {
-    "sinceFreshStart": 0,
-    "sinceRulesLive": 0,
-    "betweenTheTwoTimes": 0,
+    "sinceFreshStart": 26,
+    "sinceRulesLive": 32,
+    "betweenTheTwoTimes": 6,
     "explained": true
    }
   ],
   "takeAll": [
-   0,
-   null
+   97,
+   0.0858
   ],
-  "folds": "0/0",
+  "folds": "3/6",
   "live": [
-   0,
-   null,
-   null
+   31,
+   -0.0914,
+   -0.3111
   ],
   "exec": {
-   "trades": 0,
-   "clean": false,
+   "trades": 55,
+   "clean": true,
    "errors": {},
-   "risk": {}
+   "risk": {
+    "stopOvershoot": 17,
+    "heldToSettlement": 1,
+    "exitDelayed": 1
+   }
   },
   "errorIds": {},
   "errorTrades": [],
   "ledgerProblems": [],
   "stops": {
-   "stops": 0,
-   "overshootsAbove5c": 0,
-   "overshootShareFromGapBeforeTriggerPct": null,
-   "overshootShareAfterTriggerPct": null,
-   "withEntryChase": 0,
-   "causeCounts": {}
+   "stops": 54,
+   "overshootsAbove5c": 41,
+   "overshootShareFromGapBeforeTriggerPct": 39.4,
+   "overshootShareAfterTriggerPct": 8.6,
+   "withEntryChase": 6,
+   "causeCounts": {
+    "unexplained with the recorded evidence": 20,
+    "price gapped past the stop between book updates": 15,
+    "low-priced token": 8,
+    "entered after the token had already moved 5c+": 6,
+    "1 exit retry": 3,
+    "bids fell during the 350 ms exit latency / 2-tick walk": 3
+   }
   },
   "expA": {
-   "trades": null,
-   "meanDifferencePerTrade": null,
-   "exitedEarlier": null,
-   "missedRecoveries": null,
-   "savedOnStops": null
+   "trades": 1,
+   "meanDifferencePerTrade": 0.1944,
+   "exitedEarlier": 1,
+   "missedRecoveries": 0,
+   "savedOnStops": 0.1944
   },
   "expB": {
-   "trades": null,
-   "rejectRatePct": null,
-   "rejectedStops": null
+   "trades": 1,
+   "rejectRatePct": 0.0,
+   "rejectedStops": 0
   },
   "config": {
    "strategyVersion": "momentum-17.8",
@@ -176,15 +187,20 @@
    "experimentsHash": "96ff8357b1ea"
   },
   "alerts": [
-   "database: no verified backup recorded yet"
+   "database: no verified backup recorded yet",
+   "1 scalp(s) held to settlement"
   ],
   "model": [
-   0,
-   null,
-   null,
-   null
+   691,
+   0.2504,
+   0.2169,
+   -0.1544
   ]
  },
- "cpuProfile": null,
- "recentLog": []
+ "cpuProfile": "{\"seconds\":300,\"samples\":5954,\"busyPct\":11.5,\"self\":[[\"selector_events.py:_read_ready__get_buffer\",44.7],[\"ssl.py:read\",31.1],[\"pathlib.py:open\",6.0],[\"encoders.py:jsonable_encoder\",3.2],[\"poly_diagnostics.py:append\",2.5],[\"ssl.py:write\",2.0],[\"dataclasses.py:is_dataclass\",1.5],[\"encoder.py:iterencode\",1.5],[\"selector_events.py:write\",0.9],[\"_decoders.py:decode\",0.7],[\"<frozen importlib._bootstrap_external>:_path_stat\",0.7],[\"copy.py:deepcopy\",0.7],[\"copy.py:_deepcopy_dict\",0.4],[\"poly_edge.py:stats\",0.4]],\"inclusive\":[[\"server.py:run\",100.0],[\"main.py:run\",100.0],[\"main.py:main\",100.0],[\"core.py:invoke\",100.0],[\"core.py:main\",100.0],[\"core.py:__call__\",100.0],[\"uvicorn:<module>\",100.0],[\"selector_events.py:_read_ready__get_buffer\",75.4],[\"selector_events.py:_read_ready\",75.4],[\"ssl.py:read\",31.1],[\"sslproto.py:_do_read__copied\",31.1],[\"sslproto.py:_do_read\",31.1],[\"sslproto.py:buffer_updated\",30.7],[\"poly_server_demo.py:engine_worker\",7.5]]}",
+ "recentLog": [
+  "23:44:07 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-10-24 23:44:07\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"healthy\",\"checkpointAgeSec\":2.565654993057251,\"errors\":0,\"lastError\":null,\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":-4.5562,\"lifetimeTrades\":26,\"epochStart\":1792782893.0,\"archivedRealizedPnl\":15.2056,",
+  "23:49:07 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-10-24 23:49:07\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"healthy\",\"checkpointAgeSec\":2.4392223358154297,\"errors\":0,\"lastError\":null,\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":-4.5562,\"lifetimeTrades\":26,\"epochStart\":1792782893.0,\"archivedRealizedPnl\":15.2056",
+  "23:54:07 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-10-24 23:54:07\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"healthy\",\"checkpointAgeSec\":2.009768486022949,\"errors\":0,\"lastError\":null,\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":-4.5562,\"lifetimeTrades\":26,\"epochStart\":1792782893.0,\"archivedRealizedPnl\":15.2056,"
+ ]
 }
