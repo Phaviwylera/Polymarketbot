@@ -199,7 +199,8 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             p.engines['ETH'].inventory_stop=.1   # a stop inside the spread+fee friction labels probes immediately
             before={a:copy.deepcopy(e.paper) for a,e in p.engines.items()};manager=audit.DiagnosticDownloads()
             try:
-                with patch.object(ExchangeFeeds,'worker',parked),patch.object(SemanticResearch,'worker',parked):
+                import poly_shadow
+                with patch.object(ExchangeFeeds,'worker',parked),patch.object(SemanticResearch,'worker',parked),patch.object(poly_shadow,'RESEARCH_STEP_SEC',.25):
                     p.start_research();await asyncio.sleep(1.8)
                     self.assertGreater(p.research.snapshot()['labelledSamples'],0)
                     for a,e in p.engines.items():self.assertEqual(e.paper,before[a])
