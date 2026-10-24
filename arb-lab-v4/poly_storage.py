@@ -7,6 +7,7 @@ import asyncio,copy,json,os,time,base64,gzip
 from collections import deque
 
 LOCK_ID=161000702
+BASELINE_ROW='baseline_2026_10_25'
 HEALTH_WINDOW_SEC=20.0   # entries pause when the last durable commit is older than this
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS poly_v161_state (
@@ -32,6 +33,7 @@ class DurableStore:
         self.conn=None;self.task=None;self.owner=False;self.active=False;self.ready=False;self.last_commit=0.
         self.queue=deque();self.errors=0;self.last_error=None;self.dropped=0;self.saved=0;self.standby=None
         self.commits=0;self.closed=False;self.restored_rows=[];self.restored_model=None
+        self.last_backup=None;self.backup_task=None;self.baseline=None;self.pending_baseline=None
         self.engine.storage=self
         for lane in engine.engines.values():lane.operational_guard=self.entry_allowed
     def status(self):
@@ -43,7 +45,9 @@ class DurableStore:
                 'lastError':self.last_error,'droppedEvents':self.dropped,
                 'databaseExpiresAt':os.getenv('POLY_DATABASE_EXPIRES_AT') or None,
                 'coverage':'Paper checkpoints, research labels, model artifact, attribution, sampled decisions and EdgeLab learning (calibration, strategy record, wallet study); raw feed spool stays local.',
-                'checkpointTargetSec':2,'rawFeedDurable':False}
+                'checkpointTargetSec':2,'rawFeedDurable':False,
+                'backupConfigured':bool(os.getenv('POLY_BACKUP_URL')),'lastBackupAt':(self.last_backup or {}).get('at'),
+                'lastBackupOk':(self.last_backup or {}).get('ok'),'baselineStored':bool(self.baseline)}
     def entry_allowed(self):
         return not self.url or bool(self.owner and self.active and self.ready and not self.dropped and time.time()-self.last_commit<HEALTH_WINDOW_SEC)
     def enqueue(self,event):
@@ -64,6 +68,21 @@ class DurableStore:
         if not self.url:
             await self.engine.start();self.engine.start_research();self.active=True;return
         self.task=asyncio.create_task(self.worker(),name='v161-durable-owner')
+        if os.getenv('POLY_BACKUP_URL'):self.backup_task=asyncio.create_task(self.backup_worker(),name='v161-backup')
+    async def backup_worker(self):
+        """Daily verified copy to POLY_BACKUP_URL (also the migration path). Never logs a URL."""
+        import poly_dbcopy
+        target=os.getenv('POLY_BACKUP_URL','')
+        if not target or target==self.url:
+            print('POLY_BACKUP_REFUSED target missing or equal to the primary database',flush=True);return
+        await asyncio.sleep(float(os.getenv('POLY_BACKUP_FIRST_DELAY_SEC','600')))
+        while not self.closed:
+            try:
+                if self.active:self.last_backup=await poly_dbcopy.copy_database(self.url,target,SCHEMA)
+            except asyncio.CancelledError:raise
+            except Exception as exc:
+                self.last_backup={'ok':False,'at':None,'error':type(exc).__name__};print('POLY_BACKUP_ERROR',type(exc).__name__,flush=True)
+            await asyncio.sleep(86400 if (self.last_backup or {}).get('ok') else 3600)
     async def connect(self):
         import asyncpg
         self.step='connect';self.conn=await asyncpg.connect(self.url,timeout=15,command_timeout=8)
@@ -83,6 +102,8 @@ class DurableStore:
         labels=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' ORDER BY t DESC LIMIT 12000",timeout=T)
         model_raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='model'",timeout=T)
         records=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='TRADE_ATTRIBUTION' ORDER BY t DESC LIMIT 5000",timeout=T)
+        b=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name=$1",BASELINE_ROW,timeout=T)
+        if b:self.baseline=json.loads(b) if isinstance(b,str) else b
         self.engine.durable_recovery=recovery
         edge=getattr(self.engine,'edge',None)
         if edge is not None and edge_raw:edge.restore(json.loads(edge_raw) if isinstance(edge_raw,str) else edge_raw)
@@ -127,6 +148,11 @@ class DurableStore:
             # 2s checkpoint made commits slow enough to trip the 10s health window and pause entries.
             if artifact is not None and artifact is getattr(self,'_saved_artifact',None):artifact=None
             if artifact:await self.conn.execute("INSERT INTO poly_v161_state VALUES('model',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(artifact,separators=(',',':'),allow_nan=False),timeout=30)
+            if self.pending_baseline is not None and self.baseline is None:
+                # Immutable: written once; a later deploy can never overwrite the frozen baseline.
+                await self.conn.execute("INSERT INTO poly_v161_state VALUES($1,$2,$3::jsonb) ON CONFLICT(name) DO NOTHING",BASELINE_ROW,now,
+                                        json.dumps(self.pending_baseline,separators=(',',':'),allow_nan=False,default=str),timeout=30)
+                self.baseline=self.pending_baseline;self.pending_baseline=None;print('POLY_BASELINE_STORED',BASELINE_ROW,flush=True)
             edge=getattr(self.engine,'edge',None)
             if edge is not None and self.commits%15==0:
                 await self.conn.execute("INSERT INTO poly_v161_state VALUES('edge',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(edge.export(),separators=(',',':'),allow_nan=False),timeout=30)
@@ -166,6 +192,7 @@ class DurableStore:
             await asyncio.sleep(5)   # checkpoint cadence (health window is 20 s); 3 s cost CPU the feeds needed
     async def close(self):
         self.closed=True
+        if self.backup_task:self.backup_task.cancel()
         if self.task:self.task.cancel();await asyncio.gather(self.task,return_exceptions=True)
         if self.active:await self.engine.shutdown();self.active=False
         if self.owner and self.conn and not self.conn.is_closed():

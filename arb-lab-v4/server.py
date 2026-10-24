@@ -864,11 +864,29 @@ async def _audit(force=False):
 async def poly_audit_endpoint():
     return await _audit()
 
+@app.get("/api/poly/baseline")
+async def poly_baseline_endpoint():
+    """The frozen 2026-10-25 baseline (stored once in the database) and the strategy identity running now."""
+    import poly_strategy
+    st=getattr(poly_server_engine,'storage',None);b=getattr(st,'baseline',None)
+    return {'running':poly_strategy.identity(),'baseline':b,'stored':b is not None}
+
+def _baseline_payload(rep):
+    """Frozen baseline: identity, code revision, the full trade history and the audit at freeze time."""
+    import poly_strategy,poly_devlog
+    return {'identity':poly_strategy.identity(),'renderCommit':os.getenv('RENDER_GIT_COMMIT'),'capturedAt':time.time(),
+            'trades':poly_devlog.trade_rows(poly_server_engine),'attribution':list(poly_server_engine.attribution.rows),
+            'audit':{k:rep.get(k) for k in ('verdict','walkForward','liveRules','execution','ledger','modelVsMarket','stopForensics')}}
+
 async def _audit_printer():
     import poly_audit
     await asyncio.sleep(240)
     while True:
-        try:print('POLY_AUDIT '+json.dumps(poly_audit.compact(await _audit(force=True)),separators=(',',':'),default=str),flush=True)
+        try:
+            rep=await _audit(force=True)
+            st=getattr(poly_server_engine,'storage',None)
+            if st is not None and st.baseline is None and st.pending_baseline is None and st.active:st.pending_baseline=_baseline_payload(rep)
+            print('POLY_AUDIT '+json.dumps(poly_audit.compact(rep),separators=(',',':'),default=str),flush=True)
         except Exception as exc:print('POLY_AUDIT_ERROR',type(exc).__name__,str(exc)[:120],flush=True)
         await asyncio.sleep(3600)
 
