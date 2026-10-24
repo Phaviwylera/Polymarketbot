@@ -163,7 +163,7 @@ class DurableStore:
                     try:await self.conn.close(timeout=2)
                     except Exception:pass
                 self.conn=None
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)   # checkpoint cadence (health window is 20 s)
     async def close(self):
         self.closed=True
         if self.task:self.task.cancel();await asyncio.gather(self.task,return_exceptions=True)

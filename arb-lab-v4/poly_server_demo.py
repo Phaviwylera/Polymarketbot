@@ -2112,7 +2112,9 @@ class PolyServerDemo:
 
     def _save(self):
         now=time.time()
-        if now-self._last_saved_at<1:return
+        # Every 5 s (was 1 s): a full JSON snapshot per lane per second was a large share of the
+        # 0.1-CPU budget; the durable copy lives in Postgres and is checkpointed separately.
+        if now-self._last_saved_at<5:return
         self._last_saved_at=now
         try:self.state_file.write_text(json.dumps(self.snapshot(),separators=(',',':')),encoding='utf-8')
         except Exception as exc:self._diagnostic('STATE_SAVE_ERROR',error=repr(exc))
@@ -2131,7 +2133,7 @@ class PolyServerDemo:
             p=self.paper
             if not p:continue
             now=time.time()
-            if now-self.last_diagnostic_state>=1:
+            if now-self.last_diagnostic_state>=5:   # was every 1 s per lane
                 self.last_diagnostic_state=now
                 self._diagnostic('STATE',context=self._diagnostic_context())
             if now-getattr(self,'last_decision_sample',0)>=15:
