@@ -894,6 +894,20 @@ async def _audit_printer():
 async def start_audit_printer():
     if POLY_ENGINE_ROLE!='frontend':asyncio.create_task(_audit_printer())
 
+_status_tee=None
+@app.on_event('startup')
+async def start_status_report():
+    """POLY_STATUS_GH_TOKEN set (e.g. on EC2): publish health/audit snapshots to a GitHub branch."""
+    global _status_tee
+    token=os.getenv('POLY_STATUS_GH_TOKEN','')
+    if not token or POLY_ENGINE_ROLE=='frontend':return
+    import poly_status_report as sr,poly_audit
+    _status_tee=sr.install_tee()
+    pub=sr.GitHubPublisher(token,os.getenv('POLY_STATUS_REPO','Phaviwylera/polymarketbot'),os.getenv('POLY_STATUS_BRANCH','bot-status'))
+    async def compact():return poly_audit.compact(await _audit())
+    asyncio.create_task(sr.run(poly_server_engine,compact,_status_tee,time.time(),pub))
+    print('POLY_STATUS_REPORT_ON',flush=True)
+
 @app.get("/api/poly/edge")
 async def poly_edge():
     return poly_server_engine.edge.snapshot(200.)
