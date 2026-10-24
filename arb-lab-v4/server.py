@@ -651,6 +651,8 @@ async def _loop_watchdog():
 @app.on_event('startup')
 async def start_loop_watchdog():
     asyncio.create_task(_loop_watchdog())
+    if os.getenv('POLY_SAMPLER','1')!='0':
+        import poly_sampler;poly_sampler.Sampler().start();print('POLY_SAMPLER_ON',flush=True)
 
 @app.on_event('startup')
 async def verify_jito_block_engine():

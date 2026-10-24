@@ -77,4 +77,20 @@ class HttpClientReuseTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNot(e._http(),c1)   # a closed client is replaced
             await e._http().aclose()
 
+class SamplerTests(unittest.TestCase):
+    def test_counts_busy_functions_and_reports(self):
+        import threading,poly_sampler
+        done=threading.Event();ids={}
+        def hot():
+            ids['t']=threading.get_ident();x=0
+            while not done.is_set():x+=1
+        t=threading.Thread(target=hot);t.start()
+        while 't' not in ids:time.sleep(.001)
+        s=poly_sampler.Sampler(ids['t'])
+        for _ in range(30):s.sample_once();time.sleep(.002)
+        done.set();t.join()
+        r=s.report()
+        self.assertEqual(r['samples'],30);self.assertTrue(any('hot' in k for k,_ in r['self']))
+        self.assertEqual(s.samples,0)   # counters reset after each report
+
 if __name__=='__main__':unittest.main()
