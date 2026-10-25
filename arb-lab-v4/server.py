@@ -949,6 +949,7 @@ async def start_trade_tape():
     if os.getenv('POLY_BACKUP_S3_BUCKET'):
         import poly_s3backup;s3=poly_s3backup.S3(os.getenv('POLY_BACKUP_S3_BUCKET'))
     _tape=poly_tape.Tape(s3=s3,learner=poly_server_engine.edge.learner)
+    import poly_study;_tape.study=poly_study.Study();poly_server_engine.edge.study=_tape.study
     for lane in poly_server_engine.engines.values():lane.tape=_tape
     edge=poly_server_engine.edge
     if not hasattr(edge,'settle_listeners'):edge.settle_listeners=[]
@@ -958,6 +959,14 @@ async def start_trade_tape():
 @app.get("/api/poly/tape")
 async def poly_tape_report():
     return _tape.report() if _tape else {'enabled':False}
+
+@app.get("/api/poly/study")
+async def poly_study_snapshot():
+    if not _tape or _tape.study is None:return {'enabled':False}
+    return _tape.study.snapshot(_tape,_tape.learner)
+
+@app.get('/study')
+async def study_page():return FileResponse(ROOT/'poly-study.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
 
 @app.get("/api/poly/bullpen")
 async def poly_bullpen_status():

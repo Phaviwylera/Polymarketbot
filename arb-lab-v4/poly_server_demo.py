@@ -508,7 +508,8 @@ class PolyServerDemo:
                         except Exception:pass
                     tape=getattr(self,'tape',None)
                     if tape is not None:   # shadow: score this market trade with the model (never trades)
-                        try:tape.on_print(self.lane,self.trade_prints[-1],self.market,(self.edge.signals.get(self.lane) if self.edge else None),self.momentum_decision)
+                        try:tape.on_print(self.lane,self.trade_prints[-1],self.market,(self.edge.signals.get(self.lane) if self.edge else None),self.momentum_decision,
+                                     {'spot':self.spot,'open':self.open_ref,'openTrusted':self.open_trusted})
                         except Exception:pass
                     # Apply this print before a subsequently received book/risk update.
                     inv=(self.paper or {}).get('inventory')

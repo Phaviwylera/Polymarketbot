@@ -1,0 +1,212 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE Study</title>
+<style>
+:root{color-scheme:dark;--bg:#070c0e;--panel:#0a1114;--panel2:#0c161a;--line:#1c2a2f;--line2:#233136;--dim:#6f8589;--dim2:#879b9f;--text:#e4edef;--cyan:#65d5ff;--green:#67f3a2;--amber:#ffc45a;--violet:#bdabff;--red:#ff7786;--mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Consolas,monospace}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text)}body{font:11px/1.45 var(--mono);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;min-width:320px;overflow-x:hidden}
+a{color:var(--cyan);text-decoration:none}
+.top{display:flex;align-items:center;gap:12px;padding:9px 14px;border-bottom:1px solid var(--line);background:#081013;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+.logo{width:30px;height:30px;border:1px solid #347052;border-radius:7px;display:grid;place-items:center;color:var(--green);font-weight:700;font-size:12px}
+.brand b{font-size:13px;letter-spacing:.06em}.brand small{display:block;color:var(--dim);font-size:9.5px;letter-spacing:.08em}
+.mode{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{border:1px solid var(--line2);border-radius:999px;padding:3px 10px;font-size:9.5px;letter-spacing:.08em;color:var(--dim2)}
+.pill.live{color:var(--amber);border-color:#5a4a20;animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(255,196,90,.08)}}
+main{padding:12px;display:grid;gap:12px;grid-template-columns:repeat(12,minmax(0,1fr))}
+.p{background:var(--panel);border:1px solid var(--line);border-top-color:#2a3d43;border-radius:9px;min-width:0;display:flex;flex-direction:column;overflow:hidden;
+ box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 22px -12px rgba(0,0,0,.75),0 4px 0 -1px #050a0c;transform:perspective(900px) rotateX(var(--tx,0)) rotateY(var(--ty,0)) translateY(var(--lift,0));transition:transform .25s,box-shadow .25s}
+@media(hover:hover){.p:hover{--lift:-3px;box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 18px 30px -14px rgba(0,0,0,.8),0 0 0 1px rgba(101,213,255,.12)}}
+.p.bump{animation:bump .5s ease}@keyframes bump{30%{transform:translateY(-4px) scale(1.01)}}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 11px;border-bottom:1px solid var(--line);color:var(--dim2);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase}
+.ph b{color:var(--text)}.pb{padding:10px 11px;min-width:0}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+@media(max-width:1100px){.c3{grid-column:span 6}.c4,.c5,.c7,.c8{grid-column:span 12}.c6{grid-column:span 12}}
+@media(max-width:620px){main{padding:8px;gap:8px}.c3{grid-column:span 12}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;box-shadow:0 3px 0 -1px #050a0c}
+.kpi span{display:block;color:var(--dim);font-size:9px;letter-spacing:.08em;text-transform:uppercase}.kpi b{font-size:17px;font-weight:650}.kpi em{display:block;font-style:normal;color:var(--dim2);font-size:9.5px;margin-top:2px}
+.pos{color:var(--green)}.neg{color:var(--red)}.dim{color:var(--dim)}.amb{color:var(--amber)}.cy{color:var(--cyan)}
+#cloud{width:100%;height:380px;display:block;cursor:grab;touch-action:none}#cloud:active{cursor:grabbing}
+.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--dim2);font-size:9.5px;margin-top:6px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.hm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}@media(max-width:760px){.hm{grid-template-columns:minmax(0,1fr)}}
+.hm h4{margin:0 0 5px;font-size:9.5px;letter-spacing:.08em;color:var(--dim2);font-weight:500;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:62px repeat(10,minmax(0,1fr));gap:2px;font-size:8.5px}
+.grid div{height:22px;border-radius:3px;display:grid;place-items:center;color:#0b1416;font-weight:650;transition:background .6s}
+.grid .lab{background:none;color:var(--dim);justify-content:start;font-weight:400}
+table{width:100%;border-collapse:collapse;font-size:10.5px}th{color:var(--dim);font-weight:500;font-size:9px;letter-spacing:.07em;text-align:left;padding:4px 5px;border-bottom:1px solid var(--line)}
+td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r{text-align:right}
+.scroll{max-height:360px;overflow:auto}
+.rounds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.rc{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 9px;box-shadow:0 3px 0 -1px #050a0c;animation:rise .5s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(8px) rotateX(12deg)}}
+.rc .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}.chip{border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700}
+.chip.UP{background:rgba(103,243,162,.15);color:var(--green)}.chip.DOWN{background:rgba(255,119,134,.15);color:var(--red)}
+.rc canvas{width:100%;height:46px;display:block}.rc .ln{color:var(--dim2);font-size:9.5px}
+#curve{width:100%;height:210px;display:block}
+.row-new{animation:flash 1.2s ease}@keyframes flash{from{background:rgba(101,213,255,.18)}}
+.note{color:var(--dim2);font-size:10px;margin-top:6px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header class="top">
+ <div class="logo">PE</div><div class="brand"><b>POLY/EDGE // STUDY</b><small>EVERY POLYMARKET TRADE · HOW WINS HAPPEN · MODEL TRAINING</small></div>
+ <div class="mode"><span class="pill live" id="mode">STUDY MODE · NO TRADES</span><span class="pill" id="age">—</span><a class="pill" href="/poly">← Terminal</a></div>
+</header>
+<main>
+ <section class="p c12"><div class="ph"><span>◆ <b>Study progress</b></span><span id="since">—</span></div><div class="pb"><div class="kpis" id="kpis"></div></div></section>
+
+ <section class="p c7"><div class="ph"><span>◉ <b>3D trade cloud</b> · every labelled print</span><span>drag to rotate</span></div><div class="pb"><canvas id="cloud"></canvas>
+  <div class="legend"><span><i style="background:var(--green)"></i>bought a winner</span><span><i style="background:var(--red)"></i>bought a loser</span><span>X: share of round left · Y: price · Z: spot vs open toward the token (bps)</span></div></div></section>
+ <section class="p c5"><div class="ph"><span>⟋ <b>Model training</b> · learner vs market</span><span id="curveBadge">—</span></div><div class="pb"><canvas id="curve"></canvas><div class="note" id="curveNote">—</div></div></section>
+
+ <section class="p c12"><div class="ph"><span>▦ <b>Where winning buys happen</b> · average return per $1 after fee, by round</span><span>rows: share of round left · cols: price paid</span></div><div class="pb"><div class="hm" id="heat"></div>
+  <div class="note">Green = buying there made money on average; colour strength = how many rounds back it. A cell needs ≥ <span id="minr">20</span> rounds and a positive lower bound before the rule may use it.</div></div></section>
+
+ <section class="p c6"><div class="ph"><span>★ <b>Winning patterns</b> · best cells so far</span><span id="patBadge">—</span></div><div class="pb scroll"><table id="pat"></table></div></section>
+ <section class="p c6"><div class="ph"><span>⚑ <b>How it should be executed</b> · rule tested on unseen rounds</span><span id="ruleBadge">—</span></div><div class="pb"><div id="rule"></div><div class="scroll" style="max-height:220px"><table id="ruleT"></table></div></div></section>
+
+ <section class="p c12"><div class="ph"><span>⧉ <b>Resolved rounds</b> · how each one was won</span><span id="rBadge">—</span></div><div class="pb"><div class="rounds" id="rounds"></div></div></section>
+
+ <section class="p c8"><div class="ph"><span>⇶ <b>Live tape</b> · every trade as it happens</span><span id="tapeBadge">—</span></div><div class="pb scroll"><table id="live"></table></div></section>
+ <section class="p c4"><div class="ph"><span>◎ <b>Winning wallets</b> · per round</span><span>from the wallet study</span></div><div class="pb scroll"><div id="wallets"></div></div></section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),ok=v=>v!==null&&v!==undefined&&isFinite(v);
+const fmt=(v,d=3)=>ok(v)?(+v).toFixed(d):'—',sg=(v,d=3)=>ok(v)?(v>=0?'+':'')+(+v).toFixed(d):'—',pct=v=>ok(v)?(+v).toFixed(1)+'%':'—';
+const cls=v=>ok(v)?(v>0?'pos':v<0?'neg':''):'dim',ago=t=>ok(t)?Math.max(0,Math.round(Date.now()/1000-t))+'s':'—';
+let last=null,lastRounds='',seenLive=new Set();
+function bump(el){if(!el)return;el.classList.remove('bump');void el.offsetWidth;el.classList.add('bump');}
+
+// ---------- KPIs ----------
+function kpis(s){
+ const t=s.totals||{},l=s.learner||{},r=s.rule||{},sm=s.summary||{},tp=s.tape||{};
+ const items=[['Prints recorded',(tp.prints||0)+(tp.pending||0),`${tp.pending||0} waiting for their round`],
+  ['Rounds studied',t.rounds||0,`UP won ${t.winnerUp||0} · DOWN won ${t.winnerDown||0}`],
+  ['Taker buys analysed',t.buys||0,`${sm.winnerBuyShareOfTakerBuyUsd!=null?(100*sm.winnerBuyShareOfTakerBuyUsd).toFixed(1)+'% of buy $ went to the winner':'—'}`],
+  ['Decided with',ok(sm.medianDecidedSecondsLeft)?Math.round(sm.medianDecidedSecondsLeft)+'s left':'—','median: winner ≥ 80¢ and stays'],
+  ['Best winner entry',ok(sm.medianBestWinnerEntry)?Math.round(100*sm.medianBestWinnerEntry)+'¢':'—','median cheapest price anyone paid for the winner'],
+  ['Learner vs market',l.rounds?`${fmt(l.brierLearned,4)} / ${fmt(l.brierPrice,4)}`:'learning',`${l.rounds||0} rounds · ${l.learnedBeatsPrice?'<span class="pos">beats market</span>':'not beating market yet'}`],
+  ['Rule on unseen rounds',r.trades?sg(r.avgReturnPerDollar,3)+'/$':'waiting',r.trades?`${r.trades} trades · ${pct(r.winPct)} wins`:`needs cells with ≥ ${s.minRoundsForRule} rounds`]];
+ $('kpis').innerHTML=items.map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('');
+ $('since').textContent=ok(s.started)?'studying since '+new Date(s.started*1000).toISOString().slice(5,16).replace('T',' ')+' UTC':'—';
+}
+
+// ---------- heatmaps ----------
+function heat(s){
+ const names=s.leftNames||[],cap={with:'spot already on the token side',flat:'spot near the open',against:'spot against the token'};
+ $('minr').textContent=s.minRoundsForRule;
+ $('heat').innerHTML=['with','flat','against'].map(a=>{const g=s.heatmaps[a]||[];
+  let h=`<div><h4>${cap[a]}</h4><div class="grid"><div class="lab"></div>${[...Array(10)].map((_,i)=>`<div class="lab" style="justify-content:center">${i*10}</div>`).join('')}`;
+  for(let i=names.length-1;i>=0;i--){h+=`<div class="lab">${names[i]}</div>`;(g[i]||[]).forEach((c,j)=>{
+   if(!c){h+='<div style="background:#0f1a1e"></div>';return;}
+   const m=c.mean,al=Math.min(1,.18+c.rounds/40),col=m>=0?`rgba(103,243,162,${al})`:`rgba(255,119,134,${al})`;
+   h+=`<div style="background:${col}" title="${names[i]} left · ${j*10}-${j*10+10}c · ${a}\navg ${sg(m)} per $1 · lower ${sg(c.lower)}\n${c.rounds} rounds · ${c.prints} buys · win ${pct(c.winPct)}">${Math.abs(m)>=.995?'':Math.round(m*100)}</div>`;});}
+  return h+'</div></div>';}).join('');
+}
+
+// ---------- patterns + rule ----------
+function patterns(s){
+ const p=s.patterns||[];$('patBadge').textContent=p.filter(x=>x.qualifies).length+' qualify';
+ $('pat').innerHTML='<tr><th>pattern (where the buy happened)</th><th class="r">rounds</th><th class="r">win</th><th class="r">avg/$</th><th class="r">lower</th></tr>'+
+  (p.length?p.map(x=>`<tr><td>${x.qualifies?'✅ ':''}${x.cell}</td><td class="r">${x.rounds}</td><td class="r">${pct(x.winPct)}</td><td class="r ${cls(x.avgReturnPerDollar)}">${sg(x.avgReturnPerDollar)}</td><td class="r ${cls(x.lowerBound)}">${sg(x.lowerBound)}</td></tr>`).join(''):'<tr><td class="dim">collecting rounds…</td></tr>');
+ const r=s.rule||{};$('ruleBadge').textContent=r.trades?`${r.trades} trades`:'waiting';
+ $('rule').innerHTML=r.trades?`<div class="kpis" style="margin-bottom:8px"><div class="kpi"><span>avg per $1</span><b class="${cls(r.avgReturnPerDollar)}">${sg(r.avgReturnPerDollar)}</b></div><div class="kpi"><span>win rate</span><b>${pct(r.winPct)}</b></div><div class="kpi"><span>lower bound</span><b class="${cls(r.lowerBound)}">${sg(r.lowerBound)}</b></div></div>`:
+  `<div class="note">The rule: in each new round, take the first taker buy that falls in a pattern cell with ≥ ${s.minRoundsForRule} earlier rounds and a positive lower bound. It is judged only on rounds it had not learned from. ${r.note||''}</div>`;
+ $('ruleT').innerHTML=(r.recent||[]).length?'<tr><th>lane</th><th>bought</th><th class="r">price</th><th class="r">left</th><th class="r">spot</th><th class="r">result/$</th></tr>'+r.recent.slice().reverse().map(x=>`<tr><td>${x.lane}</td><td>${x.token}</td><td class="r">${Math.round(100*x.price)}¢</td><td class="r">${ok(x.secondsLeft)?Math.round(x.secondsLeft)+'s':'—'}</td><td class="r">${sg(x.agreeBps,1)}</td><td class="r ${cls(x.returnPerDollar)}">${sg(x.returnPerDollar)}</td></tr>`).join(''):'';
+}
+
+// ---------- rounds ----------
+function spark(c,path,win){const r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);c.width=r.width*d;c.height=r.height*d;const g=c.getContext('2d');g.scale(d,d);
+ const w=r.width,h=r.height;g.strokeStyle='#1c2a2f';g.beginPath();g.moveTo(0,h/2);g.lineTo(w,h/2);g.stroke();if(!path||path.length<2)return;
+ const xs=path.map(p=>p[0]),mx=Math.max(...xs),mn=Math.min(...xs),X=s=>w-(s-mn)/Math.max(1,mx-mn)*w,Y=v=>h-2-v*(h-4);
+ g.strokeStyle=win==='UP'?'#67f3a2':'#ff7786';g.lineWidth=1.5;g.beginPath();path.forEach((p,i)=>i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));g.stroke();}
+function rounds(s){
+ const rs=s.rounds||[];$('rBadge').textContent=rs.length+' recent';const key=rs.map(r=>r.slug).join();if(key===lastRounds)return;lastRounds=key;
+ $('rounds').innerHTML=rs.length?rs.slice(0,12).map((r,i)=>{const b=r.bestEntry||{},tw=(r.topWinningBuys||[])[0];
+  return `<div class="rc" style="animation-delay:${i*40}ms"><div class="hd"><b>${r.lane}</b><span class="chip ${r.winner}">${r.winner} won</span></div><canvas data-i="${i}"></canvas>
+  <div class="ln">decided ${ok(r.decidedSecondsLeft)?Math.round(r.decidedSecondsLeft)+'s before close':'only at the end'} · spot ${sg(r.finalSpotVsOpenBps,1)} bps</div>
+  <div class="ln">best winner entry <b class="pos">${ok(b.price)?Math.round(100*b.price)+'¢':'—'}</b>${ok(b.secondsLeft)?' with '+Math.round(b.secondsLeft)+'s left':''}${ok(b.agreeBps)?' · spot '+sg(b.agreeBps,1):''}</div>
+  <div class="ln">${r.prints} prints · $${Math.round(r.volumeUsd)} · buys on winner ${r.winnerBuys} / loser ${r.loserBuys}</div>
+  ${tw?`<div class="ln">top winning buy ${Math.round(tw.size)} sh @ ${Math.round(100*tw.price)}¢${ok(tw.secondsLeft)?' · '+Math.round(tw.secondsLeft)+'s left':''}</div>`:''}
+  ${r.ruleTrade?`<div class="ln">rule bought ${r.ruleTrade.token} @ ${Math.round(100*r.ruleTrade.price)}¢ → <b class="${cls(r.ruleTrade.returnPerDollar)}">${sg(r.ruleTrade.returnPerDollar)}</b>/$</div>`:''}</div>`;}).join(''):'<div class="dim">waiting for the first round to resolve (5-15 min)…</div>';
+ document.querySelectorAll('#rounds canvas').forEach(c=>{const r=rs[+c.dataset.i];spark(c,r.path,r.winner);});
+}
+
+// ---------- live tape ----------
+function live(s){
+ const L=s.live||[];$('tapeBadge').textContent=((s.tape||{}).pending||0)+' prints in open rounds';
+ $('live').innerHTML='<tr><th>time</th><th>lane</th><th>token</th><th class="r">price</th><th class="r">size</th><th>side</th><th class="r">left</th><th class="r">spot→tok</th><th class="r">model</th><th class="r">learned</th></tr>'+
+  L.map(r=>{const k=r.t+r.token+r.price+r.size,n=!seenLive.has(k);seenLive.add(k);
+   return `<tr class="${n&&last?'row-new':''}"><td class="dim">${new Date(r.t*1000).toISOString().slice(11,19)}</td><td>${r.lane}</td><td class="${r.token==='UP'?'pos':'neg'}">${r.token}</td><td class="r">${Math.round(100*r.price)}¢</td><td class="r">${fmt(r.size,0)}</td><td class="dim">${r.aggressor||'—'}</td><td class="r">${ok(r.secondsLeft)?Math.round(r.secondsLeft)+'s':'—'}</td><td class="r ${cls(r.agreeBps)}">${sg(r.agreeBps,1)}</td><td class="r">${ok(r.pToken)?Math.round(100*r.pToken)+'%':'—'}</td><td class="r cy">${ok(r.pLearned)?Math.round(100*r.pLearned)+'%':'—'}</td></tr>`;}).join('');
+ if(seenLive.size>3000)seenLive=new Set([...seenLive].slice(-500));
+}
+function wallets(s){
+ const W=s.wallets||[];$('wallets').innerHTML=W.length?W.map(w=>`<div class="rc" style="margin-bottom:8px"><div class="hd"><b>${w.lane}</b><span class="chip ${w.winner}">${w.winner} won</span></div>
+  ${(w.top||[]).map(x=>`<div class="ln"><span class="cy">${x.wallet}</span> <b class="${cls(x.pnl)}">${sg(x.pnl,2)}</b> · ${x.buys} buys $${fmt(x.buyUsd,0)} · ${ok(x.avgEntrySec)?'entered ~'+Math.round(x.avgEntrySec)+'s in':''} @ ${ok(x.avgPrice)?Math.round(100*x.avgPrice)+'¢':'—'}</div>`).join('')}</div>`).join(''):'<div class="dim">waiting for the wallet study (rounds are fetched a few minutes after they resolve)…</div>';
+}
+
+// ---------- learner curve (animated draw) ----------
+let curveData=[],curveT=0;
+function curve(s){
+ curveData=s.learnCurve||[];const l=s.learner||{};$('curveBadge').innerHTML=l.rounds?(l.learnedBeatsPrice?'<span class="pos">beats market</span>':'<span class="amb">behind market</span>'):'learning';
+ const w=l.weights||{};$('curveNote').innerHTML=l.rounds?`Each round is scored before the model learns from it. What it has learned so far (weights): spot-vs-open <b>${sg(w.spotAgree,3)}</b> · late spot <b>${sg(w.spotAgreeXlate,3)}</b> · model disagreement <b>${sg(w.modelMinusPrice,3)}</b> · market price <b>${fmt(w.logitPrice,3)}</b>`:'The learner starts as the market price and only moves away from it when settled trades show it should.';
+ curveT=0;
+}
+function drawCurve(){
+ const c=$('curve'),r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);if(c.width!==Math.round(r.width*d)){c.width=r.width*d;c.height=r.height*d;}
+ const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,r.width,r.height);const D=curveData.filter(x=>ok(x.brierLearned)&&ok(x.brierPrice));
+ const w=r.width,h=r.height,L=34,B=h-18;g.fillStyle='#6f8589';g.font='9px ui-monospace';
+ if(D.length<2){g.fillText('the curve appears after a few rounds resolve…',L,h/2);return;}
+ const vals=D.flatMap(x=>[x.brierLearned,x.brierPrice,x.brierModel].filter(ok)),mn=Math.min(...vals),mx=Math.max(...vals),pad=(mx-mn)*.12||.01;
+ const X=i=>L+i/(D.length-1)*(w-L-8),Y=v=>B-(v-(mn-pad))/((mx+pad)-(mn-pad))*(B-8);
+ for(let k=0;k<=3;k++){const v=mn-pad+k*((mx+pad)-(mn-pad))/3;g.strokeStyle='#14222a';g.beginPath();g.moveTo(L,Y(v));g.lineTo(w-8,Y(v));g.stroke();g.fillText(v.toFixed(3),2,Y(v)+3);}
+ curveT=Math.min(1,curveT+.025);const upto=Math.max(2,Math.floor(D.length*curveT));
+ [['brierModel','#bdabff','raw model'],['brierPrice','#ffc45a','market price'],['brierLearned','#65d5ff','learner']].forEach(([k,col,lab],j)=>{
+  g.strokeStyle=col;g.lineWidth=k==='brierLearned'?2:1.3;g.beginPath();let st=false;
+  D.slice(0,upto).forEach((x,i)=>{if(!ok(x[k]))return;st?g.lineTo(X(i),Y(x[k])):(g.moveTo(X(i),Y(x[k])),st=true);});g.stroke();
+  g.fillStyle=col;g.fillText('● '+lab,L+j*92,h-4);});
+ g.fillStyle='#6f8589';g.fillText('Brier (lower = better) over rounds',w-180,12);
+}
+(function loop(){drawCurve();requestAnimationFrame(loop);})();
+
+// ---------- 3D cloud ----------
+let scene,cam,ren,pts,grp,rotY=.7,rotX=.35,drag=null,auto=true,spawn=0;
+function init3d(){
+ const c=$('cloud');if(!window.THREE){const g=c.getContext('2d');g.fillStyle='#6f8589';g.fillText('3D view needs three.js (blocked?)',10,20);return;}
+ ren=new THREE.WebGLRenderer({canvas:c,antialias:true,alpha:true});scene=new THREE.Scene();cam=new THREE.PerspectiveCamera(42,1,.1,50);cam.position.set(0,0,3.4);
+ grp=new THREE.Group();scene.add(grp);
+ const box=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2,2,2)),new THREE.LineBasicMaterial({color:0x233136}));grp.add(box);
+ const ax=(a,b,col)=>{const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a),new THREE.Vector3(...b)]);grp.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:col})));};
+ ax([-1,-1,-1],[1,-1,-1],0x65d5ff);ax([-1,-1,-1],[-1,1,-1],0xffc45a);ax([-1,-1,-1],[-1,-1,1],0xbdabff);
+ const lbl=(t,p,col)=>{const cv=document.createElement('canvas');cv.width=256;cv.height=48;const x=cv.getContext('2d');x.fillStyle=col;x.font='22px ui-monospace,monospace';x.fillText(t,4,30);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true}));s.position.set(...p);s.scale.set(.75,.14,1);grp.add(s);};
+ lbl('round left →',[.55,-1.12,-1],'#65d5ff');lbl('price ↑',[-1.25,.8,-1],'#ffc45a');lbl('spot→token',[-1,-1.12,.75],'#bdabff');
+ // decision plane: the "fair" price surface would be here; show the 50c level
+ const plane=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.MeshBasicMaterial({color:0x65d5ff,transparent:true,opacity:.04,side:THREE.DoubleSide}));plane.rotation.x=Math.PI/2;grp.add(plane);
+ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute([],3));geo.setAttribute('color',new THREE.Float32BufferAttribute([],3));
+ pts=new THREE.Points(geo,new THREE.PointsMaterial({size:.045,vertexColors:true,transparent:true,opacity:.9,sizeAttenuation:true}));grp.add(pts);
+ c.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};auto=false;c.setPointerCapture(e.pointerId);});
+ c.addEventListener('pointermove',e=>{if(!drag)return;rotY+=(e.clientX-drag.x)*.008;rotX=Math.max(-1.2,Math.min(1.2,rotX+(e.clientY-drag.y)*.008));drag={x:e.clientX,y:e.clientY};});
+ c.addEventListener('pointerup',()=>{drag=null;setTimeout(()=>auto=true,4000);});
+ (function tick(){const r=c.getBoundingClientRect();if(r.width&&(c.width!==Math.round(r.width*Math.min(2,devicePixelRatio))||!ren._s)){ren.setPixelRatio(Math.min(2,devicePixelRatio));ren.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();ren._s=1;}
+  if(auto)rotY+=.0025;grp.rotation.y=rotY;grp.rotation.x=rotX;spawn=Math.min(1,spawn+.04);pts.material.size=.045*(.4+.6*spawn);ren.render(scene,cam);requestAnimationFrame(tick);})();
+}
+function cloud(s){
+ if(!pts)return;const C=s.cloud||[],pos=[],col=[];
+ C.forEach(p=>{if(!ok(p.l)||!ok(p.p))return;const z=ok(p.a)?Math.max(-1,Math.min(1,p.a/30)):0;pos.push(p.l*2-1,p.p*2-1,z);
+  if(p.w===true)col.push(.40,.95,.64);else if(p.w===false)col.push(1,.47,.53);else col.push(.4,.5,.55);});
+ pts.geometry.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));pts.geometry.setAttribute('color',new THREE.Float32BufferAttribute(col,3));pts.geometry.computeBoundingSphere();spawn=0;
+}
+
+// ---------- poll ----------
+async function poll(){
+ try{const s=await (await fetch('/api/poly/study',{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
+  const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p').forEach(bump);cloud(s);curve(s);}
+  if(!last){cloud(s);curve(s);}
+  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
+ }catch(e){$('age').textContent='reconnecting…';}
+}
+init3d();poll();setInterval(poll,3000);
+// gentle tilt on hover for the panels
+if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.p').forEach(p=>{p.addEventListener('pointermove',e=>{const r=p.getBoundingClientRect();p.style.setProperty('--ty',((e.clientX-r.left)/r.width-.5)*3+'deg');p.style.setProperty('--tx',(.5-(e.clientY-r.top)/r.height)*3+'deg');});p.addEventListener('pointerleave',()=>{p.style.setProperty('--ty','0deg');p.style.setProperty('--tx','0deg');});});
+})();
+</script></body></html>

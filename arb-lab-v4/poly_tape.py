@@ -81,10 +81,10 @@ class Tape:
         self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'}
         self.root=root or os.path.join(os.getenv('POLY_DATA_DIR','/tmp'),'tape');self.s3=s3;self.now=now
         self.pending=defaultdict(list)          # slug -> rows awaiting the round's outcome
-        self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
+        self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.live=deque(maxlen=80);self.study=None;self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
         self.seen=0;self.dropped=0;self.files_uploaded=0;self.last_error=None;self.started=now();self.restored=None
     # ---- recording ------------------------------------------------------------------------------
-    def on_print(self,lane,pr,market,signal,momentum=None):
+    def on_print(self,lane,pr,market,signal,momentum=None,ctx=None):
         """pr: lane trade print {'t','side':'up'|'down','price','size','aggressor','marketSlug'}; signal: EdgeLab.signals[lane]."""
         slug=pr.get('marketSlug') or (market or {}).get('slug')
         if not slug:return None
@@ -99,13 +99,21 @@ class Tape:
              'size':float(pr.get('size') or 0),'aggressor':pr.get('aggressor'),'pToken':None if p_tok is None else round(p_tok,5),
              'se':None if se is None else round(float(se),5),'modelAgeSec':None if age is None else round(age,2),
              'action':action,'edge':edge,'reason':why,'momentum':(momentum or '')[:60]}
+        # market context at this print: where spot is versus the round's opening price, and time left
+        ctx=ctx or {};spot=ctx.get('spot');opn=ctx.get('open')
+        end=(market or {}).get('endTs');interval=900. if str(lane).endswith('15') else 300.
+        row['secondsLeft']=round(float(end)-t,1) if end else None
+        row['leftFrac']=round(min(1.,max(0.,(float(end)-t)/interval)),4) if end else None
+        if spot and opn and ctx.get('openTrusted',True):
+            bps=(float(spot)/float(opn)-1)*1e4;row['spot']=float(spot);row['open']=float(opn);row['spotVsOpenBps']=round(bps,2)
+            row['agreeBps']=round(bps if pr['side']=='up' else -bps,2)   # >0: spot is already on this token's side
         # learner: market-anchored probability using only information available at this print
         try:
             pl=self.learner.predict({**row,'pToken':row['pToken'] if fresh else None})
             la,le,_=decide(pl,LEARNED_SE,price,0.)
             row.update(pLearned=round(pl,5),learnedAction=la,learnedEdge=le)
         except Exception:pass
-        self.pending[slug].append(row);self.seen+=1
+        self.pending[slug].append(row);self.seen+=1;self.live.append(row)
         return row
     def settle(self,slug,winner):
         rows=self.pending.pop(slug,[])
@@ -125,6 +133,9 @@ class Tape:
             self.recent.append(r)
         try:self.learner.learn_round([{**r,'pToken':r['pToken'] if (r.get('modelAgeSec') is not None and r['modelAgeSec']<=MODEL_MAX_AGE_SEC) else None} for r in rows])
         except Exception as exc:self.last_error=f'learn: {type(exc).__name__}'
+        if self.study is not None:
+            try:self.study.on_round(rows,winner,self.learner)
+            except Exception as exc:self.last_error=f'study: {type(exc).__name__}'
         try:self._write(rows)
         except Exception as exc:self.last_error=f'write: {type(exc).__name__}'
         return len(rows)
@@ -264,7 +275,9 @@ class Tape:
         return n
     async def loop(self):
         global CURRENT;CURRENT=self
-        try:self.load_state()
+        try:
+            self.load_state()
+            if self.study is not None:self.study.load(os.path.join(os.path.dirname(self.state_path()),'study_state.json.gz'))
         except Exception as exc:self.last_error=f'load: {type(exc).__name__}'
         await asyncio.sleep(120)                 # let the saved learner state restore first
         try:await self.warm_start()
@@ -272,7 +285,9 @@ class Tape:
         tick=0
         while True:
             await asyncio.sleep(60);tick+=1
-            try:self.save_state()
+            try:
+                self.save_state()
+                if self.study is not None:self.study.save(os.path.join(os.path.dirname(self.state_path()),'study_state.json.gz'))
             except Exception as exc:self.last_error=f'save: {type(exc).__name__}'
             if tick%10==0:
                 try:await self.resolve_stale();self.expire();await self.upload_closed_hours()

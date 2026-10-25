@@ -164,6 +164,9 @@ class ThresholdLane:
     def open_usd(self):return sum(p['costUsd'] for p in self.open.values())
 
     async def scan(self,store,now=None):
+        if os.environ.get('POLY_TRADING_PAUSED','1')=='1':   # study mode: no new positions; open ones still resolve
+            self.state['skipped']={'all trading paused by owner (study mode)':1};self.state['lastScanAt']=time.time() if now is None else now
+            await self.resolve(store,now);return
         now=time.time() if now is None else now;self.state['skipped']={};seen=0;events=set()
         for asset,(name,product) in ASSETS.items():
             try:sigma,spot=await self.vol(product)

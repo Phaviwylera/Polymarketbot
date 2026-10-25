@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 
 LANES=('BTC','ETH','BTC15','ETH15')
-NAMES=('bias','logitPrice','modelMinusPrice','timeLeft','timeLeftXlogitPrice','disagreeXtimeLeft','logSize','aggressorBuy')+tuple('lane_'+l for l in LANES)
+NAMES=('bias','logitPrice','modelMinusPrice','timeLeft','timeLeftXlogitPrice','disagreeXtimeLeft','logSize','aggressorBuy','spotAgree','spotAgreeXlate')+tuple('lane_'+l for l in LANES)
 EPS=1e-4
 
 def logit(p):p=min(1-EPS,max(EPS,float(p)));return math.log(p/(1-p))
@@ -31,7 +31,8 @@ def features(row):
     interval=900. if str(row.get('lane','')).endswith('15') else 300.
     end=row.get('roundEnd');t=float(row.get('t') or 0)
     left=min(1.,max(0.,(float(end)-t)/interval)) if end else .5
-    x=[1.,lp,d,left,left*lp,d*left,math.log1p(max(0.,float(row.get('size') or 0)))/5,1. if str(row.get('aggressor')).upper()=='BUY' else 0.]
+    ag=row.get('agreeBps');ag=max(-3.,min(3.,float(ag)/20.)) if ag is not None else 0.   # spot vs open, signed toward this token
+    x=[1.,lp,d,left,left*lp,d*left,math.log1p(max(0.,float(row.get('size') or 0)))/5,1. if str(row.get('aggressor')).upper()=='BUY' else 0.,ag,ag*(1-left)]
     x+=[1. if row.get('lane')==l else 0. for l in LANES]
     return x
 

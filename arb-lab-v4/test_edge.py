@@ -566,3 +566,11 @@ def setUpModule():
 def tearDownModule():
     if _prev_teardown:_prev_teardown()
     _mom.stop()
+
+import poly_portfolio as _pp
+_tp=_p2.object(_pp,'TRADING_PAUSED',False)
+_prev_setup2=setUpModule;_prev_teardown2=tearDownModule
+def setUpModule():
+    _tp.start();_prev_setup2()
+def tearDownModule():
+    _prev_teardown2();_tp.stop()

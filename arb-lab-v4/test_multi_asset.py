@@ -91,3 +91,11 @@ class MultiAssetTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await e._resolved_winner('test'),'down')
 
 if __name__=='__main__':unittest.main()
+
+
+# Entry mechanics are tested with trading enabled; production runs in study mode (all trading paused).
+import poly_portfolio as _pp
+from unittest.mock import patch as _p3
+_tp=_p3.object(_pp,'TRADING_PAUSED',False)
+def setUpModule():_tp.start()
+def tearDownModule():_tp.stop()

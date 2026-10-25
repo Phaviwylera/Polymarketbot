@@ -26,6 +26,9 @@ GIVEBACK_PAUSE_SEC=3600.
 AUTO_CYCLE=os.environ.get('POLY_AUTO_CYCLE','1').strip()!='0'
 # Owner switch: lanes listed here keep their ledger but run no feeds and take no entries (they still
 # start if they hold a position). Used to keep the 0.1-CPU free host from starving the busier lanes.
+# Owner decision 2026-10-25 20:56 IST: study mode. No new paper entries of any strategy; open positions keep
+# their exits; every feed, the trade tape, the study engine and model training keep running.
+TRADING_PAUSED=os.environ.get('POLY_TRADING_PAUSED','1')=='1'
 PAUSED_LANES=frozenset(x.strip().upper() for x in os.environ.get('POLY_PAUSED_LANES','').split(',') if x.strip())
 LANE_LOCK_COOLDOWN_SEC=1800.
 PORTFOLIO_LOCK_COOLDOWN_SEC=3600.
@@ -190,6 +193,7 @@ class PaperPortfolio:
         return not self.locked
     def pause_reason(self):
         """Overnight guard: blocks new entries without locking lanes; open positions keep their exits."""
+        if TRADING_PAUSED:return 'all trading paused by owner (study mode)'
         realized=sum(float((e.paper or {}).get('realizedPnl') or 0) for e in self.engines.values())
         return None if self._epoch_guard(realized) else self.guard_reason
     def epoch_pnl(self,realized=None):

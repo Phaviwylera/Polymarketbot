@@ -166,6 +166,10 @@ class WalletIntel:
                 w['entrySec'].append(max(0.,t['t']-round_start));w['prices'].append(t['price']);w['outcomes'].add(t['outcome'])
                 w['winnerBuys']+=int(win==1.)
             else:w['pnl']+=t['size']*(t['price']-win)
+        hook=getattr(self,'on_round',None)
+        if hook:
+            try:hook(per,winner,round_start)
+            except Exception:pass
         for wallet,r in per.items():
             a=self.wallets.setdefault(wallet,{'rounds':0,'pnl':0.,'recent':[],'buys':0,'buyUsd':0.,'entrySec':[],'prices':[],'bothSides':0,'winnerBuys':0})
             a['rounds']+=1;a['pnl']+=r['pnl'];a['recent']=(a['recent']+[round(r['pnl'],4)])[-60:]
@@ -433,6 +437,8 @@ class EdgeLab:
                     if item[0] not in self.intel.studied_set:batch.append(item)
                 for cid,winner,start,asset in batch:
                     rows=await self._get(DATA_API+'/trades',{'market':cid,'limit':1000,'takerOnly':'false'})
+                    study=getattr(self,'study',None)
+                    self.intel.on_round=(lambda per,w,st,_a=asset:study.on_wallet_round(_a,st,w,per)) if study is not None else None
                     self.intel.learn_round(self.intel.parse(rows),winner,start)
                     self.intel.studied.append(cid);self.intel.studied_set.add(cid)
                     await asyncio.sleep(.5)

@@ -118,3 +118,11 @@ class ThresholdTests(unittest.IsolatedAsyncioTestCase):
         import poly_storage;self.assertIn('THRESHOLD_SHADOW',poly_storage.KINDS)
 
 if __name__=='__main__':unittest.main()
+
+
+# The lane's entry rules are tested with trading enabled; production runs in study mode.
+import os as _os
+from unittest.mock import patch as _p4
+_tp=_p4.dict(_os.environ,{'POLY_TRADING_PAUSED':'0'})
+def setUpModule():_tp.start()
+def tearDownModule():_tp.stop()
