@@ -1,0 +1,240 @@
+{
+ "at": 1792897685.684155,
+ "atUtc": "2026-10-25 03:08:05",
+ "uptimeSec": 120,
+ "host": "aws-ec2-t4g.small",
+ "revision": "72e34e1",
+ "hostStats": {
+  "loadAvg": [
+   0.08,
+   0.26,
+   0.25
+  ],
+  "memTotalMb": 1835,
+  "memAvailableMb": 1230,
+  "processRssMb": 219,
+  "cpuCount": 2
+ },
+ "portfolio": {
+  "accountEquity": 193.52268,
+  "accountPnl": -6.477319999999987,
+  "equity": 199.0226,
+  "realizedPnl": -0.9774,
+  "trades": 5,
+  "lifetimeRealizedPnl": -6.477319999999999,
+  "lifetimeTrades": 33,
+  "epochPnl": -6.477319999999999,
+  "maxDrawdownUsd": 3.333200000000005,
+  "riskLocked": false,
+  "guard": {
+   "reason": null,
+   "pausedUntil": null,
+   "lossLimitUsd": 8.0,
+   "givebackArmUsd": 4.0,
+   "givebackFraction": 0.5
+  },
+  "pausedLanes": [],
+  "revision": "17.7-lean"
+ },
+ "lanes": {
+  "BTC": {
+   "feed": {
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
+   },
+   "paused": false,
+   "decision": "oracle impulse does not confirm direction",
+   "position": null
+  },
+  "ETH": {
+   "feed": {
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
+   },
+   "paused": false,
+   "decision": "oracle impulse does not confirm direction",
+   "position": null
+  },
+  "BTC15": {
+   "feed": {
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
+   },
+   "paused": false,
+   "decision": "oracle impulse does not confirm direction",
+   "position": null
+  },
+  "ETH15": {
+   "feed": {
+    "market": "live",
+    "clob": "live",
+    "rtds": "live"
+   },
+   "paused": false,
+   "decision": "two consecutive losses",
+   "position": null
+  }
+ },
+ "storage": {
+  "configured": true,
+  "backend": "postgresql",
+  "state": "healthy",
+  "writer": true,
+  "active": true,
+  "checkpointAt": 1792897684.033717,
+  "checkpointAgeSec": 1.6601274013519287,
+  "queuedEvents": 0,
+  "lastFlushSec": 0.037,
+  "eventsSavedThisBoot": 53,
+  "errors": 0,
+  "lastError": null,
+  "droppedEvents": 0,
+  "databaseExpiresAt": null,
+  "coverage": "Paper checkpoints, research labels, model artifact, attribution, sampled decisions and EdgeLab learning (calibration, strategy record, wallet study); raw feed spool stays local.",
+  "checkpointTargetSec": 2,
+  "rawFeedDurable": false,
+  "backupConfigured": false,
+  "lastBackupAt": null,
+  "lastBackupOk": null,
+  "baselineStored": true
+ },
+ "bullpen": {
+  "enabled": true,
+  "installed": false,
+  "version": "0.1.118",
+  "lastRunAt": null,
+  "calls": 0,
+  "ok": 0,
+  "errors": 0,
+  "lastError": null,
+  "walletsCovered": 0,
+  "eventsRecorded": 0,
+  "mode": "read-only, record-only, no login"
+ },
+ "threshold": {
+  "status": "COLLECTING",
+  "resolved": 0,
+  "open": 0,
+  "pnlUsd": 0,
+  "avgPnlUsd": null,
+  "stressEntry1cWorseAvg": null,
+  "blockLower": null,
+  "skips": {},
+  "error": null
+ },
+ "skillVsLuck": {
+  "tested": 2501,
+  "fdr": 0.1,
+  "skill": 557,
+  "oneBigWin": 7,
+  "ourSkilledTop": {
+   "wallets": 150,
+   "skill": 102,
+   "oneBigWin": 0,
+   "luckOrNoise": 47
+  },
+  "method": "one-sided t (normal tail) on last 60 rounds, Benjamini-Hochberg FDR, single-round concentration"
+ },
+ "audit": {
+  "verdict": "FAIL",
+  "why": [
+   "only 56 out-of-sample trades (need 60)",
+   "block bootstrap 95% lower bound -0.0313 is not above 0",
+   "3/6 folds non-negative (need 60%)"
+  ],
+  "oos": [
+   56,
+   0.2062,
+   11.5484,
+   -0.0391,
+   0.4676
+  ],
+  "oosBlock": [
+   -0.0313,
+   0.4351,
+   50
+  ],
+  "stress1tick": 0.1578,
+  "ledger": [
+   45,
+   0,
+   {
+    "sinceFreshStart": 33,
+    "sinceRulesLive": 39,
+    "betweenTheTwoTimes": 6,
+    "explained": true
+   }
+  ],
+  "takeAll": [
+   104,
+   0.0616
+  ],
+  "folds": "3/6",
+  "live": [
+   38,
+   -0.1251,
+   -0.313
+  ],
+  "exec": {
+   "trades": 62,
+   "clean": true,
+   "errors": {},
+   "risk": {
+    "stopOvershoot": 21,
+    "heldToSettlement": 1,
+    "exitDelayed": 1
+   }
+  },
+  "errorIds": {},
+  "errorTrades": [],
+  "ledgerProblems": [],
+  "stops": {
+   "stops": 60,
+   "overshootsAbove5c": 45,
+   "overshootShareFromGapBeforeTriggerPct": 38.0,
+   "overshootShareAfterTriggerPct": 14.3,
+   "withEntryChase": 6,
+   "causeCounts": {
+    "unexplained with the recorded evidence": 20,
+    "price gapped past the stop between book updates": 16,
+    "low-priced token": 8,
+    "bids fell during the 350 ms exit latency / 2-tick walk": 6,
+    "entered after the token had already moved 5c+": 6,
+    "1 exit retry": 3,
+    "2 exit retries": 1
+   }
+  },
+  "expA": {
+   "trades": 8,
+   "meanDifferencePerTrade": -0.0028,
+   "exitedEarlier": 7,
+   "missedRecoveries": 1,
+   "savedOnStops": 1.4366
+  },
+  "expB": {
+   "trades": 8,
+   "rejectRatePct": 25.0,
+   "rejectedStops": 2
+  },
+  "config": {
+   "strategyVersion": "momentum-17.8",
+   "configHash": "cfa5d71516e3",
+   "experimentsHash": "96ff8357b1ea"
+  },
+  "alerts": [
+   "database: no verified backup recorded yet",
+   "1 scalp(s) held to settlement"
+  ],
+  "model": [
+   757,
+   0.2465,
+   0.2176,
+   -0.1328
+  ]
+ },
+ "cpuProfile": null,
+ "recentLog": []
+}
