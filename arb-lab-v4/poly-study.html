@@ -24,7 +24,23 @@ main{padding:12px;display:grid;gap:12px;grid-template-columns:repeat(12,minmax(0
 .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;box-shadow:0 3px 0 -1px #050a0c}
 .kpi span{display:block;color:var(--dim);font-size:9px;letter-spacing:.08em;text-transform:uppercase}.kpi b{font-size:17px;font-weight:650}.kpi em{display:block;font-style:normal;color:var(--dim2);font-size:9.5px;margin-top:2px}
 .pos{color:var(--green)}.neg{color:var(--red)}.dim{color:var(--dim)}.amb{color:var(--amber)}.cy{color:var(--cyan)}
-#cloud{width:100%;height:380px;display:block;cursor:grab;touch-action:none}#cloud:active{cursor:grabbing}
+/* torus panel (video template: navy, blue-white particles, gold spikes, glowing threads) */
+.tor{background:radial-gradient(ellipse at 50% 55%,#0c1630 0%,#070b17 60%,#05080f 100%);border-color:#18233d}
+.tor .ph{border-color:#16213a;color:#8ea2c9}
+.tbody{position:relative;display:grid;grid-template-columns:210px minmax(0,1fr) 232px;gap:10px;padding:10px;min-height:520px}
+#torus{width:100%;height:500px;display:block;cursor:grab;touch-action:none}#torus:active{cursor:grabbing}
+#threads{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+.col{display:flex;flex-direction:column;gap:9px;z-index:3;min-width:0}.col h5{margin:0 0 2px;font-size:9px;letter-spacing:.12em;color:#8ea2c9;font-weight:600}
+.inp{background:rgba(8,14,30,.82);border:1px solid #1d2b4a;border-left:3px solid var(--c);border-radius:6px;padding:6px 8px}
+.inp .t{display:flex;justify-content:space-between;align-items:baseline;font-size:9px;letter-spacing:.08em;color:#c9d6f2}.inp .t b{font-size:13px;color:var(--c)}
+.inp small{display:block;color:#62749b;font-size:8.5px;margin-top:1px}.inp canvas{width:100%;height:26px;display:block;margin-top:3px}
+.fill{background:rgba(8,14,30,.85);border:1px solid #22325a;border-radius:6px;padding:6px 8px;position:relative;overflow:hidden;animation:rise .5s ease both}
+.fill .t{display:flex;justify-content:space-between;align-items:baseline}.fill .t span{font-size:9.5px;color:#9fc0ff;letter-spacing:.06em}.fill .t b{font-size:13px;color:#ffd166}
+.fill small{display:block;color:#62749b;font-size:8.5px}.fill i{display:block;height:2px;margin-top:4px;background:linear-gradient(90deg,#ffd166,rgba(255,209,102,0));border-radius:2px}
+.fill.win{border-color:#2f4a3a}.fill.win .t b{color:#ffd166}
+.ttl{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;color:#c9d6f2;font-size:10px;letter-spacing:.1em;white-space:nowrap;text-shadow:0 0 8px rgba(101,150,255,.6)}
+.tleg{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:#8ea2c9;font-size:9.5px;padding:0 10px 10px}.tleg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+@media(max-width:900px){.tbody{grid-template-columns:minmax(0,1fr);min-height:0}#torus{height:340px}#threads{display:none}.col{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.col h5{grid-column:1/-1}.ttl{position:static;transform:none;text-align:center;white-space:normal}}
 .legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--dim2);font-size:9.5px;margin-top:6px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .hm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}@media(max-width:760px){.hm{grid-template-columns:minmax(0,1fr)}}
 .hm h4{margin:0 0 5px;font-size:9.5px;letter-spacing:.08em;color:var(--dim2);font-weight:500;text-transform:uppercase}
@@ -52,15 +68,21 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
 <main>
  <section class="p c12"><div class="ph"><span>◆ <b>Study progress</b></span><span id="since">—</span></div><div class="pb"><div class="kpis" id="kpis"></div></div></section>
 
- <section class="p c7"><div class="ph"><span>◉ <b>3D trade cloud</b> · every labelled print</span><span>drag to rotate</span></div><div class="pb"><canvas id="cloud"></canvas>
-  <div class="legend"><span><i style="background:var(--green)"></i>bought a winner</span><span><i style="background:var(--red)"></i>bought a loser</span><span>X: share of round left · Y: price · Z: spot vs open toward the token (bps)</span></div></div></section>
- <section class="p c5"><div class="ph"><span>⟋ <b>Model training</b> · learner vs market</span><span id="curveBadge">—</span></div><div class="pb"><canvas id="curve"></canvas><div class="note" id="curveNote">—</div></div></section>
+ <section class="p c12 tor"><div class="ph"><span>◉ <b>Market torus</b> · every trade on the ring of the round</span><span>ring: time through the round · tube: price · drag to rotate</span></div>
+  <div class="tbody" id="tbody"><canvas id="threads"></canvas>
+   <div class="col" id="inputs"><h5>LIVE INPUTS · LATEST TRADE</h5></div>
+   <div style="position:relative;min-width:0"><div class="ttl" id="ttl">—</div><canvas id="torus"></canvas></div>
+   <div class="col" id="fills"><h5>WINNING BUYS · RECENT ROUNDS</h5></div>
+  </div>
+  <div class="tleg"><span><i style="background:#ffd166"></i>live trade (round still open)</span><span><i style="background:#46e08a"></i>bought the winner</span><span><i style="background:#ff5d73"></i>bought a loser</span><span>spike length = trade size</span></div></section>
+
+ <section class="p c6"><div class="ph"><span>⟋ <b>Model training</b> · learner vs market</span><span id="curveBadge">—</span></div><div class="pb"><canvas id="curve"></canvas><div class="note" id="curveNote">—</div></div></section>
+ <section class="p c6"><div class="ph"><span>⚑ <b>How it should be executed</b> · rule tested on unseen rounds</span><span id="ruleBadge">—</span></div><div class="pb"><div id="rule"></div><div class="scroll" style="max-height:220px"><table id="ruleT"></table></div></div></section>
 
  <section class="p c12"><div class="ph"><span>▦ <b>Where winning buys happen</b> · average return per $1 after fee, by round</span><span>rows: share of round left · cols: price paid</span></div><div class="pb"><div class="hm" id="heat"></div>
   <div class="note">Green = buying there made money on average; colour strength = how many rounds back it. A cell needs ≥ <span id="minr">20</span> rounds and a positive lower bound before the rule may use it.</div></div></section>
 
- <section class="p c6"><div class="ph"><span>★ <b>Winning patterns</b> · best cells so far</span><span id="patBadge">—</span></div><div class="pb scroll"><table id="pat"></table></div></section>
- <section class="p c6"><div class="ph"><span>⚑ <b>How it should be executed</b> · rule tested on unseen rounds</span><span id="ruleBadge">—</span></div><div class="pb"><div id="rule"></div><div class="scroll" style="max-height:220px"><table id="ruleT"></table></div></div></section>
+ <section class="p c12"><div class="ph"><span>★ <b>Winning patterns</b> · best cells so far</span><span id="patBadge">—</span></div><div class="pb scroll"><table id="pat"></table></div></section>
 
  <section class="p c12"><div class="ph"><span>⧉ <b>Resolved rounds</b> · how each one was won</span><span id="rBadge">—</span></div><div class="pb"><div class="rounds" id="rounds"></div></div></section>
 
@@ -168,45 +190,116 @@ function drawCurve(){
 }
 (function loop(){drawCurve();requestAnimationFrame(loop);})();
 
-// ---------- 3D cloud ----------
-let scene,cam,ren,pts,grp,rotY=.7,rotX=.35,drag=null,auto=true,spawn=0;
-function init3d(){
- const c=$('cloud');if(!window.THREE){const g=c.getContext('2d');g.fillStyle='#6f8589';g.fillText('3D view needs three.js (blocked?)',10,20);return;}
- ren=new THREE.WebGLRenderer({canvas:c,antialias:true,alpha:true});scene=new THREE.Scene();cam=new THREE.PerspectiveCamera(42,1,.1,50);cam.position.set(0,0,3.4);
- grp=new THREE.Group();scene.add(grp);
- const box=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2,2,2)),new THREE.LineBasicMaterial({color:0x233136}));grp.add(box);
- const ax=(a,b,col)=>{const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a),new THREE.Vector3(...b)]);grp.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:col})));};
- ax([-1,-1,-1],[1,-1,-1],0x65d5ff);ax([-1,-1,-1],[-1,1,-1],0xffc45a);ax([-1,-1,-1],[-1,-1,1],0xbdabff);
- const lbl=(t,p,col)=>{const cv=document.createElement('canvas');cv.width=256;cv.height=48;const x=cv.getContext('2d');x.fillStyle=col;x.font='22px ui-monospace,monospace';x.fillText(t,4,30);
-  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true}));s.position.set(...p);s.scale.set(.75,.14,1);grp.add(s);};
- lbl('round left →',[.55,-1.12,-1],'#65d5ff');lbl('price ↑',[-1.25,.8,-1],'#ffc45a');lbl('spot→token',[-1,-1.12,.75],'#bdabff');
- // decision plane: the "fair" price surface would be here; show the 50c level
- const plane=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.MeshBasicMaterial({color:0x65d5ff,transparent:true,opacity:.04,side:THREE.DoubleSide}));plane.rotation.x=Math.PI/2;grp.add(plane);
- const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute([],3));geo.setAttribute('color',new THREE.Float32BufferAttribute([],3));
- pts=new THREE.Points(geo,new THREE.PointsMaterial({size:.045,vertexColors:true,transparent:true,opacity:.9,sizeAttenuation:true}));grp.add(pts);
- c.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};auto=false;c.setPointerCapture(e.pointerId);});
- c.addEventListener('pointermove',e=>{if(!drag)return;rotY+=(e.clientX-drag.x)*.008;rotX=Math.max(-1.2,Math.min(1.2,rotX+(e.clientY-drag.y)*.008));drag={x:e.clientX,y:e.clientY};});
- c.addEventListener('pointerup',()=>{drag=null;setTimeout(()=>auto=true,4000);});
- (function tick(){const r=c.getBoundingClientRect();if(r.width&&(c.width!==Math.round(r.width*Math.min(2,devicePixelRatio))||!ren._s)){ren.setPixelRatio(Math.min(2,devicePixelRatio));ren.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.updateProjectionMatrix();ren._s=1;}
-  if(auto)rotY+=.0025;grp.rotation.y=rotY;grp.rotation.x=rotX;spawn=Math.min(1,spawn+.04);pts.material.size=.045*(.4+.6*spawn);ren.render(scene,cam);requestAnimationFrame(tick);})();
+// ---------- market torus (video template) ----------
+// Ring of the round: angle around the ring = time through the round (start -> close), angle around the tube =
+// trade price (0c -> 100c). Base particles breathe; every trade is a spike out of the surface (length = size):
+// gold = live (round open), green = bought the winner, red = bought a loser. Threads link the live input cards
+// (left) to the latest trade and the recent winning buys (right) to their spot on the ring.
+const TR={R:1.22,r:.50,NU:170,NV:46};
+let T3=null,spikes=[],anchors={inputs:[],fills:[]},latestLane=null,dragT=null,autoT=true,rotTy=0,rotTx=.52,clock0=performance.now();
+const GOLD=[1,.82,.40],GREEN=[.28,.88,.54],RED=[1,.36,.45];
+function torPos(u,v,lift=0){const rr=TR.r+lift,c=Math.cos(v);return [(TR.R+rr*c)*Math.cos(u),rr*Math.sin(v),(TR.R+rr*c)*Math.sin(u)];}
+function torNorm(u,v){return [Math.cos(v)*Math.cos(u),Math.sin(v),Math.cos(v)*Math.sin(u)];}
+function uvOf(leftFrac,price){return [(1-Math.max(0,Math.min(1,leftFrac??.5)))*Math.PI*2-Math.PI/2, Math.max(0,Math.min(1,price))*Math.PI*2-Math.PI/2];}
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),gr=g.createRadialGradient(32,32,0,32,32,32);
+ gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.25,'rgba(255,255,255,.75)');gr.addColorStop(.6,'rgba(255,255,255,.12)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+function initTorus(){
+ const c=$('torus');if(!window.THREE){const g=c.getContext('2d');g.fillStyle='#8ea2c9';g.fillText('3D view needs three.js',10,20);return;}
+ const ren=new THREE.WebGLRenderer({canvas:c,antialias:true,alpha:true}),scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(38,1,.1,60);
+ cam.position.set(0,.05,4.05);const grp=new THREE.Group();scene.add(grp);const tex=glowTex();
+ // base lattice
+ const n=TR.NU*TR.NV,base=new Float32Array(n*3),col=new Float32Array(n*3),uv=new Float32Array(n*2);let k=0;
+ for(let i=0;i<TR.NU;i++)for(let j=0;j<TR.NV;j++){const u=i/TR.NU*Math.PI*2+(j%2)*Math.PI/TR.NU,v=j/TR.NV*Math.PI*2;uv[2*k]=u;uv[2*k+1]=v;
+  const p=torPos(u,v);base.set(p,3*k);const w=(.45+.55*(Math.sin(v)*.5+.5))*(.75+.25*Math.random()),hot=Math.random()<.035;col.set(hot?[1,.86,.5]:[.22+.62*w*w,.42+.50*w,1],3*k);k++;}
+ const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.BufferAttribute(base.slice(),3));bg.setAttribute('color',new THREE.BufferAttribute(col,3));
+ const basePts=new THREE.Points(bg,new THREE.PointsMaterial({size:.052,map:tex,vertexColors:true,transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending}));grp.add(basePts);
+ // spikes + tips
+ const sg=new THREE.BufferGeometry(),tg=new THREE.BufferGeometry();
+ const lines=new THREE.LineSegments(sg,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.9,depthWrite:false,blending:THREE.AdditiveBlending}));
+ const tips=new THREE.Points(tg,new THREE.PointsMaterial({size:.06,map:tex,vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));grp.add(lines,tips);
+ // faint inner halo ring
+ const halo=new THREE.Mesh(new THREE.TorusGeometry(TR.R,TR.r*.98,24,120),new THREE.MeshBasicMaterial({color:0x1b3a7a,transparent:true,opacity:.06,depthWrite:false}));halo.rotation.x=Math.PI/2;grp.add(halo);
+ T3={ren,scene,cam,grp,basePts,uv,lines,tips,canvas:c};
+ c.addEventListener('pointerdown',e=>{dragT={x:e.clientX,y:e.clientY};autoT=false;c.setPointerCapture(e.pointerId);});
+ c.addEventListener('pointermove',e=>{if(!dragT)return;rotTy+=(e.clientX-dragT.x)*.008;rotTx=Math.max(.12,Math.min(1.45,rotTx+(e.clientY-dragT.y)*.006));dragT={x:e.clientX,y:e.clientY};});
+ c.addEventListener('pointerup',()=>{dragT=null;setTimeout(()=>autoT=true,4000);});
+ requestAnimationFrame(frameT);
 }
-function cloud(s){
- if(!pts)return;const C=s.cloud||[],pos=[],col=[];
- C.forEach(p=>{if(!ok(p.l)||!ok(p.p))return;const z=ok(p.a)?Math.max(-1,Math.min(1,p.a/30)):0;pos.push(p.l*2-1,p.p*2-1,z);
-  if(p.w===true)col.push(.40,.95,.64);else if(p.w===false)col.push(1,.47,.53);else col.push(.4,.5,.55);});
- pts.geometry.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));pts.geometry.setAttribute('color',new THREE.Float32BufferAttribute(col,3));pts.geometry.computeBoundingSphere();spawn=0;
+function frameT(now){
+ if(!T3)return;const {ren,cam,grp,basePts,uv,canvas}=T3,r=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
+ if(r.width&&(T3.w!==r.width||T3.h!==r.height)){ren.setPixelRatio(dpr);ren.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.position.z=4.05*Math.max(1,Math.pow(1.9/cam.aspect,.85));cam.updateProjectionMatrix();T3.w=r.width;T3.h=r.height;}
+ const t=(now-clock0)/1000;if(autoT)rotTy+=.0018;grp.rotation.set(rotTx,rotTy,0);
+ // breathing surface
+ const pos=basePts.geometry.attributes.position.array;
+ for(let k=0,n=uv.length/2;k<n;k++){const u=uv[2*k],v=uv[2*k+1],lift=.018*Math.sin(t*1.6+u*5+v*3)+.01*Math.sin(t*.7+u*13);const p=torPos(u,v,lift);pos[3*k]=p[0];pos[3*k+1]=p[1];pos[3*k+2]=p[2];}
+ basePts.geometry.attributes.position.needsUpdate=true;
+ // growing spikes
+ const L=[],C=[],P=[],PC=[];
+ spikes.forEach(s=>{const age=t-s.born,g=Math.min(1,Math.max(0,age/.9)),len=s.len*(1-Math.pow(1-g,3))*(1+.06*Math.sin(t*3+s.u*7));
+  const a=torPos(s.u,s.v,.005),nn=torNorm(s.u,s.v),b=[a[0]+nn[0]*len,a[1]+nn[1]*len,a[2]+nn[2]*len],f=s.fade;
+  L.push(...a,...b);C.push(s.c[0]*f*.35,s.c[1]*f*.35,s.c[2]*f*.35,s.c[0]*f,s.c[1]*f,s.c[2]*f);P.push(...b);PC.push(s.c[0]*f,s.c[1]*f,s.c[2]*f);});
+ T3.lines.geometry.setAttribute('position',new THREE.Float32BufferAttribute(L,3));T3.lines.geometry.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+ T3.tips.geometry.setAttribute('position',new THREE.Float32BufferAttribute(P,3));T3.tips.geometry.setAttribute('color',new THREE.Float32BufferAttribute(PC,3));
+ ren.render(T3.scene,cam);drawThreads(t);requestAnimationFrame(frameT);
+}
+// project a torus point to coordinates inside #tbody
+function screenOf(u,v,lift){if(!T3)return null;const p=new THREE.Vector3(...torPos(u,v,lift));p.applyMatrix4(T3.grp.matrixWorld).project(T3.cam);
+ if(p.z>1)return null;const cr=T3.canvas.getBoundingClientRect(),br=$('tbody').getBoundingClientRect();return {x:cr.left-br.left+(p.x*.5+.5)*cr.width,y:cr.top-br.top+(-p.y*.5+.5)*cr.height};}
+function drawThreads(t){
+ const cv=$('threads');if(!cv||getComputedStyle(cv).display==='none')return;const br=$('tbody').getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
+ if(cv.width!==Math.round(br.width*dpr)||cv.height!==Math.round(br.height*dpr)){cv.width=br.width*dpr;cv.height=br.height*dpr;}
+ const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,br.width,br.height);g.lineCap='round';
+ const draw=(el,uvl,color,side,i)=>{if(!el||!uvl)return;const er=el.getBoundingClientRect(),q=screenOf(...uvl);if(!q)return;
+  const x0=side==='L'?er.right-br.left:er.left-br.left,y0=er.top-br.top+er.height/2,dx=(q.x-x0)*.55;
+  g.strokeStyle=color;g.globalAlpha=.55;g.lineWidth=1.1;g.shadowColor=color;g.shadowBlur=8;
+  g.beginPath();g.moveTo(x0,y0);g.bezierCurveTo(x0+dx,y0,q.x-dx*.4,q.y,q.x,q.y);g.stroke();
+  // travelling pulse
+  const s=(t*.45+i*.17)%1,bx=(1-s)**3*x0+3*(1-s)**2*s*(x0+dx)+3*(1-s)*s*s*(q.x-dx*.4)+s**3*q.x,by=(1-s)**3*y0+3*(1-s)**2*s*y0+3*(1-s)*s*s*q.y+s**3*q.y;
+  g.globalAlpha=.95;g.fillStyle=color;g.beginPath();g.arc(bx,by,2.1,0,7);g.fill();g.beginPath();g.arc(x0,y0,2.4,0,7);g.fill();g.beginPath();g.arc(q.x,q.y,1.8,0,7);g.fill();g.shadowBlur=0;};
+ anchors.inputs.forEach((a,i)=>draw(a.el,a.uv,a.color,'L',i));anchors.fills.forEach((a,i)=>draw(a.el,a.uv,a.color,'R',i+5));g.globalAlpha=1;
+}
+function sparkT(c,vals,color,lo,hi){const r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);if(!r.width)return;c.width=r.width*d;c.height=r.height*d;const g=c.getContext('2d');g.scale(d,d);
+ const v=vals.filter(ok);if(v.length<2)return;const mn=lo??Math.min(...v),mx=hi??Math.max(...v),X=i=>i/(v.length-1)*r.width,Y=x=>r.height-2-(x-mn)/Math.max(1e-9,mx-mn)*(r.height-4);
+ g.strokeStyle=color;g.lineWidth=1.6;g.shadowColor=color;g.shadowBlur=6;g.beginPath();v.forEach((x,i)=>i?g.lineTo(X(i),Y(x)):g.moveTo(X(i),Y(x)));g.stroke();
+ g.fillStyle=color;g.beginPath();g.arc(X(v.length-1),Y(v[v.length-1]),2.2,0,7);g.fill();}
+function torus(s){
+ const now=(performance.now()-clock0)/1000,live=s.live||[],cloud=s.cloud||[],have=new Map(spikes.map(x=>[x.key,x]));const next=[];
+ const add=(key,lf,price,size,color,fade,scale=1,b=0)=>{const [u,v]=uvOf(lf,price),h=Math.sin((+size||1)*12.9898+price*78.233+b*3.1)*43758.5453,j=((h-Math.floor(h))-.5)*.09,old=have.get(key);
+  next.push({key,u:u+j,v:v+j*.7,len:scale*(.06+.30*Math.min(1,Math.log1p(+size||1)/5.2)),c:color,fade,born:old?old.born:now});};
+ cloud.slice(-260).forEach((p,i,a)=>{if(!ok(p.p))return;add('c'+p.t+p.tok+p.p+p.s,p.l,p.p,p.s,p.w?GREEN:RED,(.18+.32*i/a.length),.55);});
+ live.slice(0,80).forEach((r,i)=>{if(!ok(r.price))return;const lf=ok(r.leftFrac)?r.leftFrac:(ok(r.secondsLeft)?r.secondsLeft/(String(r.lane).endsWith('15')?900:300):.5);for(let b=0;b<3;b++)add('l'+b+r.t+r.token+r.price+r.size,lf,r.price,r.size,GOLD,(1-.55*i/80)*(b?.7:1),1.25,b);});
+ spikes=next;
+ // left: live input cards for the latest print
+ const L0=live[0];latestLane=L0?L0.lane:null;const same=live.filter(r=>r.lane===latestLane).slice(0,40).reverse(),up=r=>r.token==='UP'?r.price:1-r.price;
+ const upP=L0?up(L0):null,mUp=L0&&ok(L0.pToken)?(L0.token==='UP'?L0.pToken:1-L0.pToken):null,lUp=L0&&ok(L0.pLearned)?(L0.token==='UP'?L0.pLearned:1-L0.pLearned):null;
+ const sl=L0&&ok(L0.secondsLeft)?Math.max(0,L0.secondsLeft):null;
+ const inputs=[['SPOT − OPEN',L0&&ok(L0.spotVsOpenBps)?sg(L0.spotVsOpenBps,1)+' bps':'—','where spot is vs the round open','#ff9f43',same.map(r=>r.spotVsOpenBps)],
+  ['TIME LEFT',ok(sl)?Math.floor(sl/60)+':'+String(Math.floor(sl%60)).padStart(2,'0'):'—',(latestLane||'—')+' round','#e8eefc',same.map(r=>r.secondsLeft)],
+  ['MODEL P(UP)',ok(mUp)?mUp.toFixed(3):'—','our model for UP','#46e08a',same.map(r=>ok(r.pToken)?(r.token==='UP'?r.pToken:1-r.pToken):null),0,1],
+  ['LEARNER P(UP)',ok(lUp)?lUp.toFixed(3):'—','market-anchored learner','#65d5ff',same.map(r=>ok(r.pLearned)?(r.token==='UP'?r.pLearned:1-r.pLearned):null),0,1],
+  ['UP PRICE',ok(upP)?upP.toFixed(3):'—','last trade, as UP probability','#ff5d73',same.map(up),0,1]];
+ const ic=$('inputs');if(ic.children.length!==inputs.length+1){ic.innerHTML='<h5>LIVE INPUTS · LATEST TRADE</h5>'+inputs.map((x,i)=>`<div class="inp" style="--c:${x[3]}" id="inp${i}"><div class="t"><span>${x[0]}</span><b></b></div><small></small><canvas></canvas></div>`).join('');}
+ anchors.inputs=inputs.map((x,i)=>{const el=$('inp'+i);el.querySelector('b').textContent=x[1];el.querySelector('small').textContent=x[2];sparkT(el.querySelector('canvas'),x[4],x[3],x[5],x[6]);
+  const lf=L0?(ok(L0.leftFrac)?L0.leftFrac:.5):.5;return {el,uv:L0?[...uvOf(lf,L0.price).map((a,j)=>a+(i-2)*.03*(j?1:.4)),.02]:null,color:x[3]};});
+ // right: biggest recent winning buys
+ const wins=[];(s.rounds||[]).forEach(r=>(r.topWinningBuys||[]).slice(0,2).forEach(b=>wins.push({...b,lane:r.lane,winner:r.winner,profit:(+b.size||0)*(1-(+b.price||0))})));
+ wins.sort((a,b)=>b.profit-a.profit);const top=wins.slice(0,7),fc=$('fills');
+ fc.innerHTML='<h5>WINNING BUYS · RECENT ROUNDS</h5>'+(top.length?top.map((b,i)=>`<div class="fill win" id="fill${i}" style="animation-delay:${i*50}ms"><div class="t"><span>${b.lane} · BUY ${b.winner}</span><b>+$${b.profit.toFixed(2)}</b></div><small>${Math.round(b.size)} sh @ ${Math.round(100*b.price)}¢${ok(b.secondsLeft)?' · '+Math.round(b.secondsLeft)+'s left':''}${ok(b.agreeBps)?' · spot '+sg(b.agreeBps,1):''}</small><i style="width:${Math.max(8,Math.min(100,100*b.profit/top[0].profit))}%"></i></div>`).join(''):'<div class="fill"><small>waiting for the first rounds to resolve…</small></div>');
+ anchors.fills=top.map((b,i)=>{const lf=ok(b.secondsLeft)?b.secondsLeft/(String(b.lane).endsWith('15')?900:300):.5;return {el:$('fill'+i),uv:[...uvOf(lf,b.price),.06],color:'#ffd166'};});
+ $('ttl').textContent=L0?`${latestLane} · MODEL P(UP) ${ok(mUp)?mUp.toFixed(3):'—'} · PRICE ${ok(upP)?upP.toFixed(3):'—'} · LEARNER ${ok(lUp)?lUp.toFixed(3):'—'}`:'waiting for trades…';
 }
 
 // ---------- poll ----------
 async function poll(){
  try{const s=await (await fetch('/api/poly/study',{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
-  const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p').forEach(bump);cloud(s);curve(s);}
-  if(!last){cloud(s);curve(s);}
+  const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p:not(.tor)').forEach(bump);curve(s);}
+  if(!last)curve(s);
+  torus(s);
   kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
  }catch(e){$('age').textContent='reconnecting…';}
 }
-init3d();poll();setInterval(poll,3000);
+initTorus();poll();setInterval(poll,3000);
 // gentle tilt on hover for the panels
-if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.p').forEach(p=>{p.addEventListener('pointermove',e=>{const r=p.getBoundingClientRect();p.style.setProperty('--ty',((e.clientX-r.left)/r.width-.5)*3+'deg');p.style.setProperty('--tx',(.5-(e.clientY-r.top)/r.height)*3+'deg');});p.addEventListener('pointerleave',()=>{p.style.setProperty('--ty','0deg');p.style.setProperty('--tx','0deg');});});
+if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.p:not(.tor)').forEach(p=>{p.addEventListener('pointermove',e=>{const r=p.getBoundingClientRect();p.style.setProperty('--ty',((e.clientX-r.left)/r.width-.5)*3+'deg');p.style.setProperty('--tx',(.5-(e.clientY-r.top)/r.height)*3+'deg');});p.addEventListener('pointerleave',()=>{p.style.setProperty('--ty','0deg');p.style.setProperty('--tx','0deg');});});
 })();
 </script></body></html>

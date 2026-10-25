@@ -154,8 +154,8 @@ class Study:
              'patterns':self.patterns(),'rule':self.rule_summary(),'rounds':rs[-24:][::-1],'wallets':list(self.wallet_rounds)[-12:][::-1],
              'learnCurve':list(self.learn_curve)[-300:]}
         if tape is not None:
-            out['live']=[{k:r.get(k) for k in ('t','lane','token','price','size','aggressor','pToken','pLearned','secondsLeft','agreeBps','action','learnedAction')} for r in list(tape.live)[-40:]][::-1]
-            out['cloud']=[{'l':r.get('leftFrac'),'p':r['price'],'a':r.get('agreeBps'),'w':r.get('won'),'s':r.get('size')} for r in list(tape.recent)[-400:]]
+            out['live']=[{k:r.get(k) for k in ('t','lane','token','price','size','aggressor','pToken','pLearned','secondsLeft','leftFrac','agreeBps','spotVsOpenBps','action','learnedAction')} for r in list(tape.live)[-80:]][::-1]
+            out['cloud']=[{'l':r.get('leftFrac'),'p':r['price'],'a':r.get('agreeBps'),'w':r.get('won'),'s':r.get('size'),'t':r.get('t'),'tok':r.get('token')} for r in list(tape.recent)[-400:]]
             out['tape']=tape.compact()
         if learner is not None:out['learner']=learner.summary()
         return out
