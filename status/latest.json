@@ -1,29 +1,29 @@
 {
- "at": 1792910853.6426885,
- "atUtc": "2026-10-25 06:47:33",
+ "at": 1792911650.438054,
+ "atUtc": "2026-10-25 07:00:50",
  "uptimeSec": 120,
  "host": "aws-ec2-t4g.small",
- "revision": "d46e9bb",
+ "revision": "c78599e",
  "hostStats": {
   "loadAvg": [
-   0.53,
-   0.41,
-   0.29
+   0.3,
+   0.26,
+   0.25
   ],
   "memTotalMb": 1835,
-  "memAvailableMb": 1224,
+  "memAvailableMb": 1209,
   "processRssMb": 226,
   "cpuCount": 2
  },
  "portfolio": {
-  "accountEquity": 196.82090319999998,
-  "accountPnl": -3.1790968000000226,
-  "equity": 198.52812709999998,
-  "realizedPnl": -0.8534764000000001,
-  "trades": 5,
-  "lifetimeRealizedPnl": -2.5607003000000006,
-  "lifetimeTrades": 60,
-  "epochPnl": -2.5607003000000006,
+  "accountEquity": 196.54422489999996,
+  "accountPnl": -3.455775100000037,
+  "equity": 198.25144879999996,
+  "realizedPnl": -1.0309512000000005,
+  "trades": 11,
+  "lifetimeRealizedPnl": -2.7381751000000008,
+  "lifetimeTrades": 66,
+  "epochPnl": -2.7381751000000008,
   "maxDrawdownUsd": 7.434893199999976,
   "riskLocked": false,
   "guard": {
@@ -44,22 +44,22 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "one momentum entry per asset per 5-minute round",
+   "decision": "two consecutive losses",
    "position": null
   },
   "ETH": {
    "feed": {
-    "market": "awaiting_settlement",
+    "market": "live",
     "clob": "live",
     "rtds": "live"
    },
    "paused": false,
    "decision": "managing live paper position",
    "position": {
-    "side": "UP",
-    "entryPrice": 0.05999999999999999,
-    "shares": 9.67,
-    "entryAt": 1792910631.4737737,
+    "side": "DOWN",
+    "entryPrice": 0.28,
+    "shares": 5.0,
+    "entryAt": 1792911616.0199482,
     "mode": "EDGE_HOLD"
    }
   },
@@ -70,7 +70,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "oracle impulse below 1.0 bps",
+   "decision": "two consecutive losses",
    "position": null
   },
   "ETH15": {
@@ -90,11 +90,11 @@
   "state": "healthy",
   "writer": true,
   "active": true,
-  "checkpointAt": 1792910852.9476328,
-  "checkpointAgeSec": 0.7061617374420166,
-  "queuedEvents": 0,
+  "checkpointAt": 1792911645.461702,
+  "checkpointAgeSec": 4.9876017570495605,
+  "queuedEvents": 2,
   "lastFlushSec": 0.046,
-  "eventsSavedThisBoot": 54,
+  "eventsSavedThisBoot": 53,
   "errors": 0,
   "lastError": null,
   "droppedEvents": 0,
@@ -133,15 +133,15 @@
   "error": null
  },
  "skillVsLuck": {
-  "tested": 2834,
+  "tested": 2839,
   "fdr": 0.1,
-  "skill": 649,
+  "skill": 653,
   "oneBigWin": 6,
   "ourSkilledTop": {
    "wallets": 150,
-   "skill": 110,
+   "skill": 108,
    "oneBigWin": 0,
-   "luckOrNoise": 39
+   "luckOrNoise": 40
   },
   "method": "one-sided t (normal tail) on last 60 rounds, Benjamini-Hochberg FDR, single-round concentration"
  },
@@ -169,8 +169,8 @@
    51,
    0,
    {
-    "sinceFreshStart": 60,
-    "sinceRulesLive": 66,
+    "sinceFreshStart": 66,
+    "sinceRulesLive": 72,
     "betweenTheTwoTimes": 6,
     "explained": true
    }
@@ -186,7 +186,7 @@
    -0.2958
   ],
   "exec": {
-   "trades": 89,
+   "trades": 95,
    "clean": true,
    "errors": {},
    "risk": {
@@ -232,21 +232,18 @@
    "experimentsHash": "d43afd80f9e4"
   },
   "alerts": [
-   "ETH: market feed awaiting_settlement",
-   "ETH: order book 12s old",
    "database: no verified backup recorded yet",
    "1 scalp(s) held to settlement"
   ],
   "model": [
    836,
-   0.2502,
-   0.225,
-   -0.112
+   0.2506,
+   0.2256,
+   -0.1108
   ]
  },
  "cpuProfile": null,
  "recentLog": [
-  "06:45:48 POLY_TRADE {\"asset\":\"BTC\",\"strategy\":\"EDGE_HOLD\",\"side\":\"UP\",\"entryAt\":1792910738.1224537,\"closedAt\":1792910748.6561828,\"quantity\":5.53,\"entryPrice\":0.26,\"exitPrice\":0.29,\"netPnlUsd\":0.011723599999999612,\"feesUsd\":0.1541764,\"holdSec\":10.533729076385498,\"exitReason\":\"market price exceeded calibrated fair value\",\"stopOvershootUsd\":0,\"entryLatencyMs\":352.6310920715332,\"exitLatencyMs\":352.326631546020",
-  "06:47:21 POLY_DEMO_CLOB_RECONNECT ETH ConnectionClosedOK received 1000 (OK) all subscribed assets resolved; then sent 1000 (OK) all subscribed assets resolved"
+  "07:00:46 POLY_DEMO_CLOB_RECONNECT BTC RuntimeError stale order-book backlog (lag 5.0s price_change run 50 rejected 50); reconnect"
  ]
 }
