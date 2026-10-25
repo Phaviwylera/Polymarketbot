@@ -153,3 +153,16 @@ class MomentumExecutionTests(unittest.IsolatedAsyncioTestCase):
             task.cancel();await asyncio.gather(task,return_exceptions=True)
 
 if __name__=='__main__':unittest.main()
+
+
+# Entry mechanics are tested with momentum entries enabled; production pauses them (owner decision 2026-10-25).
+import poly_server_demo as _sd
+from unittest.mock import patch as _p2
+_mom=_p2.object(_sd,'MOMENTUM_ENTRIES_PAUSED',False)
+_prev_setup=globals().get('setUpModule');_prev_teardown=globals().get('tearDownModule')
+def setUpModule():
+    _mom.start()
+    if _prev_setup:_prev_setup()
+def tearDownModule():
+    if _prev_teardown:_prev_teardown()
+    _mom.stop()

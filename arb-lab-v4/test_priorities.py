@@ -65,3 +65,14 @@ class BackupMarkerTests(unittest.TestCase):
         class C:
             def list_objects_v2(self,**kw):return {'Contents':[{'Key':'polybot/2026-10-25/backup-1792932797.jsonl.gz'},{'Key':'polybot/2026-10-25/verified-1792931796.json'}]}
         s3=sb.S3('b',client=C());self.assertEqual(asyncio.run(s3.latest_backup_at()),1792931796)
+
+
+class MomentumPauseTests(Lane):
+    async def test_paused_by_default_blocks_new_entries_but_manages_open_positions(self):
+        import poly_server_demo as sd
+        self.assertTrue(sd.MOMENTUM_ENTRIES_PAUSED)                 # production default since 2026-10-25
+        await self.e._momentum_step(self.m)
+        self.assertIsNone(self.e.paper.get('position'));self.assertIn('paused by owner',self.e.momentum_decision)
+        with patch.object(sd,'MOMENTUM_ENTRIES_PAUSED',False):self.assertTrue(await self.e._momentum_enter(self.candidate()))
+        self.set_bids([(.30,40)]);await self.e._momentum_step(self.m)   # paused again: the open position still exits on its stop
+        self.assertIsNone(self.e.paper['position']);self.assertTrue(self.closed)

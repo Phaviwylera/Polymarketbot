@@ -49,6 +49,9 @@ import os as _os
 # exits averaged +$0.87 (47 trades; +$1.11 on the 26 matching current rules) against a fee saving of
 # about $0.08 per exit. The first two live maker exits made +$0.31 and +$0.32.
 MAKER_EXIT=_os.getenv("POLY_MAKER_EXIT","0")=="1"
+# Owner decision 2026-10-25: momentum showed no edge after fees (54 trades, -$7.99, fees 107% of gross); new
+# entries are paused while data collection continues. POLY_MOMENTUM_ENTRIES=1 re-enables them.
+MOMENTUM_ENTRIES_PAUSED=_os.getenv("POLY_MOMENTUM_ENTRIES","0")!="1"
 SELF_MANAGED_MODES=("MOMENTUM_SCALP","MODEL_SCALP","EDGE_HOLD")
 MODEL_MIN_CONSERVATIVE_RETURN=0.005
 INVENTORY_MAX_INITIAL_GAP=0.0
@@ -1747,6 +1750,10 @@ class PolyServerDemo:
         await self._momentum_manage(m)
         p=self.paper;self._update_risk()
         if p.get('position'):self.momentum_decision='managing live paper position';return
+        if MOMENTUM_ENTRIES_PAUSED:   # owner decision 2026-10-25: no new momentum entries; feeds, tape and research keep running
+            try:_,why=self._momentum_signal(m)
+            except Exception:why='—'
+            self.momentum_decision='momentum entries paused by owner · signal: '+str(why)[:60];return
         if not self._operational_entry_allowed():
             pause=getattr(self,'entry_pause',None);why=pause() if pause else None
             self.momentum_decision=('entries paused: '+why) if why else 'entries paused: storage recovery or handover';return
