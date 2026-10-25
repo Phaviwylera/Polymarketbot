@@ -261,6 +261,7 @@ class EdgeLab:
         # The rolling 200-bet gate is picked from several variants and is weaker than the audit's predeclared
         # 60-trade out-of-sample criteria; promotion is a deliberate change (POLY_EDGE_AUTO_PROMOTE=1).
         self.auto_promote=os.getenv('POLY_EDGE_AUTO_PROMOTE','0')=='1'
+        import poly_learner;self.learner=poly_learner.Learner()   # learns vs market from every settled trade print (trade tape)
         self.strategies={v:StrategyRecord(v) for v in VARIANTS}
         self.maker=StrategyRecord('maker')   # pair-shadow cycles: maker first leg, taker hedge or unwind
         self.rounds={}            # slug -> round record awaiting resolution
@@ -503,7 +504,7 @@ class EdgeLab:
     def export(self):
         return {'version':VERSION,'savedAt':time.time(),'calibration':self.cal.export(),'maker':self.maker.export(),
                 'strategies':{v:s.export() for v,s in self.strategies.items()},'wallets':self.intel.export(),
-                'trades':list(self.trades)[-3000:],
+                'trades':list(self.trades)[-3000:],'learner':self.learner.export(),
                 # display only: the last 15 min of model-vs-market points per lane, so a restart does not blank the edge matrix
                 'samples':{k:list(v)[-180:] for k,v in self.samples.items()}}
     def import_bets(self,archive):
@@ -528,6 +529,7 @@ class EdgeLab:
         self.maker=StrategyRecord('maker');self.maker.restore(state.get('maker'))
         self.intel.restore(state.get('wallets'))
         self.trades.clear();self.trades.extend(r for r in state.get('trades') or [] if isinstance(r,dict) and 'pnl' in r)
+        if state.get('learner'):self.learner.restore(state['learner'])
         for k,rows in (state.get('samples') or {}).items():
             if isinstance(rows,list):self.samples[k].extend(r for r in rows if isinstance(r,dict) and 't' in r)
         self.restored=True;return True

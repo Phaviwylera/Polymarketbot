@@ -23,6 +23,7 @@ import asyncio,gzip,json,math,os,time
 from collections import defaultdict,deque
 
 FEE_RATE=0.07;EDGE_BUFFER=0.02;Z=1.0;MODEL_MAX_AGE_SEC=10.0;MAX_PENDING_PER_ROUND=20000
+LEARNED_SE=0.02            # margin used for decisions on the learner's probability (it is already market-anchored)
 CURRENT=None
 
 def fee(p):return FEE_RATE*p*(1-p)
@@ -42,12 +43,16 @@ def decide(p_token,se,price,model_age):
 class Agg:
     def __init__(self):
         self.n=0;self.rounds=set();self.brier_m=0.;self.brier_p=0.;self.ll_m=0.;self.ll_p=0.
-        self.act=defaultdict(lambda:{'n':0,'won':0,'ret':0.});self.round_ret=defaultdict(float);self.round_n=defaultdict(int)
+        self.act=defaultdict(lambda:{'n':0,'won':0,'ret':0.});self.lact=defaultdict(lambda:{'n':0,'won':0,'ret':0.});self.round_ret=defaultdict(float);self.round_n=defaultdict(int)
     def add(self,row):
         y=1. if row['won'] else 0.;p=row['pToken'];q=row['price'];self.n+=1;self.rounds.add(row['slug'])
         if p is not None:
             self.brier_m+=(p-y)**2;self.ll_m+=-math.log(max(1e-6,p if y else 1-p))
         self.brier_p+=(q-y)**2;self.ll_p+=-math.log(max(1e-6,q if y else 1-q))
+        la=row.get('learnedAction');lr=row.get('learnedReturnPerDollar')
+        if la:
+            st=self.lact[la];st['n']+=1
+            if lr is not None:st['ret']+=lr;st['won']+=int(lr>0)
         a=row['action'];r=row.get('returnPerDollar')
         st=self.act[a];st['n']+=1
         if r is not None:
@@ -57,12 +62,16 @@ class Agg:
              'brierModel':round(self.brier_m/with_model,5) if with_model else None,'brierPrice':round(self.brier_p/self.n,5) if self.n else None,
              'logLossModel':round(self.ll_m/with_model,5) if with_model else None,'logLossPrice':round(self.ll_p/self.n,5) if self.n else None,
              'actions':{k:{'prints':v['n'],'winPct':round(100*v['won']/v['n'],1) if v['n'] and k!='SKIP' else None,
-                           'avgReturnPerDollar':round(v['ret']/v['n'],4) if v['n'] and k!='SKIP' else None} for k,v in self.act.items()}}
+                           'avgReturnPerDollar':round(v['ret']/v['n'],4) if v['n'] and k!='SKIP' else None} for k,v in self.act.items()},
+             'learnedActions':{k:{'prints':v['n'],'winPct':round(100*v['won']/v['n'],1) if v['n'] and k!='SKIP' else None,
+                           'avgReturnPerDollar':round(v['ret']/v['n'],4) if v['n'] and k!='SKIP' else None} for k,v in self.lact.items()}}
         if with_model and self.n:out['modelBeatsPrice']=out['brierModel']<out['brierPrice']
         return out
 
 class Tape:
-    def __init__(self,root=None,s3=None,now=time.time):
+    def __init__(self,root=None,s3=None,now=time.time,learner=None):
+        import poly_learner
+        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'}
         self.root=root or os.path.join(os.getenv('POLY_DATA_DIR','/tmp'),'tape');self.s3=s3;self.now=now
         self.pending=defaultdict(list)          # slug -> rows awaiting the round's outcome
         self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
@@ -78,10 +87,17 @@ class Tape:
         age=(t-float(signal['at'])) if signal and signal.get('at') else None
         p_tok=None if pu is None else (pu if pr['side']=='up' else 1-pu)
         action,edge,why=decide(p_tok,se,price,age)
+        fresh=p_tok is not None and age is not None and age<=MODEL_MAX_AGE_SEC
         row={'t':round(t,3),'lane':lane,'slug':slug,'roundEnd':(market or {}).get('endTs'),'token':pr['side'].upper(),'price':price,
              'size':float(pr.get('size') or 0),'aggressor':pr.get('aggressor'),'pToken':None if p_tok is None else round(p_tok,5),
              'se':None if se is None else round(float(se),5),'modelAgeSec':None if age is None else round(age,2),
              'action':action,'edge':edge,'reason':why,'momentum':(momentum or '')[:60]}
+        # learner: market-anchored probability using only information available at this print
+        try:
+            pl=self.learner.predict({**row,'pToken':row['pToken'] if fresh else None})
+            la,le,_=decide(pl,LEARNED_SE,price,0.)
+            row.update(pLearned=round(pl,5),learnedAction=la,learnedEdge=le)
+        except Exception:pass
         self.pending[slug].append(row);self.seen+=1
         return row
     def settle(self,slug,winner):
@@ -93,12 +109,50 @@ class Tape:
             elif r['action']=='SELL':
                 o=1-r['price'];c=o+fee(o);r['returnPerDollar']=round(((0. if r['won'] else 1.)-c)/c,5)
             else:r['returnPerDollar']=None
+            la=r.get('learnedAction')
+            if la=='BUY':c=r['price']+fee(r['price']);r['learnedReturnPerDollar']=round(((1. if r['won'] else 0.)-c)/c,5)
+            elif la=='SELL':o=1-r['price'];c=o+fee(o);r['learnedReturnPerDollar']=round(((0. if r['won'] else 1.)-c)/c,5)
+            else:r['learnedReturnPerDollar']=None
             self.agg.add(r);self.lanes[r['lane']].add(r)
             if r['pToken'] is not None:self.with_model+=1;self.lane_model[r['lane']]+=1
             self.recent.append(r)
+        try:self.learner.learn_round([{**r,'pToken':r['pToken'] if (r.get('modelAgeSec') is not None and r['modelAgeSec']<=MODEL_MAX_AGE_SEC) else None} for r in rows])
+        except Exception as exc:self.last_error=f'learn: {type(exc).__name__}'
         try:self._write(rows)
         except Exception as exc:self.last_error=f'write: {type(exc).__name__}'
         return len(rows)
+    # ---- warm start: replay labelled history (prequential) ----------------------------------------
+    def replay(self,rows):
+        """Learn from already-labelled rows (oldest round first). Only used when the learner has no state."""
+        by={}
+        for r in rows:
+            if r.get('won') is None:continue
+            by.setdefault(r['slug'],[]).append(r)
+        order=sorted(by.values(),key=lambda rs:float(rs[0].get('roundEnd') or rs[0].get('t') or 0))
+        for rs in order:
+            self.learner.learn_round([{**r,'pToken':r['pToken'] if (r.get('modelAgeSec') is not None and r['modelAgeSec']<=MODEL_MAX_AGE_SEC) else None} for r in rs])
+        return len(order)
+    def _local_rows(self):
+        out=[]
+        if not os.path.isdir(self.root):return out
+        for day in sorted(os.listdir(self.root)):
+            d=os.path.join(self.root,day)
+            for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+                with gzip.open(os.path.join(d,name),'rt') as f:out+=[json.loads(l) for l in f if l.strip()]
+        return out
+    async def warm_start(self,days=7):
+        if self.learner.rounds>0:self.warm={'state':'skipped: learner restored with history','rounds':self.learner.rounds};return 0
+        rows=[]
+        if self.s3 is not None and hasattr(self.s3,'list_get'):
+            try:rows+=await self.s3.list_get('polybot/tape/',days)
+            except Exception as exc:self.warm={'state':'s3 error','error':type(exc).__name__}
+        rows+=self._local_rows()
+        seen=set();uniq=[]
+        for r in rows:
+            k=(r.get('slug'),r.get('t'),r.get('token'),r.get('price'),r.get('size'))
+            if k not in seen:seen.add(k);uniq.append(r)
+        n=await asyncio.to_thread(self.replay,uniq)
+        self.warm={'state':'done','rounds':n,'prints':len(uniq)};return n
     def expire(self,max_age=3*3600):
         """Rounds whose outcome never arrived are dropped (not labelled) after max_age."""
         now=self.now()
@@ -141,18 +195,24 @@ class Tape:
                 'seenPrints':self.seen,'pendingRounds':len(self.pending),'pendingPrints':sum(len(v) for v in self.pending.values()),
                 'droppedPrints':self.dropped,'filesUploaded':self.files_uploaded,'error':self.last_error,
                 'overall':self.agg.summary(self.with_model),'byLane':{k:a.summary(self.lane_model[k]) for k,a in self.lanes.items()},
-                'recentDecisionsBlockBootstrap':blk,
+                'recentDecisionsBlockBootstrap':blk,'learner':self.learner.summary(),'warmStart':self.warm,
                 'rules':{'z':Z,'edgeBuffer':EDGE_BUFFER,'feeRate':FEE_RATE,'modelMaxAgeSec':MODEL_MAX_AGE_SEC},
                 'note':'prints in one round share one outcome: rounds, not prints, are the independent sample size',
-                'recent':[{k:r.get(k) for k in ('t','lane','token','price','pToken','action','edge','won','returnPerDollar')} for r in list(self.recent)[-12:]]}
+                'recent':[{k:r.get(k) for k in ('t','lane','token','price','pToken','pLearned','action','learnedAction','edge','won','returnPerDollar')} for r in list(self.recent)[-12:]]}
     def compact(self):
-        o=self.agg.summary(self.with_model);a=o['actions']
+        o=self.agg.summary(self.with_model);a=o['actions'];la=o.get('learnedActions') or {};ls=self.learner.summary()
         return {'prints':o['labelledPrints'],'rounds':o['rounds'],'brierModel':o['brierModel'],'brierPrice':o['brierPrice'],
                 'buy':[(a.get('BUY') or {}).get('prints'),(a.get('BUY') or {}).get('avgReturnPerDollar')],
                 'sell':[(a.get('SELL') or {}).get('prints'),(a.get('SELL') or {}).get('avgReturnPerDollar')],
-                'skip':(a.get('SKIP') or {}).get('prints'),'pending':sum(len(v) for v in self.pending.values()),'error':self.last_error}
+                'skip':(a.get('SKIP') or {}).get('prints'),'pending':sum(len(v) for v in self.pending.values()),'error':self.last_error,
+                'learner':{k:ls.get(k) for k in ('rounds','brierPrice','brierLearned','brierModel','learnedBeatsPrice')},
+                'learnedBuy':[(la.get('BUY') or {}).get('prints'),(la.get('BUY') or {}).get('avgReturnPerDollar')],
+                'learnedSell':[(la.get('SELL') or {}).get('prints'),(la.get('SELL') or {}).get('avgReturnPerDollar')]}
     async def loop(self):
         global CURRENT;CURRENT=self
+        await asyncio.sleep(120)                 # let the saved learner state restore first
+        try:await self.warm_start()
+        except Exception as exc:self.warm={'state':'error','error':type(exc).__name__}
         while True:
             await asyncio.sleep(600)
             try:self.expire();await self.upload_closed_hours()

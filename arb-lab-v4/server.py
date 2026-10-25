@@ -945,7 +945,7 @@ async def start_trade_tape():
     s3=None
     if os.getenv('POLY_BACKUP_S3_BUCKET'):
         import poly_s3backup;s3=poly_s3backup.S3(os.getenv('POLY_BACKUP_S3_BUCKET'))
-    _tape=poly_tape.Tape(s3=s3)
+    _tape=poly_tape.Tape(s3=s3,learner=poly_server_engine.edge.learner)
     for lane in poly_server_engine.engines.values():lane.tape=_tape
     edge=poly_server_engine.edge
     if not hasattr(edge,'settle_listeners'):edge.settle_listeners=[]

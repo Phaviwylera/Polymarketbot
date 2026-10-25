@@ -66,6 +66,23 @@ class S3:
         await asyncio.to_thread(self.c().upload_file,path,self.bucket,key,ExtraArgs={'Metadata':{'sha256':sha},'ServerSideEncryption':'AES256'})
     async def get(self,key,path):
         await asyncio.to_thread(self.c().download_file,self.bucket,key,path)
+    async def list_get(self,prefix,days=7):
+        """Labelled tape rows from the last `days` of hourly files under prefix (warm start of the learner)."""
+        def run():
+            import io
+            cut=time.time()-days*86400;rows=[];token=None
+            while True:
+                kw={'Bucket':self.bucket,'Prefix':prefix}
+                if token:kw['ContinuationToken']=token
+                r=self.c().list_objects_v2(**kw)
+                for o in r.get('Contents',[]):
+                    if o['LastModified'].timestamp()<cut:continue
+                    body=self.c().get_object(Bucket=self.bucket,Key=o['Key'])['Body'].read()
+                    with gzip.open(io.BytesIO(body),'rt') as f:rows+=[json.loads(l) for l in f if l.strip()]
+                if not r.get('IsTruncated'):break
+                token=r.get('NextContinuationToken')
+            return rows
+        return await asyncio.to_thread(run)
 
 async def backup(url,s3,log=print,workdir=None):
     import asyncpg
