@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS poly_v161_events_kind_time ON poly_v161_events(kind,t
 """
 KINDS={'SHADOW_OUTCOME','MODEL_EVALUATION','TRADE_ATTRIBUTION','EXECUTION_REJECT',
        'EXIT_ATTEMPT','EXIT_WAIT','MOMENTUM_ORDER','ENGINE_EVENT','DECISION_SAMPLE',
-       'PAIR_QUOTE','PAIR_CANCEL','PAIR_FIRST_FILL','PAIR_HEDGE_FILL','PAIR_EXIT_REQUEST','PAIR_OUTCOME','PAIR_ERROR','BULLPEN_SIGNAL'}
+       'PAIR_QUOTE','PAIR_CANCEL','PAIR_FIRST_FILL','PAIR_HEDGE_FILL','PAIR_EXIT_REQUEST','PAIR_OUTCOME','PAIR_ERROR','BULLPEN_SIGNAL','THRESHOLD_SHADOW'}
 def checkpoint(snapshot):
     keys={'asset','revision','serverTime','paper','market','bbo','openRef','openTrusted',
           'spot','twap','spotAgeSec','twapAgeSec','model','candidate','decision','mode','reasonCounts'}

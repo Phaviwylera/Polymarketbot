@@ -106,11 +106,11 @@ class Bullpen:
         return data
 
     # ---- collect --------------------------------------------------------------------------------
-    def _record(self,store,command,data,wallet=None,our=None,now=None):
+    def _record(self,store,command,data,wallet=None,our=None,now=None,skill=None):
         if store is None or data is None:return
         now=time.time() if now is None else now;self.seq+=1
         store.enqueue({'bootId':self.boot,'journalSeq':self.seq,'t':now,'asset':'ALL','kind':'BULLPEN_SIGNAL',
-                       'command':command,'wallet':wallet,'ourScore':our,'bullpenVersion':VERSION,'data':data})
+                       'command':command,'wallet':wallet,'ourScore':our,'ourSkillTest':skill,'bullpenVersion':VERSION,'data':data})
         self.state['eventsRecorded']+=1
     async def collect_once(self,engine,store,now=None):
         now=time.time() if now is None else now
@@ -119,7 +119,8 @@ class Bullpen:
         due=[(w,s) for w,s in skilled.items() if ADDRESS.match(str(w)) and now-self.seen.get(w,0)>=WALLET_REFRESH_SEC][:WALLETS_PER_RUN]
         for w,s in due:
             for cmd,extra in (('wallet-stats',['--section','all']),('trader-profile',[])):
-                self._record(store,cmd,await self.run(['polymarket','data',cmd,w,*extra]),w,round(float(s),6),now)
+                self._record(store,cmd,await self.run(['polymarket','data',cmd,w,*extra]),w,round(float(s),6),now,
+                             intel.skill_test(w) if hasattr(intel,'skill_test') else None)
             self.seen[w]=now;await asyncio.sleep(1)
         if now-self.leaderboard_at>=LEADERBOARD_SEC:
             self._record(store,'leaderboard',await self.run(['polymarket','data','leaderboard']),now=now);self.leaderboard_at=now

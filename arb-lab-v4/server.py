@@ -862,7 +862,11 @@ async def _audit(force=False):
 
 @app.get("/api/poly/audit")
 async def poly_audit_endpoint():
-    return await _audit()
+    rep=dict(await _audit())
+    rep['threshold']=_threshold.compact() if _threshold else None
+    try:rep['skillVsLuck']={k:v for k,v in poly_server_engine.edge.intel.skill_vs_luck().items() if k!='per'}
+    except Exception:rep['skillVsLuck']=None
+    return rep
 
 @app.get("/api/poly/baseline")
 async def poly_baseline_endpoint():
@@ -916,6 +920,19 @@ async def start_bullpen():
     if os.getenv('POLY_BULLPEN','1')=='0' or POLY_ENGINE_ROLE=='frontend':return
     import poly_bullpen
     _bullpen=poly_bullpen.Bullpen();asyncio.create_task(_bullpen.loop(poly_server_engine));print('POLY_BULLPEN_ON',flush=True)
+
+_threshold=None
+@app.on_event('startup')
+async def start_threshold_shadow():
+    """Paper-only 'above $X' probability-model shadow lane (POLY_THRESHOLD=0 disables)."""
+    global _threshold
+    if os.getenv('POLY_THRESHOLD','1')=='0' or POLY_ENGINE_ROLE=='frontend':return
+    import poly_threshold
+    _threshold=poly_threshold.ThresholdLane();asyncio.create_task(_threshold.loop(poly_server_engine));print('POLY_THRESHOLD_ON',flush=True)
+
+@app.get("/api/poly/threshold")
+async def poly_threshold_report():
+    return _threshold.report() if _threshold else {'enabled':False}
 
 @app.get("/api/poly/bullpen")
 async def poly_bullpen_status():

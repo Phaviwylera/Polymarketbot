@@ -189,6 +189,36 @@ class WalletIntel:
     def _skilled(self,limit):
         scored=[(s,w) for w,a in self.wallets.items() if (s:=self.score(a)) is not None and s>0]
         return dict((w,s) for s,w in sorted(scored,reverse=True)[:limit])
+    def skill_vs_luck(self,fdr=0.10):
+        """Record-only 'skill or luck' test (does not change skilled() or trading).
+        Per wallet with >= SKILL_MIN_ROUNDS resolved rounds: one-sided test that mean round P&L > 0
+        (t = mean/SE, normal tail), Benjamini-Hochberg false-discovery control across every tested
+        wallet (with ~10k wallets, dozens look 'skilled' by luck alone), and a concentration check:
+        a wallet whose single best round is >= half its gross winnings is flagged 'one big win'."""
+        key=(self.version,len(self.wallets),fdr);c=getattr(self,'_svl_cache',None)
+        if c is not None and c[0]==key:return c[1]
+        tests=[]
+        for w,a in self.wallets.items():
+            x=a['recent']
+            if len(x)<SKILL_MIN_ROUNDS:continue
+            m,se=mean_se(x)
+            if not se:continue
+            t=m/se;gross=math.fsum(v for v in x if v>0)
+            tests.append((0.5*math.erfc(t/math.sqrt(2)),w,len(x),m,t,(max(x)/gross) if gross>0 else None))
+        tests.sort();k=len(tests);q=[0.]*k;run=1.
+        for i in range(k-1,-1,-1):run=min(run,tests[i][0]*k/(i+1));q[i]=run
+        per={}
+        for i,(p,w,n,m,t,conc) in enumerate(tests):
+            sig=q[i]<=fdr
+            per[w]={'n':n,'meanPnl':round(m,4),'t':round(t,2),'p':round(p,5),'q':round(q[i],4),'topRoundShare':None if conc is None else round(conc,3),
+                    'verdict':('one big win' if conc is not None and conc>=.5 else 'skill') if sig else 'luck or noise'}
+        top=self.skilled();vt=[per[w]['verdict'] for w in top if w in per]
+        out={'tested':k,'fdr':fdr,'skill':sum(v['verdict']=='skill' for v in per.values()),
+             'oneBigWin':sum(v['verdict']=='one big win' for v in per.values()),
+             'ourSkilledTop':{'wallets':len(top),'skill':vt.count('skill'),'oneBigWin':vt.count('one big win'),'luckOrNoise':vt.count('luck or noise')},
+             'method':'one-sided t (normal tail) on last 60 rounds, Benjamini-Hochberg FDR, single-round concentration','per':per}
+        self._svl_cache=(key,out);return out
+    def skill_test(self,wallet):return self.skill_vs_luck()['per'].get(wallet)
     def live_flow(self,asset,trades,now,skilled):
         flow={'up':0.,'down':0.};count=0
         for t in trades:
@@ -454,7 +484,7 @@ class EdgeLab:
     def snapshot(self,capital=200.):
         return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),
                 'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'maker':{**self.maker.stats(),'note':'returns are USD per share-pair; promotion enables funded maker quoting on 5-minute lanes'},'calibration':self.cal.summary(),'modelTrust':self.trust(),
-                'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),
+                'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),'skillVsLuck':{k:v for k,v in self.intel.skill_vs_luck().items() if k!='per'},
                 'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],'flows':self.flows(),
                 'readiness':self.readiness(capital),'errors':self.errors,
                 'sizing':{'kellyFraction':KELLY_FRACTION,'maxAllocationFraction':MAX_ALLOCATION_FRACTION,
