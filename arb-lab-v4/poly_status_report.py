@@ -57,8 +57,13 @@ def snapshot(engine,audit_compact,tee,started_at,now=None):
             'host':os.getenv('POLY_HOST_LABEL','unknown'),'revision':_revision(),'hostStats':host_stats(),
             'portfolio':{k:pf.get(k) for k in ('accountEquity','accountPnl','equity','realizedPnl','trades','lifetimeRealizedPnl','lifetimeTrades',
                                                'epochPnl','maxDrawdownUsd','riskLocked','guard','pausedLanes','revision')},
-            'lanes':lanes,'storage':storage,'audit':audit_compact,'cpuProfile':(tee.cpu if tee else None),
+            'lanes':lanes,'storage':storage,'bullpen':_bullpen_state(),'audit':audit_compact,'cpuProfile':(tee.cpu if tee else None),
             'recentLog':list(tee.lines)[-60:] if tee else []}
+
+def _bullpen_state():
+    try:
+        import poly_bullpen;b=poly_bullpen.CURRENT;return b.state if b else None
+    except Exception:return None
 
 def _revision():
     try:

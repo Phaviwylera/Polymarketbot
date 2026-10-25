@@ -71,3 +71,10 @@ The database advisory lock allows exactly one bot to own the paper account; the 
 ## 7. Before the 6-month free-plan limit
 Either upgrade the AWS account to the paid plan (same instance keeps running, billed after credits) or
 move again; the paper account is in Supabase, so moving is only a new host plus the same handover.
+
+## 8. Bullpen wallet analytics (automatic, read-only)
+The bot installs the pinned Bullpen CLI itself (checksum-verified, under `POLY_DATA_DIR/bullpen`) and
+every 30 minutes records Bullpen's public wallet analytics for our top-scored wallets as
+`BULLPEN_SIGNAL` events, next to our own score. Read-only (`--read-only`), never logs in, record-only:
+it does not affect trading. Status: `http://<ip>/api/poly/bullpen` and `bullpen` in the status report.
+Disable with `POLY_BULLPEN=0` in `/etc/polybot.env`.

@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS poly_v161_events_kind_time ON poly_v161_events(kind,t
 """
 KINDS={'SHADOW_OUTCOME','MODEL_EVALUATION','TRADE_ATTRIBUTION','EXECUTION_REJECT',
        'EXIT_ATTEMPT','EXIT_WAIT','MOMENTUM_ORDER','ENGINE_EVENT','DECISION_SAMPLE',
-       'PAIR_QUOTE','PAIR_CANCEL','PAIR_FIRST_FILL','PAIR_HEDGE_FILL','PAIR_EXIT_REQUEST','PAIR_OUTCOME','PAIR_ERROR'}
+       'PAIR_QUOTE','PAIR_CANCEL','PAIR_FIRST_FILL','PAIR_HEDGE_FILL','PAIR_EXIT_REQUEST','PAIR_OUTCOME','PAIR_ERROR','BULLPEN_SIGNAL'}
 def checkpoint(snapshot):
     keys={'asset','revision','serverTime','paper','market','bbo','openRef','openTrusted',
           'spot','twap','spotAgeSec','twapAgeSec','model','candidate','decision','mode','reasonCounts'}
@@ -165,7 +165,7 @@ class DurableStore:
             if edge is not None and self.commits%15==0:
                 await self.conn.execute("INSERT INTO poly_v161_state VALUES('edge',$1,$2::jsonb) ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at,payload=excluded.payload",now,json.dumps(edge.export(),separators=(',',':'),allow_nan=False),timeout=30)
             if self.commits and self.commits%300==0:
-                for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000)):
+                for kind,limit in (('SHADOW_OUTCOME',60000),('DECISION_SAMPLE',10000),('PAIR_OUTCOME',20000),('PAIR_QUOTE',20000),('PAIR_CANCEL',20000),('PAIR_FIRST_FILL',20000),('PAIR_HEDGE_FILL',20000),('PAIR_EXIT_REQUEST',20000),('BULLPEN_SIGNAL',6000)):
                     await self.conn.execute('DELETE FROM poly_v161_events WHERE kind=$1 AND t < (SELECT t FROM poly_v161_events WHERE kind=$1 ORDER BY t DESC OFFSET $2 LIMIT 1)',kind,limit,timeout=60)
         for _ in batch:self.queue.popleft()
         if artifact:self._saved_artifact=artifact

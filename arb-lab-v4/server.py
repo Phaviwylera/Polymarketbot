@@ -908,6 +908,19 @@ async def start_status_report():
     asyncio.create_task(sr.run(poly_server_engine,compact,_status_tee,time.time(),pub))
     print('POLY_STATUS_REPORT_ON',flush=True)
 
+_bullpen=None
+@app.on_event('startup')
+async def start_bullpen():
+    """Read-only Bullpen wallet analytics, recorded for research only (POLY_BULLPEN=0 disables)."""
+    global _bullpen
+    if os.getenv('POLY_BULLPEN','1')=='0' or POLY_ENGINE_ROLE=='frontend':return
+    import poly_bullpen
+    _bullpen=poly_bullpen.Bullpen();asyncio.create_task(_bullpen.loop(poly_server_engine));print('POLY_BULLPEN_ON',flush=True)
+
+@app.get("/api/poly/bullpen")
+async def poly_bullpen_status():
+    return _bullpen.state if _bullpen else {'enabled':False}
+
 @app.get("/api/poly/edge")
 async def poly_edge():
     return poly_server_engine.edge.snapshot(200.)
