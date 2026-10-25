@@ -45,18 +45,18 @@ def predict(model,features):
 
 def fit_xgboost(rows):
     import numpy as np
-    from xgboost import XGBRegressor
+    import xgboost as xgb   # native API: the sklearn wrapper (XGBRegressor) also needs scikit-learn, absent on the AWS host
     x=np.array([[r['features'][k] for k in NAMES] for r in rows],dtype=np.float32);y=np.array([r['netReturnPerShare'] for r in rows],dtype=np.float32)
-    estimator=XGBRegressor(n_estimators=48,max_depth=2,learning_rate=.05,min_child_weight=10,reg_lambda=10.,
-        objective='reg:squarederror',random_state=16,n_jobs=1,tree_method='hist')
-    estimator.fit(x,y);raw=json.loads(estimator.get_booster().save_raw(raw_format='json'))['learner']
+    booster=xgb.train({'max_depth':2,'eta':.05,'min_child_weight':10,'lambda':10.,'objective':'reg:squarederror','seed':16,'nthread':1,
+                       'tree_method':'hist'},xgb.DMatrix(x,label=y),num_boost_round=48)
+    raw=json.loads(booster.save_raw(raw_format='json'))['learner']
     base=json.loads(raw['learner_model_param']['base_score']);base=float(base[0] if isinstance(base,list) else base)
     trees=[]
     for t in raw['gradient_booster']['model']['trees']:
         if any(t.get('split_type',[])):raise ValueError('unsupported categorical trees')
         trees.append({'left':t['left_children'],'right':t['right_children'],'feature':t['split_indices'],'threshold':t['split_conditions']})
     model={'kind':'xgboost','baseScore':base,'trees':trees}
-    if max(abs(float(a)-predict(model,r['features'])) for a,r in zip(estimator.predict(x[:30]),rows[:30]))>1e-5:raise ValueError('portable inference mismatch')
+    if max(abs(float(a)-predict(model,r['features'])) for a,r in zip(booster.predict(xgb.DMatrix(x[:30])),rows[:30]))>1e-5:raise ValueError('portable inference mismatch')
     return model
 
 def clean(rows):
