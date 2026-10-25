@@ -95,6 +95,16 @@ class ThresholdTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(fresh.closed),1);self.assertTrue(fresh.state['restored'])
         self.assertEqual(set(fresh.open),{e['row']['slug'] for e in st.events if e['action']=='ENTRY'})
 
+    async def test_daily_slug_with_year_is_found(self):
+        class H(FakeHttp):
+            async def get(self,url,params=None):
+                if url.endswith('/events') and params.get('slug')=='bitcoin-above-on-october-27-2026':return Resp([self.event])
+                if url.endswith('/events'):return Resp([])
+                return await super().get(url,params)
+        lane=th.ThresholdLane(http=H({}))
+        ms=await lane.discover('BTC',th.dt.datetime(2026,10,26,12,tzinfo=th.dt.timezone.utc).timestamp())
+        self.assertEqual(len(ms),3);self.assertEqual({m['event'] for m in ms},{'bitcoin-above-on-october-27'})
+
     def test_report_gate(self):
         lane=th.ThresholdLane()
         for i in range(70):

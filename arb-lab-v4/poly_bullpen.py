@@ -100,6 +100,8 @@ class Bullpen:
             data=json.loads(out or b'{}')
         except Exception as exc:
             self.state['errors']+=1;self.state['lastError']=f'{args[2]}: {type(exc).__name__}';return None
+        sections=[v for v in data.values() if isinstance(v,dict) and 'status' in v and 'source' in v] if isinstance(data,dict) else []
+        if sections and not any(v.get('status')=='ok' for v in sections):data={**data,'error_code':'NO_SECTION_DATA'}
         if isinstance(data,dict) and (data.get('ok') is False or data.get('error_code')):
             self.state['errors']+=1;self.state['lastError']=f"{args[2]}: {data.get('error_code') or data.get('code')}"
         else:self.state['ok']+=1

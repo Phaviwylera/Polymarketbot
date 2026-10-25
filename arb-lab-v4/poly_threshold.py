@@ -147,10 +147,13 @@ class ThresholdLane:
         # always add the daily ladders by slug: the tag listing is capped and sorted by end time
         for d in range(0,4):
             day=dt.datetime.fromtimestamp(now+d*86400,dt.timezone.utc)
-            try:
-                data=await self.get(GAMMA+'/events',{'slug':f"{name}-above-on-{day.strftime('%B').lower()}-{day.day}"})
-                evs+=[e for e in data or [] if is_above_event(e,name) and e.get('slug') not in have];have|={e.get('slug') for e in evs}
-            except Exception:pass
+            base=f"{name}-above-on-{day.strftime('%B').lower()}-{day.day}"
+            for slug in (f'{base}-{day.year}',base):          # live slugs carry the year: bitcoin-above-on-october-25-2026
+                if slug in have:continue
+                try:
+                    data=await self.get(GAMMA+'/events',{'slug':slug})
+                    evs+=[e for e in data or [] if is_above_event(e,name) and e.get('slug') not in have];have|={e.get('slug') for e in evs}
+                except Exception:pass
         return [m for e in evs for m in parse_event(e,asset)]
     def _err(self,where,exc):self.state['errors']+=1;self.state['lastError']=f'{where}: {type(exc).__name__}'
     def _skip(self,reason):self.state['skipped'][reason]=self.state['skipped'].get(reason,0)+1

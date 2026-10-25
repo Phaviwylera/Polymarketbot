@@ -73,6 +73,14 @@ class BullpenTests(unittest.IsolatedAsyncioTestCase):
         async def err(argv,env):return json.dumps({'ok':False,'error_code':'AUTH_REQUIRED'}).encode()
         b.runner=err;await b.run(['polymarket','data','leaderboard']);self.assertIn('AUTH_REQUIRED',b.state['lastError'])
 
+    async def test_all_sections_unavailable_counts_as_error(self):
+        async def runner(argv,env):return json.dumps({'status':'error','a':{'status':'unavailable','source':'X','data':None},
+                                                     'b':{'status':'skipped','source':'Y','data':None}}).encode()
+        b=pb.Bullpen(root=tempfile.mkdtemp(),runner=runner);await b.run(['polymarket','data','wallet-stats','0x'+'a'*40])
+        self.assertEqual((b.state['ok'],b.state['errors']),(0,1))
+        async def good(argv,env):return json.dumps({'a':{'status':'ok','source':'X','data':{'win_rate':.8}}}).encode()
+        b.runner=good;await b.run(['polymarket','data','wallet-stats','0x'+'a'*40]);self.assertEqual(b.state['ok'],1)
+
     def test_signal_kind_is_durable(self):
         import poly_storage;self.assertIn('BULLPEN_SIGNAL',poly_storage.KINDS)
 
