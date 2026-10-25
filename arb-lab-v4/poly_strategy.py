@@ -25,12 +25,17 @@ def _momentum_config():
 # Experiment A: exit earlier on an adverse move. Fires on whichever comes first:
 #   net loss at the bid >= stopFraction * stop, or
 #   the bid has fallen adverseTicks below the entry-time bid while the oracle lead points against the trade.
+# Experiment C: see EXPERIMENTS['C'] (forward-only edge gate).
 # Experiment B: depth-aware entry gate, evaluated on the book at order time. Would reject when
 #   executable bid depth within 2 ticks < depthMultiple * shares, or
 #   the loss from selling into the current bids shifted adverseTicks lower (fees included) > riskBudgetMultiple * stop.
 EXPERIMENTS={
     'A':{'id':'A-earlier-exit-v1','stopFraction':0.6,'adverseTicks':2,'latencySec':0.35,'walkTicks':2},
     'B':{'id':'B-depth-gate-v1','depthMultiple':2.0,'adverseTicks':3,'riskBudgetMultiple':1.0},
+    # Experiment C: entry gate on the model's estimated edge. Hypothesis from the 2026-10-25 audit bands (IN-SAMPLE:
+    # 12-20c edge 28 trades -$6.98, >=20c 31 trades +$8.95). Scored ONLY on trades entered after registeredAt, so
+    # the split that suggested it is never part of its evidence. Report-only: no live order is affected.
+    'C':{'id':'C-min-edge-0.20-v1','minEdge':0.20,'registeredAt':1792900230,'registeredUtc':'2026-10-25 03:50 UTC'},
 }
 
 def _hash(obj):

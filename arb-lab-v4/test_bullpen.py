@@ -81,6 +81,14 @@ class BullpenTests(unittest.IsolatedAsyncioTestCase):
         async def good(argv,env):return json.dumps({'a':{'status':'ok','source':'X','data':{'win_rate':.8}}}).encode()
         b.runner=good;await b.run(['polymarket','data','wallet-stats','0x'+'a'*40]);self.assertEqual(b.state['ok'],1)
 
+    async def test_restart_does_not_refetch_recent_wallets(self):
+        calls=[]
+        async def runner(argv,env):calls.append(argv[5]);return b'{"ok":true}'
+        b=pb.Bullpen(root=tempfile.mkdtemp(),runner=runner)
+        b.remember([{'wallet':'0x'+'a'*40,'command':'wallet-stats','t':1.8e9-60},{'wallet':None,'command':'leaderboard','t':1.8e9-60}])
+        with patch.object(pb.asyncio,'sleep',new=_nosleep):n=await b.collect_once(Engine(),Store(),now=1.8e9)
+        self.assertEqual(n,1);self.assertNotIn('leaderboard',calls);self.assertFalse(any('a'*40 in c for c in calls))
+
     def test_signal_kind_is_durable(self):
         import poly_storage;self.assertIn('BULLPEN_SIGNAL',poly_storage.KINDS)
 

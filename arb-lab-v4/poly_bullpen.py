@@ -128,13 +128,31 @@ class Bullpen:
             self._record(store,'leaderboard',await self.run(['polymarket','data','leaderboard']),now=now);self.leaderboard_at=now
         self.state['lastRunAt']=now;self.state['walletsCovered']=len(self.seen)
         return len(due)
+    def remember(self,rows):
+        """Seed refresh times from stored BULLPEN_SIGNAL rows so a restart does not re-fetch the same wallets."""
+        for r in rows:
+            w,cmd,t=r.get('wallet'),r.get('command'),float(r.get('t') or 0)
+            if cmd=='leaderboard':self.leaderboard_at=max(self.leaderboard_at,t)
+            elif w:self.seen[w]=max(self.seen.get(w,0.),t)
+        self.state['walletsCovered']=len(self.seen)
+    async def load_seen(self,store):
+        if store is None or not getattr(store,'url',None):return
+        import asyncpg
+        c=await asyncpg.connect(store.url,timeout=20,command_timeout=60)
+        try:rows=await c.fetch("SELECT payload->>'wallet' AS wallet,payload->>'command' AS command,max(t) AS t FROM poly_v161_events WHERE kind='BULLPEN_SIGNAL' AND t>$1 GROUP BY 1,2",time.time()-WALLET_REFRESH_SEC-3600)
+        finally:await c.close()
+        self.remember([dict(r) for r in rows])
     async def loop(self,engine,first_delay=300):
         global CURRENT;CURRENT=self
-        await asyncio.sleep(first_delay)
+        await asyncio.sleep(first_delay);loaded=False
         while True:
             try:
                 st=getattr(engine,'storage',None)
                 if st is None or st.active:          # standby never collects (owner only)
+                    if not loaded:
+                        try:await self.load_seen(st)
+                        except Exception as exc:self.state['lastError']=f'load: {type(exc).__name__}'
+                        loaded=True
                     await self.ensure_installed();await self.collect_once(engine,st)
                     print('POLY_BULLPEN '+json.dumps({k:self.state[k] for k in ('calls','ok','errors','lastError','walletsCovered','eventsRecorded')},separators=(',',':')),flush=True)
             except Exception as exc:

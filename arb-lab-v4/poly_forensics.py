@@ -122,6 +122,17 @@ def experiments_report(attribution):
                   'experimentAccepted':poly_audit.metrics(acc),'wouldReject':poly_audit.metrics(rej),
                   'rejectRatePct':round(100*len(rej)/len(b),1),
                   'rejectedStops':sum(1 for r in b if r['experiments']['B']['wouldReject'] and 'loss stop' in str(r.get('exitReason')))}
+    import poly_strategy
+    c=poly_strategy.EXPERIMENTS.get('C')
+    if c:
+        fwd=[r for r in rows+[a for a in attribution if a.get('strategy')=='MOMENTUM_SCALP' and not isinstance(a.get('experiments'),dict)]
+             if float(r.get('entryAt') or 0)>=c['registeredAt'] and (r.get('entryFeatures') or {}).get('modelEdgeEstimate') is not None]
+        keep=[r for r in fwd if float(r['entryFeatures']['modelEdgeEstimate'])>=c['minEdge']]
+        drop=[r for r in fwd if float(r['entryFeatures']['modelEdgeEstimate'])<c['minEdge']]
+        out['C']={'id':c['id'],'registeredUtc':c['registeredUtc'],'forwardTrades':len(fwd),'baseline':poly_audit.metrics([float(r['netPnlUsd']) for r in fwd]),
+                  'experimentAccepted':poly_audit.metrics([float(r['netPnlUsd']) for r in keep]),'wouldReject':poly_audit.metrics([float(r['netPnlUsd']) for r in drop]),
+                  'acceptedBlockBootstrap':poly_audit.block_bootstrap_mean([{'entryAt':r['entryAt'],'pnl':float(r['netPnlUsd'])} for r in keep]),
+                  'decisionRule':'adopt only if, on forward trades, accepted trades pass the same gates as the baseline (60 trades, mean > 0, block-bootstrap lower > 0) and beat the rejected ones'}
     out['note']=('Shadow results on the same entries and books. A policy is not adopted because it lowers the worst loss in a small '
                  'sample: it must pass the same predeclared gates as the baseline on its own evaluation window.')
     return out
@@ -149,12 +160,14 @@ def bands(attribution):
         for lo,hi in zip(edges,edges[1:]):
             if lo<=x<hi:return f'{lo:g}-{hi:g}'
         return f'>={edges[-1]:g}'
-    out={'byEntryEdge':{},'byExitReason':{},'byHoldSec':{}}
+    out={'byEntryEdge':{},'byExitReason':{},'byHoldSec':{},'byLane':{},'byEntryPrice':{}}
     for a in rows:
         e=(a.get('entryFeatures') or {}).get('modelEdgeEstimate')
         if e is not None:out['byEntryEdge'].setdefault(band(float(e),[0,.12,.2,.3]),[]).append(float(a['netPnlUsd']))
         out['byExitReason'].setdefault(str(a.get('exitReason'))[:28],[]).append(float(a['netPnlUsd']))
         out['byHoldSec'].setdefault(band(float(a.get('holdSec') or 0),[0,5,10,20,30]),[]).append(float(a['netPnlUsd']))
+        out['byLane'].setdefault(str(a.get('lane') or a.get('asset') or '?'),[]).append(float(a['netPnlUsd']))
+        if a.get('entryPrice') is not None:out['byEntryPrice'].setdefault(band(float(a['entryPrice']),[0,.2,.3,.4,.45]),[]).append(float(a['netPnlUsd']))
     return {k:{b:poly_audit.metrics(v) for b,v in sorted(d.items())} for k,d in out.items()}
 
 def alerts(state,ledger,execution,now=None):
