@@ -78,3 +78,12 @@ every 30 minutes records Bullpen's public wallet analytics for our top-scored wa
 `BULLPEN_SIGNAL` events, next to our own score. Read-only (`--read-only`), never logs in, record-only:
 it does not affect trading. Status: `http://<ip>/api/poly/bullpen` and `bullpen` in the status report.
 Disable with `POLY_BULLPEN=0` in `/etc/polybot.env`.
+
+## 9. Daily verified backup to S3
+`POLY_BACKUP_S3_BUCKET=polybot-backup-<account>-apse2` in `/etc/polybot.env`. The bucket is private
+(public access blocked, SSE-S3, objects under `polybot/` expire after 30 days). The instance role
+`polybot-ssm` has an inline policy allowing only Get/PutObject on `polybot/*` and listing that prefix.
+Each day the bot writes a gzip JSON-lines dump, downloads it back, and marks it verified only if the
+SHA-256 matches, per-kind event counts and max time match the database, and the paper state restores
+with identical portfolio totals. Status: `storage.lastBackupAt/lastBackupOk`; alerts fire if a backup
+fails or is older than 36 h.

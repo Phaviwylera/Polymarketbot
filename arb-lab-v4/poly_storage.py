@@ -46,7 +46,7 @@ class DurableStore:
                 'databaseExpiresAt':os.getenv('POLY_DATABASE_EXPIRES_AT') or None,
                 'coverage':'Paper checkpoints, research labels, model artifact, attribution, sampled decisions and EdgeLab learning (calibration, strategy record, wallet study); raw feed spool stays local.',
                 'checkpointTargetSec':2,'rawFeedDurable':False,
-                'backupConfigured':bool(os.getenv('POLY_BACKUP_URL')),'lastBackupAt':(self.last_backup or {}).get('at'),
+                'backupConfigured':bool(os.getenv('POLY_BACKUP_URL') or os.getenv('POLY_BACKUP_S3_BUCKET')),'backupTarget':'s3' if os.getenv('POLY_BACKUP_S3_BUCKET') and not os.getenv('POLY_BACKUP_URL') else ('postgres' if os.getenv('POLY_BACKUP_URL') else None),'lastBackupAt':(self.last_backup or {}).get('at'),
                 'lastBackupOk':(self.last_backup or {}).get('ok'),'baselineStored':bool(self.baseline)}
     def entry_allowed(self):
         return not self.url or bool(self.owner and self.active and self.ready and not self.dropped and time.time()-self.last_commit<HEALTH_WINDOW_SEC)
@@ -69,6 +69,7 @@ class DurableStore:
             await self.engine.start();self.engine.start_research();self.active=True;return
         self.task=asyncio.create_task(self.worker(),name='v161-durable-owner')
         if os.getenv('POLY_BACKUP_URL'):self.backup_task=asyncio.create_task(self.backup_worker(),name='v161-backup')
+        elif os.getenv('POLY_BACKUP_S3_BUCKET'):self.backup_task=asyncio.create_task(self.s3_backup_worker(),name='v161-s3-backup')
     async def backup_worker(self):
         """Daily verified copy to POLY_BACKUP_URL (also the migration path). Never logs a URL."""
         import poly_dbcopy
@@ -82,6 +83,18 @@ class DurableStore:
             except asyncio.CancelledError:raise
             except Exception as exc:
                 self.last_backup={'ok':False,'at':None,'error':type(exc).__name__};print('POLY_BACKUP_ERROR',type(exc).__name__,flush=True)
+            await asyncio.sleep(86400 if (self.last_backup or {}).get('ok') else 3600)
+    async def s3_backup_worker(self):
+        """Daily verified backup to S3 (instance-role credentials). Owner only; never logs a URL."""
+        import poly_s3backup
+        s3=poly_s3backup.S3(os.getenv('POLY_BACKUP_S3_BUCKET'))
+        await asyncio.sleep(float(os.getenv('POLY_BACKUP_FIRST_DELAY_SEC','600')))
+        while not self.closed:
+            try:
+                if self.active:self.last_backup=await poly_s3backup.backup(self.url,s3,workdir=os.getenv('POLY_DATA_DIR') or None)
+            except asyncio.CancelledError:raise
+            except Exception as exc:
+                self.last_backup={'ok':False,'at':None,'error':type(exc).__name__};print('POLY_BACKUP_ERROR',type(exc).__name__,str(exc)[:160].replace(self.url or '#','<db>'),flush=True)
             await asyncio.sleep(86400 if (self.last_backup or {}).get('ok') else 3600)
     async def connect(self):
         import asyncpg

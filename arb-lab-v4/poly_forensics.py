@@ -195,6 +195,8 @@ def alerts(state,ledger,execution,now=None):
                 if days<=30:out.append(f"database expires in {days:.0f} days ({exp[:10]}); migrate and test a restore first")
             except ValueError:pass
         if not st.get('lastBackupAt'):out.append('database: no verified backup recorded yet')
+        elif st.get('lastBackupOk') is False:out.append('database: last backup FAILED verification')
+        elif now-float(st['lastBackupAt'])>36*3600:out.append(f"database: last verified backup is {(now-float(st['lastBackupAt']))/3600:.0f} h old")
     if ledger.get('sessionsWithProblems'):out.append(f"ledger: {ledger['sessionsWithProblems']} session(s) do not reconcile")
     if not execution.get('clean') and execution.get('trades'):out.append('fill audit: execution errors present')
     rk=execution.get('marketRisk') or {}
