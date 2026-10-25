@@ -940,7 +940,7 @@ async def poly_bullpen_status():
 
 @app.get("/api/poly/edge")
 async def poly_edge():
-    return poly_server_engine.edge.snapshot(200.)
+    return poly_server_engine.edge.snapshot(200.,since=getattr(poly_server_engine,'epoch',None) or None)
 
 @app.get("/api/poly/edge/state")
 async def poly_edge_state():

@@ -473,26 +473,30 @@ class EdgeLab:
                 {'check':'A strategy currently passes its promotion gate','value':self.promoted(),'pass':self.promoted() is not None}]
         return {'readyForRealMoney':all(c['pass'] for c in checks),'checks':checks,'liveTradingEnabled':False,
                 'note':'Paper-only build. A live order adapter is not installed; switching to real money stays a deliberate owner decision.'}
-    def flows(self):
+    def flows(self,since=None):
         out={}
         for t in self.trades:
+            if since and number(t.get('at'))<since:continue
             k=(t.get('asset') or '?',t.get('strategy') or '?');f=out.setdefault(k,{'lane':k[0],'strategy':k[1],'trades':0,'wins':0,'losses':0,'pnl':0.,'won':0.,'lost':0.})
             f['trades']+=1;f['pnl']+=t['pnl']
             if t['pnl']>=0:f['wins']+=1;f['won']+=t['pnl']
             else:f['losses']+=1;f['lost']+=-t['pnl']
         return [{**v,'pnl':round(v['pnl'],4),'won':round(v['won'],4),'lost':round(v['lost'],4)} for v in out.values()]
-    def snapshot(self,capital=200.):
+    def snapshot(self,capital=200.,since=None):
         return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),
                 'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'maker':{**self.maker.stats(),'note':'returns are USD per share-pair; promotion enables funded maker quoting on 5-minute lanes'},'calibration':self.cal.summary(),'modelTrust':self.trust(),
                 'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),'skillVsLuck':{k:v for k,v in self.intel.skill_vs_luck().items() if k!='per'},
-                'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],'flows':self.flows(),
+                'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],
+                'flows':self.flows(since),'flowsSince':since,'flowsAllTime':self.flows(),
                 'readiness':self.readiness(capital),'errors':self.errors,
                 'sizing':{'kellyFraction':KELLY_FRACTION,'maxAllocationFraction':MAX_ALLOCATION_FRACTION,
                           'rule':'quarter-Kelly on conservative probability, capped at 15% of the asset budget and the remaining loss budget'}}
     def export(self):
         return {'version':VERSION,'savedAt':time.time(),'calibration':self.cal.export(),'maker':self.maker.export(),
                 'strategies':{v:s.export() for v,s in self.strategies.items()},'wallets':self.intel.export(),
-                'trades':list(self.trades)[-3000:]}
+                'trades':list(self.trades)[-3000:],
+                # display only: the last 15 min of model-vs-market points per lane, so a restart does not blank the edge matrix
+                'samples':{k:list(v)[-180:] for k,v in self.samples.items()}}
     def import_bets(self,archive):
         """Owner-supplied archive of settled shadow bets {strategy:[bet,...]}: adds only bets not already held."""
         added=0
@@ -515,4 +519,6 @@ class EdgeLab:
         self.maker=StrategyRecord('maker');self.maker.restore(state.get('maker'))
         self.intel.restore(state.get('wallets'))
         self.trades.clear();self.trades.extend(r for r in state.get('trades') or [] if isinstance(r,dict) and 'pnl' in r)
+        for k,rows in (state.get('samples') or {}).items():
+            if isinstance(rows,list):self.samples[k].extend(r for r in rows if isinstance(r,dict) and 't' in r)
         self.restored=True;return True

@@ -248,8 +248,9 @@
   text(g2,'−30¢',28,h2-2,C.dim,8);text(g2,'model − market',w2/2,h2-2,C.dim,8,'center');text(g2,'+30¢',w2-24,h2-2,C.dim,8);
   const e=s.edge||{},cal=e.calibration||{};
   $('etable').innerHTML='<div class="h"><span>LANE</span><span>EDGE · DECISION</span></div>'+LANES.map(l=>{const sg=(e.signals||{})[l]||{},b=sg.best||{},v=b.conservativeEdge;
-   return `<div><span style="color:${COL[l]}">${NAME[l]}</span><span class="${cls(v)}">${ok(v)?(v*100).toFixed(1)+'¢':'—'}</span></div><div style="border:0;color:${C.dim};font-size:9px">${String(sg.decision||'—').slice(0,30)}</div>`;}).join('')+
-   `<div class="h" style="margin-top:6px"><span>CALIBRATION</span><span>${cal.samples||0} samples</span></div><div><span>Brier heur.</span><span>${ok(cal.brierHeuristic)?cal.brierHeuristic.toFixed(3):'—'}</span></div><div><span>Brier calib.</span><span>${ok(cal.brierCalibrated)?cal.brierCalibrated.toFixed(3):'—'}</span></div>`;
+   const dec=sg.decision==='MISPRICED'?'mispriced · shadow only, not traded':String(sg.decision||'—').slice(0,34);
+   return `<div><span style="color:${COL[l]}">${NAME[l]}</span><span class="${cls(v)}">${ok(v)?(v*100).toFixed(1)+'¢':'—'}</span></div><div style="border:0;color:${C.dim};font-size:9px">${dec}</div>`;}).join('')+
+   `<div class="h" style="margin-top:6px"><span>CALIBRATION</span><span>${cal.samples||0} samples</span></div><div><span>Brier heur.</span><span>${ok(cal.brierHeuristic)?cal.brierHeuristic.toFixed(4):'—'}</span></div><div><span>Brier calib.</span><span>${ok(cal.brierCalibrated)?cal.brierCalibrated.toFixed(4):'—'}</span></div>${ok(cal.improvement)?`<div style="border:0;color:${cal.improvement>0?C.green:C.dim};font-size:9px">${cal.improvement>0?'calibration improves the heuristic':'calibration not better than heuristic yet'}</div>`:''}`;
   const mb=$('matrixBadge');const above=all.filter(p=>p.pUp>p.upMid).length;mb.textContent=all.length?`${all.length} samples · ${Math.round(100*above/all.length)}% model > market`:'collecting';
  }
 
@@ -257,7 +258,7 @@
  function sankey(s){
   const f=(s.edge?.flows||[]).filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
   if(!f.length){text(g,'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
-  const SN={MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
+  const SN={MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING (old)',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
   const total=f.reduce((a,x)=>a+x.trades,0),wins=f.reduce((a,x)=>a+x.wins,0),losses=total-wins,pad=6,top=14,usable=h-top-8-22*4;
   const col=(items,weights,X)=>{const gap=pad*(items.length-1),sc=(usable-gap)/total;let y=top;return Object.fromEntries(items.map((k,i)=>{const hh=weights[i]*sc,r={x:X,y,h:hh,used:0,usedR:0};y+=Math.max(hh,22)+pad;return [k,r];}));};
   const LX=86,MX=w*.48,RX=w-92,NW=10;
@@ -272,7 +273,8 @@
   strats.forEach(k=>{const fl=f.filter(x=>x.strategy===k);node(nM[k],SN[k]||k,C.text,`${signed(fl.reduce((a,x)=>a+x.pnl,0))}`,true);});
   const won=f.reduce((a,x)=>a+x.won,0),lost=f.reduce((a,x)=>a+x.lost,0);node(nR.WIN,'WINS '+wins,C.green,signed(won),true);if(losses)node(nR.LOSS,'LOSSES '+losses,C.red,signed(-lost),true);
   text(g,'LANE',LX,9,C.dim,8.5);text(g,'STRATEGY',MX,9,C.dim,8.5);text(g,'OUTCOME',RX,9,C.dim,8.5);
-  set('flowBadge',`${total} closed positions · net ${signed(won-lost)}`);
+  const fa=(s.edge?.flowsAllTime||[]),ta=fa.reduce((a,x)=>a+x.trades,0),na=fa.reduce((a,x)=>a+x.pnl,0),since=s.edge?.flowsSince;
+  set('flowBadge',`${total} closed${since?' since reset '+new Date(since*1000).toISOString().slice(5,10):''} · net ${signed(won-lost)}${since&&ta>total?` · all-time ${ta} · ${signed(na)}`:''}`);
  }
 
  // ---------- footer ----------

@@ -403,7 +403,7 @@ class PaperPortfolio:
             except Exception:cache=(now,None)
         selected['rulesScorecard']=cache[1]
         selected['scout']=self.scout_snapshot()
-        selected['edge']={**self.edge.snapshot(TOTAL_BALANCE),'autoCycle':{'enabled':AUTO_CYCLE,'laneLockCooldownSec':LANE_LOCK_COOLDOWN_SEC,'portfolioLockCooldownSec':PORTFOLIO_LOCK_COOLDOWN_SEC,'recent':self.cycles[-10:]}}
+        selected['edge']={**self.edge.snapshot(TOTAL_BALANCE,since=self.epoch or None),'autoCycle':{'enabled':AUTO_CYCLE,'laneLockCooldownSec':LANE_LOCK_COOLDOWN_SEC,'portfolioLockCooldownSec':PORTFOLIO_LOCK_COOLDOWN_SEC,'recent':self.cycles[-10:]}}
         selected['research']=self.research.snapshot() if self.research else {'mode':'SHADOW_ONLY','executionEnabled':False,'training':{'state':'starting'}}
         selected['portfolio']={'revision':ENGINE_REVISION,'paperOnly':True,'selectedAsset':asset,
             'startingBalance':TOTAL_BALANCE,'equity':equity,'totalPnl':equity-TOTAL_BALANCE,
