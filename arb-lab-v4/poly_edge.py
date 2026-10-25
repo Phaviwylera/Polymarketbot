@@ -7,7 +7,7 @@ mode and are promoted to funded paper execution only while their own
 out-of-sample record passes an evidence gate. No real orders are ever placed.
 """
 from __future__ import annotations
-import asyncio,math,statistics,time
+import asyncio,math,os,statistics,time
 from collections import deque,defaultdict
 
 DATA_API='https://data-api.polymarket.com'
@@ -257,6 +257,10 @@ class WalletIntel:
 class EdgeLab:
     def __init__(self,engines):
         self.engines=engines;self.cal=Calibrator();self.intel=WalletIntel()
+        # Owner decision 2026-10-25: a shadow strategy that passes its rolling gate is NOT funded automatically.
+        # The rolling 200-bet gate is picked from several variants and is weaker than the audit's predeclared
+        # 60-trade out-of-sample criteria; promotion is a deliberate change (POLY_EDGE_AUTO_PROMOTE=1).
+        self.auto_promote=os.getenv('POLY_EDGE_AUTO_PROMOTE','0')=='1'
         self.strategies={v:StrategyRecord(v) for v in VARIANTS}
         self.maker=StrategyRecord('maker')   # pair-shadow cycles: maker first leg, taker hedge or unwind
         self.rounds={}            # slug -> round record awaiting resolution
@@ -360,17 +364,19 @@ class EdgeLab:
         return {'bets':len(rows),'trust':max(0.,min(1.,lam)),'se':se,'conservativeTrust':max(0.,min(1.,lam-se)) if usable else 0.,
                 'brierMarket':bm,'brierModel':bp,
                 'note':'share of the model-vs-market gap that settled bets support; 0 means the market price is the best estimate'}
-    def promoted(self):
+    def gate_candidate(self):
         s={v:self.strategies[v].stats() for v in VARIANTS}
         passing=[v for v in VARIANTS if s[v]['gatePassed']]
         return max(passing,key=lambda v:s[v]['meanMinus2SE']) if passing else None
+    def promoted(self):
+        return self.gate_candidate() if self.auto_promote else None
     def on_pair_outcome(self,row):
         q=number(row.get('quantity'),0)
         if q<=0 or row.get('netPnlUsd') is None:return
         net=number(row['netPnlUsd'])
         self.maker.add({'returnPerDollar':net/q,'roundStart':number(row.get('roundStart')),'won':net>0,'netPnlUsd':net,
                         'status':row.get('status'),'markout5s':row.get('markout5s'),'asset':row.get('asset'),'at':number(row.get('closedAt'),time.time())})
-    def maker_promoted(self):return self.maker.stats()['gatePassed']
+    def maker_promoted(self):return bool(self.auto_promote and self.maker.stats()['gatePassed'])
     def tradable(self,candidate):
         v=self.promoted()
         if not v or not candidate:return None
@@ -470,7 +476,7 @@ class EdgeLab:
                 {'check':'Average trade minus 2 standard errors > 0','value':round(mean-2*se,4) if n>1 else None,'pass':n>1 and mean-2*se>0},
                 {'check':'Max drawdown under 10% of paper capital','value':round(dd,2),'pass':dd<.10*capital},
                 {'check':'Track record spans at least 14 days','value':round(days,1),'pass':days>=14},
-                {'check':'A strategy currently passes its promotion gate','value':self.promoted(),'pass':self.promoted() is not None}]
+                {'check':'A strategy currently passes its promotion gate','value':self.gate_candidate(),'pass':self.gate_candidate() is not None}]
         return {'readyForRealMoney':all(c['pass'] for c in checks),'checks':checks,'liveTradingEnabled':False,
                 'note':'Paper-only build. A live order adapter is not installed; switching to real money stays a deliberate owner decision.'}
     def flows(self,since=None):
@@ -483,7 +489,7 @@ class EdgeLab:
             else:f['losses']+=1;f['lost']+=-t['pnl']
         return [{**v,'pnl':round(v['pnl'],4),'won':round(v['won'],4),'lost':round(v['lost'],4)} for v in out.values()]
     def snapshot(self,capital=200.,since=None):
-        return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),
+        return {'version':VERSION,'mode':'PROMOTED' if self.promoted() else 'SHADOW','promotedStrategy':self.promoted(),'autoPromote':self.auto_promote,'gateCandidate':self.gate_candidate(),
                 'strategies':{v:self.strategies[v].stats() for v in VARIANTS},'maker':{**self.maker.stats(),'note':'returns are USD per share-pair; promotion enables funded maker quoting on 5-minute lanes'},'calibration':self.cal.summary(),'modelTrust':self.trust(),
                 'pendingRounds':len(self.rounds),'signals':self.signals,'wallets':self.intel.profile(),'skillVsLuck':{k:v for k,v in self.intel.skill_vs_luck().items() if k!='per'},
                 'samples':{k:list(v)[-180:] for k,v in self.samples.items()},'resolutions':list(self.resolutions)[-48:],

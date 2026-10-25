@@ -137,3 +137,12 @@ class PairAttemptTests(unittest.TestCase):
             self.assertIsNone(p.active);t+=ps.QUOTE_TTL_SEC+3
         p.step(self.c(t),t);self.assertIsNone(p.active);self.assertIn('attempts this round',p.reason)
         self.assertEqual(p.counts['quotes'],ps.MAX_ATTEMPTS_PER_ROUND)
+
+
+# These tests exercise the promotion mechanism itself; production keeps it off unless the owner sets
+# POLY_EDGE_AUTO_PROMOTE=1 (see test_edge_display.AutoPromoteTests for the default).
+import os as _os
+from unittest.mock import patch as _patch
+_env=_patch.dict(_os.environ,{'POLY_EDGE_AUTO_PROMOTE':'1'})
+def setUpModule():_env.start()
+def tearDownModule():_env.stop()

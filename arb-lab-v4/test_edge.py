@@ -544,3 +544,12 @@ class PauseFlagTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([t.get_name() for t in p.edge.tasks],['edge-resolver'])
             self.assertIn('research',p.snapshot());p.research.restore_pairs({})
             await p.research.close()
+
+
+# These tests exercise the promotion mechanism itself; production keeps it off unless the owner sets
+# POLY_EDGE_AUTO_PROMOTE=1 (see test_edge_display.AutoPromoteTests for the default).
+import os as _os
+from unittest.mock import patch as _patch
+_env=_patch.dict(_os.environ,{'POLY_EDGE_AUTO_PROMOTE':'1'})
+def setUpModule():_env.start()
+def tearDownModule():_env.stop()
