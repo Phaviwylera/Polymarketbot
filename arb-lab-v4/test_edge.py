@@ -422,7 +422,7 @@ class PromoteRetryTests(unittest.IsolatedAsyncioTestCase):
         class Conn:
             def __init__(s,fail):s.fail=fail
             async def fetchval(s,q,timeout=None):return None
-            async def fetch(s,q,timeout=None):
+            async def fetch(s,q,*args,timeout=None):
                 if s.fail:raise asyncio.TimeoutError()
                 return []
         class Eng:

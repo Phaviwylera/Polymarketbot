@@ -1631,6 +1631,14 @@ class PolyServerDemo:
                            float(candidate.get('stopLossUsd') or .30),tick,ps.EXPERIMENTS['B'])
             gate['id']=ps.EXPERIMENTS['B']['id']
         except Exception as exc:gate={'id':'B','error':type(exc).__name__}
+        # v17.9 live rule B: skip the entry when the order-time book could not absorb a stop-out within budget.
+        try:
+            import poly_strategy as _ps
+            if _ps.LIVE_RULES.get('depthGate') and gate.get('wouldReject'):
+                self.momentum_decision='depth gate: '+str(gate.get('reason'))[:80]
+                self._diagnostic('DEPTH_GATE_REJECT',signal=candidate,gate=gate)
+                return False
+        except Exception:pass
         self.pending=True;p['executionAttempts']+=1;p['momentumOrders']=int(p.get('momentumOrders',0))+1
         self._record('ORDER',side=side,price=candidate['ask'],detail=f'MOMENTUM_SCALP marketable paper order; {shares:.2f} shares; max {max_price:.3f}')
         self._diagnostic('MOMENTUM_ORDER',signal=candidate,context=self._diagnostic_context())
@@ -1688,6 +1696,14 @@ class PolyServerDemo:
             except Exception:pass
         if self._maker_exit_step(pos,now):return
         reason=pos.get('exitRequestedReason')
+        # v17.9 live rule A: exit as soon as the earlier-exit trigger fires (net <= 0.6 x stop, or 2 ticks below
+        # the entry bid with the oracle lead against); the normal stop/target checks below still take priority.
+        try:
+            import poly_strategy as _ps
+            ea=(pos.get('experiments') or {}).get('A') or {}
+            if not reason and _ps.LIVE_RULES.get('earlyExit') and pos.get('mode')=='MOMENTUM_SCALP' and ea.get('state') in ('triggered','filled'):
+                reason='momentum early exit'
+        except Exception:pass
         if p.get('status')!='running' or now>=p['endsAt']:reason='momentum risk/session exit'
         elif age>=pos['maxHoldSec']:reason='momentum maximum hold'
         elif self.market['endTs']-now<=15:reason='momentum market closing'

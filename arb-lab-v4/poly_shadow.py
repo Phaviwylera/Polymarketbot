@@ -18,6 +18,8 @@ RESEARCH_STEP_SEC=1.0   # shadow research sampling; was 0.25 s, CPU-bound host
 # step: when the step became 1.0 s the old fixed 1.0 s deadline rejected every probe and no label was produced
 # from 2026-10-24 03:43 until this fix.
 ENTRY_MIN_SEC=0.35
+# Labelled rows kept for training: ~1 day at the 1 s sampling pace (was 12,000, about 9 h). The database keeps 60,000.
+RESEARCH_ROWS=int(_os.getenv('POLY_RESEARCH_ROWS','36000'))
 ENTRY_DEADLINE_SEC=max(1.0,ENTRY_MIN_SEC+1.5*RESEARCH_STEP_SEC)
 def _low_priority():
     try:_os.nice(15)
@@ -90,7 +92,7 @@ class ShadowLane:
 class ResearchHub:
     def __init__(self,engines,path='/tmp/poly_v16_research.sqlite3'):
         self.engines=engines;self.journal=DiagnosticLog(path,'RESEARCH');self.journal.MAX_CRITICAL_ROWS=8000;self.external=ExchangeFeeds();self.semantic=SemanticResearch(engines,self.journal)
-        self.rows=deque(maxlen=12000);self.artifact=None;self.training={'state':'collecting_data','executionEnabled':False};self.errors=0;self.last_step=0.;self.tasks=[]
+        self.rows=deque(maxlen=RESEARCH_ROWS);self.artifact=None;self.training={'state':'collecting_data','executionEnabled':False};self.errors=0;self.last_step=0.;self.tasks=[]
         self.lanes={a:ShadowLane(a,self.emit,lambda:self.artifact) for a in engines};self.child=None;self.directory=Path(path).parent
         self.pairs={a:PairShadow(a,e.balance,self.emit) for a,e in engines.items()};self.pair_errors=Counter()
     on_pair_outcome=None
@@ -120,7 +122,7 @@ class ResearchHub:
         self.last_step=now
     def _load_history(self):
         with sqlite3.connect(self.journal.path,timeout=1) as db:
-            payloads=db.execute("SELECT payload FROM events WHERE payload LIKE '%\"kind\":\"SHADOW_OUTCOME\"%' ORDER BY seq DESC LIMIT 12000").fetchall()
+            payloads=db.execute("SELECT payload FROM events WHERE payload LIKE '%\"kind\":\"SHADOW_OUTCOME\"%' ORDER BY seq DESC LIMIT ?",(RESEARCH_ROWS,)).fetchall()
         rows=[json.loads(p[0])['row'] for p in reversed(payloads)]
         path=self.directory/'poly_v16_shadow_model.json';artifact=None
         if path.exists() and path.stat().st_size<2_000_000:

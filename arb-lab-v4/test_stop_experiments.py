@@ -28,6 +28,9 @@ class Lane(unittest.IsolatedAsyncioTestCase):
         self.e._ingest_book('up',book(levels,[(.40,50)]))
 
 class ShadowExperimentTests(Lane):
+    # Shadow mechanics as recorded before v17.9 adopted A and B live: run with the live rules switched off.
+    def setUp(self):
+        super().setUp();p=patch.dict(ps.LIVE_RULES,{'earlyExit':False,'depthGate':False});p.start();self.addCleanup(p.stop)
     async def test_entry_is_stamped_and_gate_b_recorded_without_changing_the_fill(self):
         cash=self.e.paper['cash'];self.assertTrue(await self.e._momentum_enter(self.candidate()))
         pos=self.e.paper['position'];ident=ps.identity()
@@ -56,6 +59,34 @@ class ShadowExperimentTests(Lane):
         self.set_bids([(.38,40),(.37,40)]);await self.e._momentum_manage(self.m);await self.e._momentum_manage(self.m)
         self.set_bids([(.50,100)]);await self.e._momentum_manage(self.m)   # real recovers to the profit target
         ex=self.closed[-1]['experiments']['A'];self.assertTrue(ex['missedRecovery']);self.assertGreater(ex['realNetPnlUsd'],0)
+
+class LiveRulesV179Tests(Lane):
+    async def test_rule_a_closes_the_real_position_on_the_early_trigger(self):
+        self.assertTrue(await self.e._momentum_enter(self.candidate()));stop=self.e.paper['position']['stopLossUsd']
+        self.set_bids([(.38,40),(.37,40)]);self.m['leadBps']=-.5
+        for _ in range(3):
+            await self.e._momentum_manage(self.m)
+            if self.e.paper['position'] is None:break
+        self.assertIsNone(self.e.paper['position'],'rule A must exit the real position')
+        t=self.closed[-1];self.assertEqual(t['exitReason'],'momentum early exit')
+        self.assertGreater(t['netPnlUsd'],-stop)                     # out before the full stop
+        p=self.e.paper;self.assertAlmostEqual(p['startingBalance']+p['realizedPnl'],p['cash'],places=6)
+    async def test_rule_b_is_not_live_in_v179(self):
+        self.assertFalse(ps.LIVE_RULES['depthGate'])
+        # default book, $0.30 stop: B's 3-tick stress loss (~$0.31) exceeds the stop, so B would reject...
+        self.assertTrue(await self.e._momentum_enter(self.candidate()))   # ...but in v17.9 the entry still happens
+        self.assertTrue(self.e.paper['position']['experiments']['B']['wouldReject'])   # and B is still recorded
+    async def test_rule_b_when_enabled_skips_thin_books(self):
+        with patch.dict(ps.LIVE_RULES,{'depthGate':True}):
+            cash=self.e.paper['cash']
+            self.assertFalse(await self.e._momentum_enter(self.candidate()));self.assertEqual(self.e.paper['cash'],cash)
+            self.assertTrue(self.e.momentum_decision.startswith('depth gate'))
+    def test_new_config_hash_separates_the_evaluation_sample(self):
+        saved=ps._cache;ps._cache=None
+        try:
+            i=ps.identity();self.assertEqual(i['strategyVersion'],'momentum-17.9');self.assertNotEqual(i['configHash'],ps.PREVIOUS_CONFIG_HASH)
+            self.assertIsNotNone(i['config']['earlyExit']);self.assertIsNone(i['config']['depthGate'])
+        finally:ps._cache=saved
 
 class PureFunctionTests(unittest.TestCase):
     def test_threshold_price_hits_the_stop_exactly(self):

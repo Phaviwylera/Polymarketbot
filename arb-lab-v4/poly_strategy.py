@@ -10,7 +10,7 @@ policy would have done. They never place, change or cancel a paper order.
 from __future__ import annotations
 import hashlib,json
 
-STRATEGY_VERSION='momentum-17.8'
+STRATEGY_VERSION='momentum-17.9'
 BASELINE={'frozenAtUtc':'2026-10-25','codeRevision':'2cf2731','tag':'baseline-2026-10-25'}
 
 def _momentum_config():
@@ -20,7 +20,10 @@ def _momentum_config():
             'exits':{'stop':'net loss >= lane stopLossUsd','takeProfit':'net >= max(0.18, stop)','maxHoldSec':30,
                      'oracleReversalBps':-0.2,'closingSec':15,'exitWalkTicks':2},
             'execution':{'latencySec':sd.EXECUTION_LATENCY_SEC,'staleBookSec':3,'feeRate':0.07,'makerExit':sd.MAKER_EXIT},
-            'laneStops':'max(0.30, min(0.40, allocation*0.005))'}
+            'laneStops':'max(0.30, min(0.40, allocation*0.005))',
+            # v17.9 (owner decision 2026-10-25, after 19-20 frozen trades): experiment A adopted as a live rule; B stays shadow.
+            'earlyExit':{k:v for k,v in EXPERIMENTS['A'].items() if k!='id'} if LIVE_RULES['earlyExit'] else None,
+            'depthGate':{k:v for k,v in EXPERIMENTS['B'].items() if k!='id'} if LIVE_RULES['depthGate'] else None}
 
 # Experiment A: exit earlier on an adverse move. Fires on whichever comes first:
 #   net loss at the bid >= stopFraction * stop, or
@@ -37,6 +40,13 @@ EXPERIMENTS={
     # the split that suggested it is never part of its evidence. Report-only: no live order is affected.
     'C':{'id':'C-min-edge-0.20-v1','minEdge':0.20,'registeredAt':1792900230,'registeredUtc':'2026-10-25 03:50 UTC'},
 }
+
+# Live rules adopted from the shadow experiments (A: earlier exit on an adverse move). B stays shadow-only.
+# Their shadow scoring keeps running as a consistency check; a new evaluation sample starts with this config hash.
+LIVE_RULES={'earlyExit':True,'depthGate':False,'adoptedUtc':'2026-10-25',
+            'evidence':'A: shadow -$3.52 vs real -$4.73 on 20 versioned trades (cfa5d71516e3). B NOT adopted: with a $0.30 stop its '
+                        '3-tick stress loss (~$0.31 on 5 shares) rejects every entry on BTC, BTC15 and ETH15, i.e. it acts as a lane switch'}
+PREVIOUS_CONFIG_HASH='cfa5d71516e3'
 
 def _hash(obj):
     return hashlib.sha256(json.dumps(obj,sort_keys=True,separators=(',',':'),default=str).encode()).hexdigest()[:12]

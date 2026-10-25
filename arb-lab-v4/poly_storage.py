@@ -112,7 +112,7 @@ class DurableStore:
         row=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='paper'",timeout=T)
         recovery=json.loads(row) if isinstance(row,str) else row
         edge_raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='edge'",timeout=T)
-        labels=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' ORDER BY t DESC LIMIT 12000",timeout=T)
+        labels=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='SHADOW_OUTCOME' ORDER BY t DESC LIMIT $1",int(os.getenv('POLY_RESEARCH_ROWS','36000')),timeout=T)
         model_raw=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name='model'",timeout=T)
         records=await self.conn.fetch("SELECT payload FROM poly_v161_events WHERE kind='TRADE_ATTRIBUTION' ORDER BY t DESC LIMIT 5000",timeout=T)
         b=await self.conn.fetchval("SELECT payload FROM poly_v161_state WHERE name=$1",BASELINE_ROW,timeout=T)

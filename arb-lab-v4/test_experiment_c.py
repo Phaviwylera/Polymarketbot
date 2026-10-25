@@ -14,9 +14,9 @@ class ExperimentCTests(unittest.TestCase):
         self.assertEqual(c['forwardTrades'],3)
         self.assertEqual(c['wouldReject']['trades'],1);self.assertEqual(c['experimentAccepted']['trades'],2)
         self.assertAlmostEqual(c['experimentAccepted']['netPnlUsd'],.2,6)
-    def test_frozen_config_hash_unchanged(self):
+    def test_config_hash_is_v179(self):
         saved=ps._cache;ps._cache=None
-        try:self.assertEqual(ps.identity()['configHash'],'cfa5d71516e3')   # fresh: earlier tests may have cached it under a patch
+        try:self.assertEqual(ps.identity()['configHash'],'de066565818b')   # v17.9 (rule A); fresh: earlier tests may have cached it under a patch
         finally:ps._cache=saved
     def test_bands_by_lane_and_price(self):
         b=pf.bands([t(1,.2,1.,'ETH',.35),t(2,.2,-1.,'BTC',.42)])
