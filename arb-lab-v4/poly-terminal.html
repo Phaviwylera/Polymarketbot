@@ -86,6 +86,16 @@ main{perspective:1400px}
 .big{text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 18px currentColor}
 @media(prefers-reduced-motion:reduce){.p,.p:hover,.p.bump{transform:none!important;animation:none!important}}
 @media(prefers-reduced-motion:reduce){.tape{animation:none;padding-left:0}.tile.live{animation:none}}
+/* research audit: own full-width panel, rows flow in two columns on wide screens */
+.audit table{margin-top:0}.audit tbody{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:22px}
+.audit tr{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px;align-items:start;border-bottom:1px dashed #16252a}.audit td{padding:5px 2px!important}
+.audit td:last-child{text-align:left!important;line-height:1.45}
+@media(max-width:1200px){.audit tbody{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){.audit tr{grid-template-columns:96px minmax(0,1fr)}}
+/* wide screens: the top row is as tall as the wallet; price chart and lifecycle grow to fill it */
+@media(min-width:1201px){#pPrice,#pLife{display:flex;flex-direction:column}#pPrice>.pb,#pLife>.pb{flex:1;display:flex;min-height:0}
+ #pPrice .price{flex:1;height:auto}#candles,#lifecycle{height:auto!important;flex:1}#candles{min-height:206px}#lifecycle{min-height:118px}
+ .rowA>.stack{grid-template-rows:minmax(0,1fr) auto}}
 </style></head><body>
 <header class="top"><div class="brand"><div class="logo">PE</div><div><b>POLY/EDGE // PAPER BOT</b><small id="sub">BTC · ETH · 5M + 15M UP/DOWN · PAPER ONLY</small></div></div>
 <div class="chips" id="chips"></div>
@@ -99,7 +109,6 @@ main{perspective:1400px}
   <div class="mut" id="lifeSub" style="margin-top:3px">—</div>
   <div class="kv"><div><span>EQUITY</span><b id="equity">—</b></div><div><span>ACCOUNT P&amp;L</span><b id="sessPnl">—</b></div><div><span>WIN RATE</span><b id="winRate">—</b></div><div><span>AVG TRADE</span><b id="avgTrade">—</b></div><div><span>MAX DD</span><b id="maxDd">—</b></div><div><span>OPEN</span><b id="openPos">—</b></div></div>
   <div class="rules"><div class="rh"><span>CURRENT RULES</span><em id="rulesDesc">—</em></div><table id="rulesTbl"><thead><tr><th></th><th>TRADES</th><th>WIN</th><th>AVG</th><th>NET</th><th>PF</th></tr></thead><tbody></tbody></table></div>
-  <div class="rules"><div class="rh"><span>RESEARCH AUDIT</span><em id="auditDesc">walk-forward · fees · model vs market</em></div><table id="auditTbl"><tbody><tr><td>loading…</td></tr></tbody></table></div>
   <div class="bars" id="exposure"></div></div></article>
  <article class="p" id="pPrice"><div class="ph"><span>◷ <b id="priceTitle">BTC</b> price · 10s candles</span><div class="tabs" id="laneTabs"></div></div><div class="pb"><div class="price"><canvas id="candles" style="height:206px"></canvas><div class="ladder" id="ladder"></div></div></div></article>
  <div class="stack">
@@ -107,6 +116,8 @@ main{perspective:1400px}
   <article class="p" id="pGrid"><div class="ph"><span>▦ Resolution grid · <b>live expiries</b></span><span class="badge" id="resBadge">—</span></div><div class="pb" style="padding:8px"><div class="grid" id="resgrid"></div></div></article>
  </div>
 </section>
+<article class="p" id="pAudit"><div class="ph"><span>⚖ Research audit · <b>walk-forward · fees · experiments · shadow lanes</b></span><span class="badge" id="auditBadge">—</span></div>
+ <div class="pb rules audit" style="margin-top:0;border-top:0;padding-top:4px"><table id="auditTbl"><tbody><tr><td>loading…</td></tr></tbody></table></div></article>
 <article class="p" id="pShell"><div class="ph"><span>◉ Neural shell · <b id="shellLane">BTC</b> · inputs → gates → decision core</span><span class="badge" id="shellBadge">—</span></div>
  <div class="shell"><div class="inputs" id="inputs"></div><div class="netwrap"><canvas id="net"></canvas>
   <div class="conf"><span>CALIBRATED P(UP) · <span id="confLane" style="display:inline">—</span></span><b id="confP">—</b><div class="meter"><i id="confBar" style="width:0"></i></div>
@@ -118,5 +129,5 @@ main{perspective:1400px}
 </section>
 </main>
 <footer class="foot" id="foot">Loading…</footer>
-<script src="/poly-terminal.js?v=18.3" defer></script>
+<script src="/poly-terminal.js?v=18.5" defer></script>
 </body></html>

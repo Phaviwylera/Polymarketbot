@@ -129,6 +129,7 @@
     ['ALERTS',(a.alerts||[]).length?`<span class="neg">${(a.alerts||[]).slice(0,4).join(' · ')}</span>`:'<span class="pos">none</span>'],
     ['LEDGER',`${lg.sessions||0} sessions · ${lg.sessionsWithProblems||0} don't reconcile · since reset ${tw.sinceFreshStart??'—'} trades, since rules ${tw.sinceRulesLive??'—'} (gap ${tw.betweenTheTwoTimes??'—'} ${tw.explained?'explained':'UNEXPLAINED'})`]]
     .map(([k,x])=>`<tr><td>${k}</td><td style="text-align:left">${x}</td></tr>`).join('');
+   set('auditBadge',v.status||'—');
   }catch(e){auditAt=Date.now()-540000;}
  }
 
