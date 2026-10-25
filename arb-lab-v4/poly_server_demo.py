@@ -498,6 +498,10 @@ class PolyServerDemo:
                     self.print_keys.append(key)
                     self.trade_seq+=1
                     self.trade_prints.append({'seq':self.trade_seq,'t':tsec if m.get('timestamp') is not None else None,'receivedAt':time.time(),'side':side,'price':price,'size':size,'aggressor':m.get('side'),'marketSlug':self.market.get('slug'),'feedReady':bool(self._inventory_feed_ready())})
+                    tape=getattr(self,'tape',None)
+                    if tape is not None:   # shadow: score this market trade with the model (never trades)
+                        try:tape.on_print(self.lane,self.trade_prints[-1],self.market,(self.edge.signals.get(self.lane) if self.edge else None),self.momentum_decision)
+                        except Exception:pass
                     # Apply this print before a subsequently received book/risk update.
                     inv=(self.paper or {}).get('inventory')
                     if inv and inv.get('marketSlug')==self.market.get('slug'):

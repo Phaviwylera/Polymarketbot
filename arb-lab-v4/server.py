@@ -864,6 +864,7 @@ async def _audit(force=False):
 async def poly_audit_endpoint():
     rep=dict(await _audit())
     rep['threshold']=_threshold.compact() if _threshold else None
+    rep['tape']=_tape.compact() if _tape else None
     try:rep['skillVsLuck']={k:v for k,v in poly_server_engine.edge.intel.skill_vs_luck().items() if k!='per'}
     except Exception:rep['skillVsLuck']=None
     return rep
@@ -933,6 +934,27 @@ async def start_threshold_shadow():
 @app.get("/api/poly/threshold")
 async def poly_threshold_report():
     return _threshold.report() if _threshold else {'enabled':False}
+
+_tape=None
+@app.on_event('startup')
+async def start_trade_tape():
+    """Score every Polymarket trade print with the model, labelled at resolution (POLY_TAPE=0 disables)."""
+    global _tape
+    if os.getenv('POLY_TAPE','1')=='0' or POLY_ENGINE_ROLE=='frontend':return
+    import poly_tape
+    s3=None
+    if os.getenv('POLY_BACKUP_S3_BUCKET'):
+        import poly_s3backup;s3=poly_s3backup.S3(os.getenv('POLY_BACKUP_S3_BUCKET'))
+    _tape=poly_tape.Tape(s3=s3)
+    for lane in poly_server_engine.engines.values():lane.tape=_tape
+    edge=poly_server_engine.edge
+    if not hasattr(edge,'settle_listeners'):edge.settle_listeners=[]
+    edge.settle_listeners.append(_tape.settle)
+    asyncio.create_task(_tape.loop());print('POLY_TAPE_ON',flush=True)
+
+@app.get("/api/poly/tape")
+async def poly_tape_report():
+    return _tape.report() if _tape else {'enabled':False}
 
 @app.get("/api/poly/bullpen")
 async def poly_bullpen_status():

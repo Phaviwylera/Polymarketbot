@@ -67,6 +67,15 @@ class ShadowTests(unittest.TestCase):
         self.assertEqual(lane.counts['entered'],1)
         s=next(s for s in lane.pending if s['row']['side']=='up');self.assertAlmostEqual(s['entryCost'],.41+fee(.41))
         self.assertEqual(s['row']['features']['entry_vwap'],.4)
+    def test_probes_enter_at_the_production_one_second_step(self):
+        """Regression: with RESEARCH_STEP_SEC=1.0 the next observation arrives ~1.0-1.1 s after seeding;
+        a fixed 1.0 s entry deadline rejected every probe, so no label was produced for 32 hours."""
+        import poly_shadow
+        self.assertGreater(poly_shadow.ENTRY_DEADLINE_SEC,poly_shadow.RESEARCH_STEP_SEC+0.1)
+        lane,events=self.lane();lane.step({'up':observations(NOW+1.08)['up']},NOW+1.08)
+        self.assertEqual(lane.counts['entered'],1);self.assertEqual(lane.counts['invalidBeforeEntry'],0)
+        lane2,_=self.lane();lane2.step({'up':observations(NOW+poly_shadow.ENTRY_DEADLINE_SEC+.1)['up']},NOW+poly_shadow.ENTRY_DEADLINE_SEC+.1)
+        self.assertEqual(lane2.counts['entered'],0);self.assertEqual(lane2.counts['invalidBeforeEntry'],1)   # a real deadline still exists
     def test_post_latency_move_creates_nofill_zero_not_a_trade(self):
         lane,events=self.lane();out=lane.step({'up':observations(NOW+.5,.42,.43)['up']},NOW+.5)
         self.assertEqual(out[0]['labelStatus'],'no_fill');self.assertEqual(out[0]['netReturnPerShare'],0);self.assertFalse(out[0]['entryFilled'])

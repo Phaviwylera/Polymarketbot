@@ -392,6 +392,9 @@ class EdgeLab:
         return 'market price exceeded calibrated fair value' if float(bid)-fee(float(bid))>=p+.01 else None
     # ---------- resolution & learning -----------------------------------------
     def settle(self,slug,winner):
+        for listener in getattr(self,'settle_listeners',()):   # e.g. the trade tape labels every print of this round
+            try:listener(slug,winner)
+            except Exception:pass
         r=self.rounds.pop(slug,None)
         if not r or winner not in ('up','down'):return
         up=winner=='up'

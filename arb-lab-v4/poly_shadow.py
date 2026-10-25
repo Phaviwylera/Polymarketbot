@@ -14,6 +14,11 @@ import os as _os
 # process was the main CPU load on the 0.1-CPU instance. Retrain every 30 min, at low priority.
 TRAIN_INTERVAL_SEC=float(_os.getenv('POLY_TRAIN_INTERVAL_SEC','1800'))
 RESEARCH_STEP_SEC=1.0   # shadow research sampling; was 0.25 s, CPU-bound host
+# A probe enters on the first observation >= 0.35 s after it is seeded. That deadline must exceed one sampling
+# step: when the step became 1.0 s the old fixed 1.0 s deadline rejected every probe and no label was produced
+# from 2026-10-24 03:43 until this fix.
+ENTRY_MIN_SEC=0.35
+ENTRY_DEADLINE_SEC=max(1.0,ENTRY_MIN_SEC+1.5*RESEARCH_STEP_SEC)
 def _low_priority():
     try:_os.nice(15)
     except Exception:pass
@@ -42,8 +47,8 @@ class ShadowLane:
             if not o:keep.append(s);continue
             if s['phase']=='entry':
                 age=now-s['seedAt']
-                if age<.35:keep.append(s);continue
-                if age>1:
+                if age<ENTRY_MIN_SEC:keep.append(s);continue
+                if age>ENTRY_DEADLINE_SEC:
                     self.counts['invalidBeforeEntry']+=1;self.emit('SHADOW_REJECT',{'id':s['id'],'asset':self.asset,'at':now,'reason':'entry observation deadline'});continue
                 fill=walk(o['depth'].get('asks',[]),o['quantity'],True,s['row']['ask']+s['row']['tick'])
                 if not fill:completed.append(self.finish(s,now,'no_fill',0.,'one-tick entry limit or full depth unavailable'));continue
