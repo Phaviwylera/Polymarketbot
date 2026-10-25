@@ -38,6 +38,14 @@ EXPERIMENTS={
     # Experiment C: entry gate on the model's estimated edge. Hypothesis from the 2026-10-25 audit bands (IN-SAMPLE:
     # 12-20c edge 28 trades -$6.98, >=20c 31 trades +$8.95). Scored ONLY on trades entered after registeredAt, so
     # the split that suggested it is never part of its evidence. Report-only: no live order is affected.
+    # D (priority 1, fees): post a zero-fee resting BID at the best bid when the entry signal fires, valid
+    # windowSec; it fills only when a market trade prints strictly BELOW it (trade-through, so queue position
+    # cannot flatter it). Shadow P&L = the real exit proceeds minus the cheaper zero-fee entry; unfilled = no trade.
+    # Answers: does a maker entry save more in fees + price than it loses by missing (adverse selection)?
+    'D':{'id':'D-maker-entry-v1','windowSec':2.0,'latencySec':0.35,'registeredAt':1792933930,'registeredUtc':'2026-10-25 13:12 UTC'},
+    # E (priority 3, calibration): the learner's market-anchored probability for the entry token at entry time;
+    # trades split by learned edge (p - ask - fee) > 0. Report-only.
+    'E':{'id':'E-learner-gate-v1','minLearnedEdge':0.0,'registeredAt':1792933930,'registeredUtc':'2026-10-25 13:12 UTC'},
     'C':{'id':'C-min-edge-0.20-v1','minEdge':0.20,'registeredAt':1792900230,'registeredUtc':'2026-10-25 03:50 UTC'},
 }
 

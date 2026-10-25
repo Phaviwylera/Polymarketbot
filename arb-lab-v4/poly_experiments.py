@@ -60,6 +60,17 @@ def step_a(pos,bid_levels,bid,lead_bps,now,tick,cfg):
               triggerToFillMs=round((now-ex.get('firstTriggerAt',ex['triggerAt']))*1000))
     return ex
 
+def d_on_print(d,pr,now=None):
+    """Experiment D: a resting bid fills on a trade that prints strictly below it on the same token, after the
+    order latency and before the window ends. pr = lane trade print."""
+    if not d or d.get('state')!='resting':return d
+    t=float(pr.get('t') or pr.get('receivedAt') or now or 0)
+    if pr.get('side')!=d['token'] or pr.get('marketSlug')!=d['marketSlug']:return d
+    if t<d['postedAt']+d['latencySec']:return d
+    if t>d['postedAt']+d['windowSec']:d['state']='expired';return d
+    if float(pr['price'])<d['price']-1e-9:d.update(state='filled',fillAt=t,fillDelaySec=round(t-d['postedAt'],3),printPrice=float(pr['price']))
+    return d
+
 def finalize(pos,real_net):
     """At the real close: the shadow result for each experiment, with the real result for comparison."""
     out={}
@@ -71,4 +82,15 @@ def finalize(pos,real_net):
                   'exitedEarlier':a.get('state')=='filled','missedRecovery':a.get('state')=='filled' and real_net>shadow+1e-9}
     b=(pos.get('experiments') or {}).get('B')
     if b is not None:out['B']={**b,'realNetPnlUsd':round(real_net,5)}
+    d=(pos.get('experiments') or {}).get('D')
+    if d is not None:
+        if d.get('state')=='resting':d['state']='unfilled at real exit'   # later prints can no longer fill it
+        filled=d.get('state')=='filled'
+        shares=float(pos['shares'])
+        shadow=round(real_net+float(pos['entryTotalCost'])-shares*float(d['price']),5) if filled else 0.
+        out['D']={**{k:d.get(k) for k in ('id','price','state','fillDelaySec','printPrice')},'filled':filled,
+                  'shadowNetPnlUsd':shadow,'realNetPnlUsd':round(real_net,5),
+                  'entrySavingUsd':round(float(pos['entryTotalCost'])-shares*float(d['price']),5) if filled else None}
+    e=(pos.get('experiments') or {}).get('E')
+    if e is not None:out['E']={**e,'realNetPnlUsd':round(real_net,5)}
     return out

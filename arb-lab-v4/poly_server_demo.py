@@ -498,6 +498,11 @@ class PolyServerDemo:
                     self.print_keys.append(key)
                     self.trade_seq+=1
                     self.trade_prints.append({'seq':self.trade_seq,'t':tsec if m.get('timestamp') is not None else None,'receivedAt':time.time(),'side':side,'price':price,'size':size,'aggressor':m.get('side'),'marketSlug':self.market.get('slug'),'feedReady':bool(self._inventory_feed_ready())})
+                    d=getattr(self,'_shadow_d',None)
+                    if d is not None:
+                        try:
+                            import poly_experiments as _px;_px.d_on_print(d,self.trade_prints[-1])
+                        except Exception:pass
                     tape=getattr(self,'tape',None)
                     if tape is not None:   # shadow: score this market trade with the model (never trades)
                         try:tape.on_print(self.lane,self.trade_prints[-1],self.market,(self.edge.signals.get(self.lane) if self.edge else None),self.momentum_decision)
@@ -1639,6 +1644,13 @@ class PolyServerDemo:
                 self._diagnostic('DEPTH_GATE_REJECT',signal=candidate,gate=gate)
                 return False
         except Exception:pass
+        # Shadow experiment D: a zero-fee resting bid at the order-time best bid (never a real order).
+        try:
+            import poly_strategy as _ps
+            cfg=_ps.EXPERIMENTS['D'];b0=self.bbo[key].get('bid')
+            self._shadow_d={'id':cfg['id'],'token':key,'marketSlug':market['slug'],'price':round(min(float(b0),candidate['ask']-tick),6),
+                            'postedAt':submitted,'latencySec':cfg['latencySec'],'windowSec':cfg['windowSec'],'state':'resting'} if b0 is not None else None
+        except Exception:self._shadow_d=None
         self.pending=True;p['executionAttempts']+=1;p['momentumOrders']=int(p.get('momentumOrders',0))+1
         self._record('ORDER',side=side,price=candidate['ask'],detail=f'MOMENTUM_SCALP marketable paper order; {shares:.2f} shares; max {max_price:.3f}')
         self._diagnostic('MOMENTUM_ORDER',signal=candidate,context=self._diagnostic_context())
@@ -1674,7 +1686,7 @@ class PolyServerDemo:
                            'sizeMultiplier':candidate.get('sizeMultiplier',1.),'entryBid':fresh.get('bid'),
                            'signalAt':candidate.get('signalAt'),'orderAt':submitted,
                            'signalToOrderMs':round((submitted-float(candidate['signalAt']))*1000,1) if candidate.get('signalAt') else None,
-                           'experiments':{'B':gate}}
+                           'experiments':{'B':gate,**({'D':self._shadow_d} if getattr(self,'_shadow_d',None) else {}),**self._experiment_e(side,ask,shares,market)}}
             try:
                 import poly_strategy as ps;p['position'].update(ps.stamp())
             except Exception:pass
@@ -1978,6 +1990,20 @@ class PolyServerDemo:
         self._attribute_close(pos,price,fee,reason,latency_ms)
         if pos.get('mode')=='MOMENTUM_SCALP':p['momentumCloses']=int(p.get('momentumCloses',0))+1
         return pnl
+
+    def _experiment_e(self,side,ask,shares,market):
+        """Experiment E: the learner's market-anchored chance for the entry token at entry (report-only)."""
+        try:
+            import poly_strategy as _ps
+            lrn=getattr(self.edge,'learner',None);sig=(self.edge.signals.get(self.lane) if self.edge else None) or {}
+            if lrn is None:return {}
+            pu=sig.get('pUp');age=time.time()-float(sig.get('at') or 0)
+            p_tok=None if pu is None or age>10 else (pu if side.upper()=='UP' else 1-pu)
+            row={'price':float(ask),'pToken':p_tok,'lane':self.lane,'t':time.time(),'roundEnd':market.get('endTs'),'size':float(shares),'aggressor':'BUY'}
+            pl=lrn.predict(row);edge=pl-float(ask)-_fee_per_share(float(ask))
+            return {'E':{'id':_ps.EXPERIMENTS['E']['id'],'pLearned':round(pl,5),'learnedEdge':round(edge,5),'pModel':None if p_tok is None else round(p_tok,5),
+                         'wouldTake':edge>_ps.EXPERIMENTS['E']['minLearnedEdge'],'learnerRounds':lrn.rounds}}
+        except Exception:return {}
 
     def _maker_exit_price(self,pos):
         """Lowest tick price at which a zero-fee sell of the whole position meets the profit target."""

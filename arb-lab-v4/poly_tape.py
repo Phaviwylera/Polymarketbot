@@ -44,6 +44,13 @@ class Agg:
     def __init__(self):
         self.n=0;self.rounds=set();self.brier_m=0.;self.brier_p=0.;self.ll_m=0.;self.ll_p=0.
         self.act=defaultdict(lambda:{'n':0,'won':0,'ret':0.});self.lact=defaultdict(lambda:{'n':0,'won':0,'ret':0.});self.round_ret=defaultdict(float);self.round_n=defaultdict(int)
+    def export(self):
+        return {'n':self.n,'rounds':sorted(self.rounds)[-20000:],'b':[self.brier_m,self.brier_p,self.ll_m,self.ll_p],
+                'act':{k:dict(v) for k,v in self.act.items()},'lact':{k:dict(v) for k,v in self.lact.items()}}
+    def restore(self,d):
+        self.n=int(d.get('n',0));self.rounds=set(d.get('rounds') or []);self.brier_m,self.brier_p,self.ll_m,self.ll_p=[float(x) for x in d.get('b',[0,0,0,0])]
+        for k,v in (d.get('act') or {}).items():self.act[k].update(v)
+        for k,v in (d.get('lact') or {}).items():self.lact[k].update(v)
     def add(self,row):
         y=1. if row['won'] else 0.;p=row['pToken'];q=row['price'];self.n+=1;self.rounds.add(row['slug'])
         if p is not None:
@@ -75,7 +82,7 @@ class Tape:
         self.root=root or os.path.join(os.getenv('POLY_DATA_DIR','/tmp'),'tape');self.s3=s3;self.now=now
         self.pending=defaultdict(list)          # slug -> rows awaiting the round's outcome
         self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
-        self.seen=0;self.dropped=0;self.files_uploaded=0;self.last_error=None;self.started=now()
+        self.seen=0;self.dropped=0;self.files_uploaded=0;self.last_error=None;self.started=now();self.restored=None
     # ---- recording ------------------------------------------------------------------------------
     def on_print(self,lane,pr,market,signal,momentum=None):
         """pr: lane trade print {'t','side':'up'|'down','price','size','aggressor','marketSlug'}; signal: EdgeLab.signals[lane]."""
@@ -193,7 +200,7 @@ class Tape:
         blk=poly_audit.block_bootstrap_mean([{'entryAt':r['roundEnd'] or r['t'],'pnl':r['returnPerDollar']} for r in rows],block_sec=300) if rows else None
         return {'mode':'shadow, record-only: every market trade scored by the model; no orders',
                 'seenPrints':self.seen,'pendingRounds':len(self.pending),'pendingPrints':sum(len(v) for v in self.pending.values()),
-                'droppedPrints':self.dropped,'filesUploaded':self.files_uploaded,'error':self.last_error,
+                'droppedPrints':self.dropped,'filesUploaded':self.files_uploaded,'error':self.last_error,'restoredState':self.restored,
                 'overall':self.agg.summary(self.with_model),'byLane':{k:a.summary(self.lane_model[k]) for k,a in self.lanes.items()},
                 'recentDecisionsBlockBootstrap':blk,'learner':self.learner.summary(),'warmStart':self.warm,
                 'rules':{'z':Z,'edgeBuffer':EDGE_BUFFER,'feeRate':FEE_RATE,'modelMaxAgeSec':MODEL_MAX_AGE_SEC},
@@ -208,12 +215,65 @@ class Tape:
                 'learner':{k:ls.get(k) for k in ('rounds','brierPrice','brierLearned','brierModel','learnedBeatsPrice')},
                 'learnedBuy':[(la.get('BUY') or {}).get('prints'),(la.get('BUY') or {}).get('avgReturnPerDollar')],
                 'learnedSell':[(la.get('SELL') or {}).get('prints'),(la.get('SELL') or {}).get('avgReturnPerDollar')]}
+    # ---- restart safety ---------------------------------------------------------------------------
+    def state_path(self):return os.path.join(os.path.dirname(self.root.rstrip('/')) or '.','tape_state.json.gz')
+    def save_state(self,path=None):
+        path=path or self.state_path();tmp=path+'.tmp'
+        st={'savedAt':self.now(),'pending':self.pending,'agg':self.agg.export(),'withModel':self.with_model,
+            'lanes':{k:a.export() for k,a in self.lanes.items()},'laneModel':dict(self.lane_model),'recent':list(self.recent),
+            'seen':self.seen,'dropped':self.dropped,'filesUploaded':self.files_uploaded,'started':self.started}
+        os.makedirs(os.path.dirname(path) or '.',exist_ok=True)
+        with gzip.open(tmp,'wt') as f:json.dump(st,f,separators=(',',':'))
+        os.replace(tmp,path)
+    def load_state(self,path=None,max_age=6*3600):
+        """Restore totals and the prints of rounds still open when the bot stopped (labelled when they resolve)."""
+        path=path or self.state_path()
+        if not os.path.exists(path):return False
+        with gzip.open(path,'rt') as f:st=json.load(f)
+        self.agg.restore(st.get('agg') or {});self.with_model=int(st.get('withModel',0))
+        for k,d in (st.get('lanes') or {}).items():self.lanes[k].restore(d)
+        self.lane_model.update({k:int(v) for k,v in (st.get('laneModel') or {}).items()})
+        self.recent.extend(st.get('recent') or [])
+        self.seen+=int(st.get('seen',0));self.dropped+=int(st.get('dropped',0));self.files_uploaded+=int(st.get('filesUploaded',0))
+        if self.now()-float(st.get('savedAt',0))<=max_age:
+            for slug,rows in (st.get('pending') or {}).items():self.pending[slug]=rows+self.pending.get(slug,[])
+        self.restored={'at':st.get('savedAt'),'pendingRounds':len(st.get('pending') or {})}
+        return True
+    async def resolve_stale(self,fetch=None,grace=600):
+        """Rounds still pending well after their end (e.g. resolved while the bot restarted, so the live
+        settle callback never fired) are labelled from Polymarket's resolved market record."""
+        now=self.now();n=0
+        for slug,rows in list(self.pending.items()):
+            end=rows[0].get('roundEnd') if rows else None
+            if not end or now<float(end)+grace:continue
+            try:
+                if fetch:m=await fetch(slug)
+                else:
+                    import httpx
+                    async with httpx.AsyncClient(timeout=15) as c:
+                        r=await c.get('https://gamma-api.polymarket.com/markets',params={'slug':slug});r.raise_for_status();d=r.json()
+                    m=d[0] if isinstance(d,list) and d else None
+                prices=json.loads(m['outcomePrices']) if m and isinstance(m.get('outcomePrices'),str) else (m or {}).get('outcomePrices')
+                outs=json.loads(m['outcomes']) if m and isinstance(m.get('outcomes'),str) else (m or {}).get('outcomes')
+                if not m or not m.get('closed') or not prices or not outs:continue
+                pr=[float(x) for x in prices]
+                if max(pr)<0.99:continue
+                winner=str(outs[pr.index(max(pr))]).lower()
+                if winner in ('up','down'):n+=self.settle(slug,winner)>0
+            except Exception as exc:self.last_error=f'resolve: {type(exc).__name__}'
+        return n
     async def loop(self):
         global CURRENT;CURRENT=self
+        try:self.load_state()
+        except Exception as exc:self.last_error=f'load: {type(exc).__name__}'
         await asyncio.sleep(120)                 # let the saved learner state restore first
         try:await self.warm_start()
         except Exception as exc:self.warm={'state':'error','error':type(exc).__name__}
+        tick=0
         while True:
-            await asyncio.sleep(600)
-            try:self.expire();await self.upload_closed_hours()
-            except Exception as exc:self.last_error=f'upload: {type(exc).__name__}'
+            await asyncio.sleep(60);tick+=1
+            try:self.save_state()
+            except Exception as exc:self.last_error=f'save: {type(exc).__name__}'
+            if tick%10==0:
+                try:await self.resolve_stale();self.expire();await self.upload_closed_hours()
+                except Exception as exc:self.last_error=f'upload: {type(exc).__name__}'

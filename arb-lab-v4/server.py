@@ -781,6 +781,9 @@ async def get_research_summary():
 
 @app.on_event("shutdown")
 async def close_poly_research():
+    if _tape is not None:   # keep the trade tape's open rounds and totals across a restart
+        try:_tape.save_state()
+        except Exception as exc:print('POLY_TAPE_SAVE_ERROR',type(exc).__name__,flush=True)
     await poly_storage.close()
 
 @app.get('/api/poly/operations')

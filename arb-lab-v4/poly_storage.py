@@ -89,6 +89,13 @@ class DurableStore:
         import poly_s3backup
         s3=poly_s3backup.S3(os.getenv('POLY_BACKUP_S3_BUCKET'))
         await asyncio.sleep(float(os.getenv('POLY_BACKUP_FIRST_DELAY_SEC','600')))
+        # A restart does not need its own backup: wait until 24 h after the newest one.
+        try:
+            last=await s3.latest_backup_at()
+            if last and time.time()-last<20*3600:
+                self.last_backup={'ok':True,'at':float(last),'target':'s3','note':'existing backup found at startup'}
+                await asyncio.sleep(max(0.,last+86400-time.time()))
+        except Exception as exc:print('POLY_BACKUP_LIST_ERROR',type(exc).__name__,flush=True)
         while not self.closed:
             try:
                 if self.active:self.last_backup=await poly_s3backup.backup(self.url,s3,workdir=os.getenv('POLY_DATA_DIR') or None)

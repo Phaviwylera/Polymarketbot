@@ -133,6 +133,22 @@ def experiments_report(attribution):
                   'experimentAccepted':poly_audit.metrics([float(r['netPnlUsd']) for r in keep]),'wouldReject':poly_audit.metrics([float(r['netPnlUsd']) for r in drop]),
                   'acceptedBlockBootstrap':poly_audit.block_bootstrap_mean([{'entryAt':r['entryAt'],'pnl':float(r['netPnlUsd'])} for r in keep]),
                   'decisionRule':'adopt only if, on forward trades, accepted trades pass the same gates as the baseline (60 trades, mean > 0, block-bootstrap lower > 0) and beat the rejected ones'}
+    d=[r for r in rows if 'D' in r['experiments'] and 'shadowNetPnlUsd' in r['experiments']['D']]
+    if d:
+        fil=[r for r in d if r['experiments']['D']['filled']];mis=[r for r in d if not r['experiments']['D']['filled']]
+        out['D']={'id':d[0]['experiments']['D'].get('id'),'trades':len(d),'fillRatePct':round(100*len(fil)/len(d),1),
+                  'baseline':poly_audit.metrics([float(r['netPnlUsd']) for r in d]),
+                  'experiment':poly_audit.metrics([float(r['experiments']['D']['shadowNetPnlUsd']) for r in d]),
+                  'filledRealPnl':poly_audit.metrics([float(r['netPnlUsd']) for r in fil]),
+                  'missedRealPnl':poly_audit.metrics([float(r['netPnlUsd']) for r in mis]),
+                  'avgEntrySavingUsd':round(sum(float(r['experiments']['D']['entrySavingUsd']) for r in fil)/len(fil),4) if fil else None,
+                  'reading':'maker entry helps only if experiment net > baseline net; missed trades that were winners = adverse selection'}
+    e=[r for r in rows if 'E' in r['experiments'] and 'learnedEdge' in r['experiments']['E']]
+    if e:
+        take=[r for r in e if r['experiments']['E']['wouldTake']];skip=[r for r in e if not r['experiments']['E']['wouldTake']]
+        out['E']={'id':e[0]['experiments']['E'].get('id'),'trades':len(e),'baseline':poly_audit.metrics([float(r['netPnlUsd']) for r in e]),
+                  'learnerWouldTake':poly_audit.metrics([float(r['netPnlUsd']) for r in take]),'learnerWouldSkip':poly_audit.metrics([float(r['netPnlUsd']) for r in skip]),
+                  'avgLearnedEdge':round(sum(float(r['experiments']['E']['learnedEdge']) for r in e)/len(e),4)}
     out['note']=('Shadow results on the same entries and books. A policy is not adopted because it lowers the worst loss in a small '
                  'sample: it must pass the same predeclared gates as the baseline on its own evaluation window.')
     return out
@@ -152,7 +168,25 @@ def version_report(attribution,identity):
     return {'current':{'strategyVersion':identity['strategyVersion'],'configHash':identity['configHash'],'experimentsHash':identity['experimentsHash']},
             'byConfigHash':{k:poly_audit.metrics(v) for k,v in groups.items()},
             'evaluationSample':poly_audit.metrics(groups.get(identity['configHash'],[])),
+            'gate':evaluation_gate([a for a in attribution if a.get('strategy')=='MOMENTUM_SCALP' and a.get('configHash')==identity['configHash']]),
             'freezeRule':'no tuning of entry, sizing, exits, filters or market selection while the stop experiments collect their sample'}
+
+def evaluation_gate(rows,now=None):
+    """The full predeclared gate applied to the CURRENT config's own trades only (no earlier versions pooled)."""
+    now=time.time() if now is None else now;c=poly_audit.PASS_CRITERIA
+    pn=[float(r['netPnlUsd']) for r in rows];m=poly_audit.metrics(pn)
+    boot=poly_audit.bootstrap_mean(pn);blk=poly_audit.block_bootstrap_mean([{'entryAt':r['entryAt'],'pnl':float(r['netPnlUsd'])} for r in rows])
+    st=poly_audit.stress([{'pnl':float(r['netPnlUsd']),'exit':r.get('exitPrice')} for r in rows]) if rows else {}
+    one=(st.get('exitWorseBy1Tick') or {}).get('avgPnlUsd')
+    checks={'trades':m['trades']>=c['minOutOfSampleTrades'],'mean':m['avgPnlUsd'] is not None and m['avgPnlUsd']>c['meanPnlAbove'],
+            'bootstrapLower':bool(boot) and boot['lower95']>c['bootstrapLower95Above'],'blockBootstrapLower':bool(blk) and blk['lower95']>c['bootstrapLower95Above'],
+            'drawdown':m['maxDrawdownUsd']<c['maxDrawdownUsdBelow'],'exitsOneTickWorse':one is not None and one>c['stressOneTickMeanAbove']}
+    first=min((float(r['entryAt']) for r in rows),default=None);days=max(1/24,(now-first)/86400) if first else None
+    pace=round(m['trades']/days,1) if days else None
+    eta=round((c['minOutOfSampleTrades']-m['trades'])/pace,1) if pace and m['trades']<c['minOutOfSampleTrades'] else 0. if pace else None
+    status='PASS' if all(checks.values()) else ('COLLECTING' if not checks['trades'] else 'FAIL')
+    return {'status':status,'checks':checks,'metrics':m,'bootstrap':boot,'blockBootstrap':blk,'stress':st,'tradesPerDay':pace,'daysToSample':eta,
+            'rule':'all checks must pass on this config alone; earlier configs are never pooled'}
 
 def bands(attribution):
     rows=[a for a in attribution if a.get('strategy')=='MOMENTUM_SCALP']

@@ -64,8 +64,21 @@ class S3:
         return self._c
     async def put(self,path,key,sha):
         await asyncio.to_thread(self.c().upload_file,path,self.bucket,key,ExtraArgs={'Metadata':{'sha256':sha},'ServerSideEncryption':'AES256'})
+    async def put_json(self,key,obj):
+        body=json.dumps(obj,separators=(',',':'),default=str).encode()
+        await asyncio.to_thread(self.c().put_object,Bucket=self.bucket,Key=key,Body=body,ServerSideEncryption='AES256',ContentType='application/json')
     async def get(self,key,path):
         await asyncio.to_thread(self.c().download_file,self.bucket,key,path)
+    async def latest_backup_at(self):
+        """Epoch of the newest VERIFIED backup (its marker key), or None."""
+        def run():
+            r=self.c().list_objects_v2(Bucket=self.bucket,Prefix=PREFIX+'20');best=None
+            for o in r.get('Contents',[]):
+                if '/verified-' not in o['Key']:continue          # only backups that passed every check
+                k=o['Key'].rsplit('verified-',1)[-1].split('.')[0]
+                if k.isdigit():best=max(best or 0,int(k))
+            return best
+        return await asyncio.to_thread(run)
     async def list_get(self,prefix,days=7):
         """Labelled tape rows from the last `days` of hourly files under prefix (warm start of the learner)."""
         def run():
@@ -106,6 +119,9 @@ async def backup(url,s3,log=print,workdir=None):
                 'eventRows':sum(k['rows'] for k in kinds.values()),'kinds':len(kinds),'mismatchedKinds':mismatched,'stateRows':expect['stateRows'],
                 'restoreCheck':restore,'portfolioMatches':pf_ok,'portfolio':expect['portfolio'],'verifiedUpToT':expect['cutoff'],
                 'seconds':round(time.time()-started,1)}
+        if ok and hasattr(s3,'put_json'):   # marker: lets a restart know a verified backup already exists
+            try:await s3.put_json(key.rsplit('/',1)[0]+f'/verified-{int(started)}.json',report)
+            except Exception:report['markerError']=True
         log('POLY_BACKUP '+json.dumps(report,separators=(',',':'),default=str))
         return report
     finally:
