@@ -63,11 +63,15 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
 </style></head><body>
 <header class="top">
  <div class="logo">PE</div><div class="brand"><b>POLY/EDGE // STUDY</b><small>EVERY POLYMARKET TRADE · HOW WINS HAPPEN · MODEL TRAINING</small></div>
- <div class="mode"><span class="pill live" id="mode">STUDY MODE · NO TRADES</span><span class="pill" id="age">—</span><a class="pill" href="/poly">← Terminal</a></div>
+ <div class="mode"><span class="pill live" id="mode">STUDY MODE · NO TRADES</span><span class="pill" id="srcToggle" style="cursor:pointer" title="switch between the live study and weeks of past rounds">◐ LIVE</span><span class="pill" id="age">—</span><a class="pill" href="/poly">← Terminal</a></div>
 </header>
 <main>
  <section class="p c12"><div class="ph"><span>◆ <b>Study progress</b></span><span id="since">—</span></div><div class="pb"><div class="kpis" id="kpis"></div></div></section>
 
+ <section class="p c8"><div class="ph"><span>◷ <b>Time of day</b> · when do buys with spot already on their side pay? (IST)</span><span id="todBadge">—</span></div><div class="pb"><canvas id="tod" style="width:100%;height:190px;display:block"></canvas>
+  <div class="note" id="todNote">Bars: average return per $1 of taker buys made while spot was already on the token's side, by hour. Line: how wrong market prices were that hour (Brier). A window counts only with ≥ 20 rounds and a lower bound above 0.</div></div></section>
+ <section class="p c4"><div class="ph"><span>⌖ <b>Market mistakes</b> · does price match reality?</span><span id="misBadge">—</span></div><div class="pb scroll" style="max-height:250px"><table id="mis"></table><div class="note" id="rev"></div></div></section>
+ <section class="p c12" id="histPanel" style="display:none"><div class="ph"><span>⏮ <b>History backfill</b> · past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
  <section class="p c12 tor"><div class="ph"><span>◉ <b>Market torus</b> · every trade on the ring of the round</span><span>ring: time through the round · tube: price · drag to rotate</span></div>
   <div class="tbody" id="tbody"><canvas id="threads"></canvas>
    <div class="col" id="inputs"><h5>LIVE INPUTS · LATEST TRADE</h5></div>
@@ -289,16 +293,47 @@ function torus(s){
  $('ttl').textContent=L0?`${latestLane} · MODEL P(UP) ${ok(mUp)?mUp.toFixed(3):'—'} · PRICE ${ok(upP)?upP.toFixed(3):'—'} · LEARNER ${ok(lUp)?lUp.toFixed(3):'—'}`:'waiting for trades…';
 }
 
+// ---------- time of day / mistakes / history ----------
+let SRC=(()=>{try{return localStorage.getItem('studySrc')||'live'}catch(e){return 'live'}})();
+function setSrcLabel(){const t=$('srcToggle');if(t)t.textContent=SRC==='live'?'◐ LIVE':'◑ HISTORY';}
+document.addEventListener('click',e=>{if(e.target&&e.target.id==='srcToggle'){SRC=SRC==='live'?'history':'live';try{localStorage.setItem('studySrc',SRC)}catch(_){}setSrcLabel();last=null;lastRounds='';poll();}});
+function tod(s){
+ const T=s.timeOfDay||[],c=$('tod');if(!c)return;const r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);c.width=r.width*d;c.height=r.height*d;const g=c.getContext('2d');g.scale(d,d);
+ const w=r.width,h=r.height,L=36,B=h-20,mid=(B+8)/2;const rows=[...Array(24)].map((_,i)=>T.find(x=>x.istHour===i)||{istHour:i});
+ const vals=rows.map(x=>x.buysWithSpot?x.buysWithSpot.mean:null).filter(ok),mx=Math.max(.05,...vals.map(Math.abs));
+ g.strokeStyle='#1c2a2f';g.beginPath();g.moveTo(L,mid);g.lineTo(w-6,mid);g.stroke();g.fillStyle='#6f8589';g.font='9px ui-monospace';g.fillText('+'+mx.toFixed(2),2,14);g.fillText('-'+mx.toFixed(2),2,B);g.fillText('0',L-10,mid+3);
+ const bw=(w-L-8)/24,best=new Set((s.bestWindows||[]).map(x=>x.istHour));
+ rows.forEach((x,i)=>{const c2=x.buysWithSpot,X=L+i*bw;if(i%3===0){g.fillStyle='#6f8589';g.fillText(String(i).padStart(2,'0'),X+1,h-6);}
+  if(!c2)return;const v=c2.mean,hh=Math.abs(v)/mx*(mid-10),al=Math.min(1,.25+c2.rounds/40);
+  g.fillStyle=v>=0?`rgba(103,243,162,${al})`:`rgba(255,119,134,${al})`;g.fillRect(X+2,v>=0?mid-hh:mid,bw-4,hh);
+  if(best.has(i)){g.strokeStyle='#ffd166';g.lineWidth=1.5;g.strokeRect(X+1,8,bw-2,B-8);}});
+ const br=rows.map(x=>x.marketBrier?x.marketBrier.mean:null),bv=br.filter(ok);
+ if(bv.length>1){const bm=Math.min(...bv),bM=Math.max(...bv);g.strokeStyle='#bdabff';g.lineWidth=1.2;g.beginPath();let st=false;
+  br.forEach((v,i)=>{if(!ok(v))return;const X=L+i*bw+bw/2,Y=B-6-(v-bm)/Math.max(1e-9,bM-bm)*(B-20);st?g.lineTo(X,Y):(g.moveTo(X,Y),st=true);});g.stroke();g.fillStyle='#bdabff';g.fillText('market error (Brier)',w-120,14);}
+ const bw2=s.bestWindows||[];$('todBadge').innerHTML=bw2.length?`<span class="pos">${bw2.length} proven hour(s): ${bw2.map(x=>String(x.istHour).padStart(2,'0')+':00').join(', ')} IST</span>`:'no proven window yet';
+}
+function mistakes(s){
+ const M=s.mistakes||[];$('misBadge').textContent=M.filter(x=>x.reading!=='priced fairly so far').length+' flagged';
+ $('mis').innerHTML='<tr><th>price</th><th class="r">rounds</th><th class="r">won − price</th><th>reading</th></tr>'+(M.length?M.map(x=>`<tr><td>${x.price}</td><td class="r">${x.rounds}</td><td class="r ${cls(x.actualMinusPrice)}">${sg(x.actualMinusPrice,3)}</td><td class="${x.reading.startsWith('tokens here win MORE')?'pos':x.reading.startsWith('tokens here win LESS')?'neg':'dim'}" style="white-space:normal">${x.reading}</td></tr>`).join(''):'<tr><td class="dim">collecting…</td></tr>');
+ const R=s.reversals||{};$('rev').innerHTML='<b>Reversals</b> (side priced ≥ 70¢ with ~20% of the round left that still lost): '+(Object.keys(R).length?Object.entries(R).map(([k,v])=>`${k} ${v.leaderLost}/${v.rounds} (${pct(v.leaderLostPct)})`).join(' · '):'collecting');
+}
+function hist(s){
+ const H=s.history,p=$('histPanel');if(!H){p.style.display='none';return;}p.style.display='';
+ const day=t=>ok(t)?new Date(t*1000).toISOString().slice(5,16).replace('T',' '):'—';
+ $('histBadge').textContent=H.phase||'—';
+ $('histK').innerHTML=[['Past rounds studied',H.roundsDone,`${H.queue||0} still to fetch · ${H.days} days back`],['Past trades',H.tradesSeen,'every taker trade, with wallet'],
+  ['Oldest round',day(H.oldestRound),'UTC'],['Newest round',day(H.newestRound),'UTC'],['Errors',H.errors||0,H.lastError||'none']].map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v??'—'}</b><em>${e}</em></div>`).join('');
+}
 // ---------- poll ----------
 async function poll(){
- try{const s=await (await fetch('/api/poly/study',{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
+ try{const s=await (await fetch('/api/poly/study'+(SRC==='history'?'?source=history':''),{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
   const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p:not(.tor)').forEach(bump);curve(s);}
   if(!last)curve(s);
   torus(s);
-  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
+  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
  }catch(e){$('age').textContent='reconnecting…';}
 }
-initTorus();poll();setInterval(poll,3000);
+setSrcLabel();initTorus();poll();setInterval(poll,3000);
 // gentle tilt on hover for the panels
 if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.p:not(.tor)').forEach(p=>{p.addEventListener('pointermove',e=>{const r=p.getBoundingClientRect();p.style.setProperty('--ty',((e.clientX-r.left)/r.width-.5)*3+'deg');p.style.setProperty('--tx',(.5-(e.clientY-r.top)/r.height)*3+'deg');});p.addEventListener('pointerleave',()=>{p.style.setProperty('--ty','0deg');p.style.setProperty('--tx','0deg');});});
 })();

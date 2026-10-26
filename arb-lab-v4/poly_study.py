@@ -57,7 +57,8 @@ class Cell:
         c=cls();c.n,c.wins,c.rounds,c.s,c.ss,c.prints=a;return c
 
 class Study:
-    def __init__(self):
+    def __init__(self,name='live'):
+        self.name=name;self.hours=defaultdict(Cell);self.weekdays=defaultdict(Cell);self.calib=defaultdict(Cell);self.reversal=defaultdict(lambda:[0,0])
         self.rounds=deque(maxlen=400);self.grid=defaultdict(Cell);self.rule=deque(maxlen=2000);self.wallet_rounds=deque(maxlen=200)
         self.learn_curve=deque(maxlen=600);self.totals={'rounds':0,'prints':0,'buys':0,'winnerUp':0,'winnerDown':0};self.started=time.time()
     @staticmethod
@@ -82,6 +83,25 @@ class Study:
         for r in buys:
             k=self.key(r);per[k].append(buy_return(float(r['price']),r['won']));wins[k]+=int(r['won'])
         for k,v in per.items():self.grid[k].add_round(v,wins[k])
+        # time of day / weekday (UTC, by the round's end): taker-buy returns overall and with spot already on the token side
+        if end:
+            tm=time.gmtime(float(end));h=tm.tm_hour;wd=tm.tm_wday
+            allb=[buy_return(float(r['price']),r['won']) for r in buys]
+            withb=[buy_return(float(r['price']),r['won']) for r in buys if agree_bucket(r.get('agreeBps'))=='with']
+            if allb:self.hours[('all',h)].add_round(allb,sum(r['won'] for r in buys));self.weekdays[('all',wd)].add_round(allb,sum(r['won'] for r in buys))
+            if withb:self.hours[('with',h)].add_round(withb,0)
+            # market calibration error this round: Brier of traded prices
+            self.hours[('brier',h)].add_round([(float(r['price'])-(1. if r['won'] else 0.))**2 for r in rows],0)
+        # market mistakes: by price decile, does the token win more (or less) often than its price says?
+        dec=defaultdict(list)
+        for r in rows:dec[price_bucket(r['price'])].append((1. if r['won'] else 0.)-float(r['price']))
+        for b,v in dec.items():self.calib[(lane[:3] if not lane.endswith('15') else lane,b)].add_round(v,0);self.calib[('all',b)].add_round(v,0)
+        # reversals: the side priced >= 70c with ~20% of the round left - how often does it still lose?
+        late=[r for r in rows if r.get('leftFrac') is not None and .15<=r['leftFrac']<=.25]
+        if late:
+            last_up=next((float(r['price']) if r['token']=='UP' else 1-float(r['price']) for r in reversed(late)),None)
+            if last_up is not None and (last_up>=.7 or last_up<=.3):
+                leader='UP' if last_up>=.7 else 'DOWN';rv=self.reversal[lane];rv[0]+=1;rv[1]+=int(leader!=W)
         # 3) round summary
         up=[(r.get('secondsLeft'),float(r['price']) if r['token']=='UP' else 1-float(r['price'])) for r in rows if r.get('secondsLeft') is not None]
         step=max(1,len(up)//60);path=[(round(a,1),round(b,3)) for a,b in up[::step]]
@@ -134,6 +154,41 @@ class Study:
         return [{'cell':self.cell_name(k),'rounds':c.rounds,'prints':c.prints,'winPct':round(100*c.wins/c.prints,1) if c.prints else None,
                  'avgReturnPerDollar':round(c.mean(),4),'lowerBound':None if c.lower() is None else round(c.lower(),4),
                  'qualifies':self.qualifying(k)} for k,c in cells[:n]]
+    @staticmethod
+    def _cell(c):
+        return None if not c or not c.rounds else {'rounds':c.rounds,'mean':round(c.mean(),5),'lower':None if c.lower() is None else round(c.lower(),5),
+                                                    'se':None if c.se() is None else round(c.se(),5),'prints':c.prints}
+    def time_of_day(self):
+        out=[]
+        for h in range(24):
+            a=self._cell(self.hours.get(('all',h)));w=self._cell(self.hours.get(('with',h)));b=self._cell(self.hours.get(('brier',h)))
+            ist=(h*60+330)//60%24
+            out.append({'utcHour':h,'istHour':ist,'buys':a,'buysWithSpot':w,'marketBrier':b})
+        return out
+    def weekday_table(self):
+        names=('Mon','Tue','Wed','Thu','Fri','Sat','Sun')
+        return [{'day':names[d],'buys':self._cell(self.weekdays.get(('all',d)))} for d in range(7)]
+    def mistakes(self):
+        rows=[]
+        for b in range(10):
+            c=self.calib.get(('all',b))
+            if not c or not c.rounds:continue
+            m=c.mean();lo=c.lower();se=c.se()
+            rows.append({'price':f'{b*10}-{b*10+10}c','rounds':c.rounds,'prints':c.prints,'actualMinusPrice':round(m,4),
+                         'lower':None if lo is None else round(lo,4),'upper':None if se is None else round(m+Z*se,4),
+                         'reading':('tokens here win MORE often than priced (cheap)' if lo is not None and lo>0 else
+                                    'tokens here win LESS often than priced (expensive)' if se is not None and m+Z*se<0 else 'priced fairly so far')})
+        return rows
+    def reversals(self):
+        return {k:{'rounds':v[0],'leaderLost':v[1],'leaderLostPct':round(100*v[1]/v[0],1) if v[0] else None} for k,v in self.reversal.items()}
+    def best_windows(self,min_rounds=MIN_ROUNDS):
+        """UTC hours whose taker buys WITH spot made money with a lower bound above 0 (strict: 3 SE)."""
+        out=[]
+        for h in range(24):
+            c=self.hours.get(('with',h))
+            if c and c.rounds>=min_rounds and c.lower() is not None and c.lower()>0:
+                out.append({'utcHour':h,'istHour':(h*60+330)//60%24,'rounds':c.rounds,'avg':round(c.mean(),4),'lower':round(c.lower(),4)})
+        return out
     def rule_summary(self):
         r=list(self.rule);n=len(r)
         if not n:return {'trades':0,'note':f'the rule trades only once a cell has >= {MIN_ROUNDS} rounds and a positive lower bound'}
@@ -152,16 +207,27 @@ class Study:
                         'winnerBuyShareOfTakerBuyUsd':round(sum(x['winnerBuyUsd'] for x in rs)/max(1e-9,sum(x['winnerBuyUsd']+x['loserBuyUsd'] for x in rs)),4) if rs else None},
              'heatmaps':{a:self.heatmap(a) for a in ('with','flat','against')},'leftNames':LEFT_NAMES,
              'patterns':self.patterns(),'rule':self.rule_summary(),'rounds':rs[-24:][::-1],'wallets':list(self.wallet_rounds)[-12:][::-1],
-             'learnCurve':list(self.learn_curve)[-300:]}
+             'learnCurve':list(self.learn_curve)[-300:],
+             'timeOfDay':self.time_of_day(),'weekdays':self.weekday_table(),'mistakes':self.mistakes(),'reversals':self.reversals(),
+             'bestWindows':self.best_windows(),'name':self.name}
         if tape is not None:
             out['live']=[{k:r.get(k) for k in ('t','lane','token','price','size','aggressor','pToken','pLearned','secondsLeft','leftFrac','agreeBps','spotVsOpenBps','action','learnedAction')} for r in list(tape.live)[-80:]][::-1]
             out['cloud']=[{'l':r.get('leftFrac'),'p':r['price'],'a':r.get('agreeBps'),'w':r.get('won'),'s':r.get('size'),'t':r.get('t'),'tok':r.get('token')} for r in list(tape.recent)[-400:]]
             out['tape']=tape.compact()
         if learner is not None:out['learner']=learner.summary()
         return out
+    def compact(self):
+        r=self.rule_summary();pats=[p for p in self.patterns(6)]
+        return {'name':self.name,'totals':self.totals,'rule':{k:r.get(k) for k in ('trades','winPct','avgReturnPerDollar','lowerBound')},
+                'qualifyingPatterns':[p['cell'] for p in pats if p['qualifies']],'topPatterns':[[p['cell'],p['rounds'],p['avgReturnPerDollar'],p['lowerBound']] for p in pats[:5]],
+                'bestWindows':self.best_windows(),'mistakes':[[m['price'],m['rounds'],m['actualMinusPrice'],m['lower'],m['upper']] for m in self.mistakes()],
+                'reversals':self.reversals(),
+                'hours':[[h['utcHour'],(h['buysWithSpot'] or {}).get('rounds'),(h['buysWithSpot'] or {}).get('mean'),(h['buysWithSpot'] or {}).get('lower')] for h in self.time_of_day() if h['buysWithSpot']]}
     # ---- persistence ---------------------------------------------------------------------------------
     def save(self,path):
-        st={'rounds':list(self.rounds),'grid':{json.dumps(list(k)):c.export() for k,c in self.grid.items()},'rule':list(self.rule),
+        st={'hours':{json.dumps(list(k)):c.export() for k,c in self.hours.items()},'weekdays':{json.dumps(list(k)):c.export() for k,c in self.weekdays.items()},
+            'calib':{json.dumps(list(k)):c.export() for k,c in self.calib.items()},'reversal':dict(self.reversal),
+            'rounds':list(self.rounds),'grid':{json.dumps(list(k)):c.export() for k,c in self.grid.items()},'rule':list(self.rule),
             'wallets':list(self.wallet_rounds),'curve':list(self.learn_curve),'totals':self.totals,'started':self.started}
         tmp=path+'.tmp'
         with gzip.open(tmp,'wt') as f:json.dump(st,f,separators=(',',':'),default=str)
@@ -171,6 +237,9 @@ class Study:
         with gzip.open(path,'rt') as f:st=json.load(f)
         self.rounds.extend(st.get('rounds') or []);self.rule.extend(st.get('rule') or []);self.wallet_rounds.extend(st.get('wallets') or [])
         self.learn_curve.extend(st.get('curve') or []);self.totals.update(st.get('totals') or {});self.started=st.get('started',self.started)
+        for name in ('hours','weekdays','calib'):
+            for k,a in (st.get(name) or {}).items():getattr(self,name)[tuple(json.loads(k))]=Cell.load(a)
+        for k,v in (st.get('reversal') or {}).items():self.reversal[k]=list(v)
         for k,a in (st.get('grid') or {}).items():
             kk=json.loads(k);self.grid[(kk[0],kk[1],kk[2])]=Cell.load(a)
         return True

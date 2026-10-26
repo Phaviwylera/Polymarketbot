@@ -57,7 +57,7 @@ def snapshot(engine,audit_compact,tee,started_at,now=None):
             'host':os.getenv('POLY_HOST_LABEL','unknown'),'revision':_revision(),'hostStats':host_stats(),
             'portfolio':{k:pf.get(k) for k in ('accountEquity','accountPnl','equity','realizedPnl','trades','lifetimeRealizedPnl','lifetimeTrades',
                                                'epochPnl','maxDrawdownUsd','riskLocked','guard','pausedLanes','revision')},
-            'lanes':lanes,'storage':storage,'bullpen':_bullpen_state(),'threshold':_threshold_state(),'tape':_tape_state(),'skillVsLuck':_skill_state(engine),'audit':audit_compact,'cpuProfile':(tee.cpu if tee else None),
+            'lanes':lanes,'storage':storage,'bullpen':_bullpen_state(),'threshold':_threshold_state(),'tape':_tape_state(),'study':_study_state(),'skillVsLuck':_skill_state(engine),'audit':audit_compact,'cpuProfile':(tee.cpu if tee else None),
             'recentLog':list(tee.lines)[-60:] if tee else []}
 
 def _bullpen_state():
@@ -68,6 +68,12 @@ def _bullpen_state():
 def _skill_state(engine):
     try:return {k:v for k,v in engine.edge.intel.skill_vs_luck().items() if k!='per'}
     except Exception:return None
+
+def _study_state():
+    try:
+        import poly_tape,poly_history;t=poly_tape.CURRENT;h=poly_history.CURRENT
+        return {'live':t.study.compact() if t and t.study else None,'history':h.study.compact() if h else None,'backfill':h.snapshot() if h else None}
+    except Exception as exc:return {'error':type(exc).__name__}
 
 def _tape_state():
     try:

@@ -938,7 +938,7 @@ async def start_threshold_shadow():
 async def poly_threshold_report():
     return _threshold.report() if _threshold else {'enabled':False}
 
-_tape=None
+_tape=None;_history=None
 @app.on_event('startup')
 async def start_trade_tape():
     """Score every Polymarket trade print with the model, labelled at resolution (POLY_TAPE=0 disables)."""
@@ -950,6 +950,10 @@ async def start_trade_tape():
         import poly_s3backup;s3=poly_s3backup.S3(os.getenv('POLY_BACKUP_S3_BUCKET'))
     _tape=poly_tape.Tape(s3=s3,learner=poly_server_engine.edge.learner)
     import poly_study;_tape.study=poly_study.Study();poly_server_engine.edge.study=_tape.study
+    global _history
+    if os.getenv('POLY_HISTORY','1')!='0':   # weeks of past rounds from Polymarket, studied separately from live
+        import poly_history;_history=poly_history.History(poly_study.Study('history'),s3=s3)
+        asyncio.create_task(_history.loop(poly_server_engine));print('POLY_HISTORY_ON',flush=True)
     for lane in poly_server_engine.engines.values():lane.tape=_tape
     edge=poly_server_engine.edge
     if not hasattr(edge,'settle_listeners'):edge.settle_listeners=[]
@@ -961,9 +965,14 @@ async def poly_tape_report():
     return _tape.report() if _tape else {'enabled':False}
 
 @app.get("/api/poly/study")
-async def poly_study_snapshot():
+async def poly_study_snapshot(source:str='live'):
+    if source=='history':
+        if not _history:return {'enabled':False}
+        snap=_history.study.snapshot(None,None);snap['history']=_history.snapshot();return snap
     if not _tape or _tape.study is None:return {'enabled':False}
-    return _tape.study.snapshot(_tape,_tape.learner)
+    snap=_tape.study.snapshot(_tape,_tape.learner)
+    if _history:snap['history']=_history.snapshot()
+    return snap
 
 @app.get('/study')
 async def study_page():return FileResponse(ROOT/'poly-study.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})

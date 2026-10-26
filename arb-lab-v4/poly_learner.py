@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 
 LANES=('BTC','ETH','BTC15','ETH15')
-NAMES=('bias','logitPrice','modelMinusPrice','timeLeft','timeLeftXlogitPrice','disagreeXtimeLeft','logSize','aggressorBuy','spotAgree','spotAgreeXlate')+tuple('lane_'+l for l in LANES)
+NAMES=('bias','logitPrice','modelMinusPrice','timeLeft','timeLeftXlogitPrice','disagreeXtimeLeft','logSize','aggressorBuy','spotAgree','spotAgreeXlate','hourSin','hourCos','hourSinXspot','hourCosXspot')+tuple('lane_'+l for l in LANES)
 EPS=1e-4
 
 def logit(p):p=min(1-EPS,max(EPS,float(p)));return math.log(p/(1-p))
@@ -32,7 +32,9 @@ def features(row):
     end=row.get('roundEnd');t=float(row.get('t') or 0)
     left=min(1.,max(0.,(float(end)-t)/interval)) if end else .5
     ag=row.get('agreeBps');ag=max(-3.,min(3.,float(ag)/20.)) if ag is not None else 0.   # spot vs open, signed toward this token
-    x=[1.,lp,d,left,left*lp,d*left,math.log1p(max(0.,float(row.get('size') or 0)))/5,1. if str(row.get('aggressor')).upper()=='BUY' else 0.,ag,ag*(1-left)]
+    hr=(t%86400)/3600. if t else 0.;hs,hc=math.sin(2*math.pi*hr/24),math.cos(2*math.pi*hr/24)   # time of day (UTC)
+    x=[1.,lp,d,left,left*lp,d*left,math.log1p(max(0.,float(row.get('size') or 0)))/5,1. if str(row.get('aggressor')).upper()=='BUY' else 0.,ag,ag*(1-left),
+       hs,hc,hs*ag,hc*ag]
     x+=[1. if row.get('lane')==l else 0. for l in LANES]
     return x
 
@@ -83,7 +85,11 @@ class Learner:
         return out
     def export(self):return {'w':self.w,'g2':self.g2,'rounds':self.rounds,'prints':self.prints,'score':self.score,'recent':self.recent[-500:],'names':list(NAMES)}
     def restore(self,s):
-        if not isinstance(s,dict) or s.get('names')!=list(NAMES):return False
-        self.w=[float(v) for v in s['w']];self.g2=[float(v) for v in s['g2']];self.rounds=int(s.get('rounds',0));self.prints=int(s.get('prints',0))
+        if not isinstance(s,dict) or not s.get('names'):return False
+        # map saved weights by feature name, so adding features never throws away what was learned
+        old={n:(float(w),float(g)) for n,w,g in zip(s['names'],s['w'],s['g2'])}
+        if 'logitPrice' not in old:return False
+        self.w=[old[n][0] if n in old else (1. if n=='logitPrice' else 0.) for n in NAMES];self.g2=[old[n][1] if n in old else 1e-8 for n in NAMES]
+        self.migratedFeatures=[n for n in NAMES if n not in old];self.rounds=int(s.get('rounds',0));self.prints=int(s.get('prints',0))
         self.score.update(s.get('score') or {});self.recent=[tuple(r) for r in s.get('recent') or []]
         return True

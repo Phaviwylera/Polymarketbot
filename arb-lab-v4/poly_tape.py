@@ -107,6 +107,10 @@ class Tape:
         if spot and opn and ctx.get('openTrusted',True):
             bps=(float(spot)/float(opn)-1)*1e4;row['spot']=float(spot);row['open']=float(opn);row['spotVsOpenBps']=round(bps,2)
             row['agreeBps']=round(bps if pr['side']=='up' else -bps,2)   # >0: spot is already on this token's side
+        bbo=ctx.get('bbo') or {}
+        if bbo:   # the book at this print: what we could actually have paid
+            mine=bbo.get(pr['side']) or {};other=bbo.get('down' if pr['side']=='up' else 'up') or {}
+            row['bid']=mine.get('bid');row['ask']=mine.get('ask');row['otherAsk']=other.get('ask')
         # learner: market-anchored probability using only information available at this print
         try:
             pl=self.learner.predict({**row,'pToken':row['pToken'] if fresh else None})
@@ -125,8 +129,11 @@ class Tape:
                 o=1-r['price'];c=o+fee(o);r['returnPerDollar']=round(((0. if r['won'] else 1.)-c)/c,5)
             else:r['returnPerDollar']=None
             la=r.get('learnedAction')
-            if la=='BUY':c=r['price']+fee(r['price']);r['learnedReturnPerDollar']=round(((1. if r['won'] else 0.)-c)/c,5)
-            elif la=='SELL':o=1-r['price'];c=o+fee(o);r['learnedReturnPerDollar']=round(((0. if r['won'] else 1.)-c)/c,5)
+            # scored at the price WE could have paid: this token's ask (BUY) or the other token's ask (SELL), else the print
+            if la=='BUY':
+                q=float(r['ask']) if r.get('ask') else r['price'];c=q+fee(q);r['learnedReturnPerDollar']=round(((1. if r['won'] else 0.)-c)/c,5)
+            elif la=='SELL':
+                o=float(r['otherAsk']) if r.get('otherAsk') else 1-r['price'];c=o+fee(o);r['learnedReturnPerDollar']=round(((0. if r['won'] else 1.)-c)/c,5)
             else:r['learnedReturnPerDollar']=None
             self.agg.add(r);self.lanes[r['lane']].add(r)
             if r['pToken'] is not None:self.with_model+=1;self.lane_model[r['lane']]+=1
