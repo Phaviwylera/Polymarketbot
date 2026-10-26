@@ -24,7 +24,7 @@ import gzip,json,math,os,time
 from collections import defaultdict,deque
 
 FEE_RATE=0.07;MIN_ROUNDS=20
-ESTIMATOR='first-touch'   # saved studies with another estimator are not reloaded (they are rebuilt from saved rows)
+ESTIMATOR='first-touch+hyp'   # saved studies with another estimator are not reloaded (they are rebuilt from saved rows)
 # 180 cells are tested at once, so 2 SE would let several lucky cells through; 3 SE (~0.13% one-sided each)
 # keeps the expected number of false 'winning' cells well below one.
 Z=3.0
@@ -32,6 +32,35 @@ LEFT_EDGES=(0.,.1,.2,.4,.6,.8,1.0001)
 LEFT_NAMES=('last 10%','10-20%','20-40%','40-60%','60-80%','first 20%')
 PRICE_EDGES=tuple(i/10 for i in range(11))
 def fee(p):return FEE_RATE*p*(1-p)
+
+# ---- pre-registered hypotheses and the ledger of rejected ideas (REA-style evidence ledger) ------------------
+# A hypothesis is FIXED here before its forward test starts; it is judged only on rounds that end after
+# registeredAt. Costs (net return = gross - fee - slippage - impact): taker fee, plus a 1c slippage/impact
+# stress on the entry price (the live ask is used when it was recorded).
+REGISTERED_AT=1793030305
+HYPOTHESES=[{'id':'H1','key':[5,4,'against'],
+  'name':'early overreaction: first 20% of the round, token at 40-50c, spot moving against it -> buy that token',
+  'origin':'found in history v3 (21 days, 16,435 rounds): 5,220 rounds, +4.8c per $1 after fee, 3-SE lower bound +0.5c (1 of ~180 cells tested)',
+  'rule':'one trade per round: the first taker BUY print in the cell; entry = ask (live) or print price, +1c stress; taker fee',
+  'pass':'forward rounds only: >= 300 trades and stressed mean - 1.645 SE > 0. Otherwise: not confirmed.',
+  'registeredAt':REGISTERED_AT}]
+LEDGER=[
+  {'id':'R1','idea':'momentum v17.9 (live paper trading)','verdict':'rejected','evidence':'fees ~103-107% of gross; 54 live-rule trades, 31.5% wins, -$7.99'},
+  {'id':'R2','idea':'favourites underpriced (60-90c win 7-12 points more than priced)','verdict':'rejected: measurement artifact','evidence':'all-prints-per-round average is biased; a fair simulated market showed the same +6 points; first-touch on 16,435 rounds: every decile within +/-0.9 points'},
+  {'id':'R3','idea':'follow spot direction (buy the side spot favours)','verdict':'rejected: look-ahead','evidence':'+22c/$ came from using the minute close up to 60 s after the trade; without it: +1.9c, lower bound -7.4c'},
+  {'id':'R4','idea':'trade only in the best hours of the day','verdict':'rejected','evidence':'21 days: all 24 UTC hours negative after fees (-0.2 to -7.8c/$); the live 3 AM IST window is 32 rounds and -2.4c in history'},
+  {'id':'R5','idea':'learner buy/sell signals','verdict':'rejected','evidence':'841 rounds: Brier equal to price (0.13264 vs 0.13273); buys -1.0c/$, sells -6.2c/$ at the real ask'},
+  {'id':'R6','idea':'pattern rule (best cells, learned prequentially)','verdict':'not proven','evidence':'915 trades on history: +1.4c/$, lower bound -3.9c'},
+]
+def _week(t):
+    return time.strftime('%G-W%V',time.gmtime(float(t))) if t else '?'
+def _sum(rows,z=1.645):
+    n=len(rows)
+    if not n:return {'trades':0}
+    a=[x['atPrint'] for x in rows];b=[x['stressed'] for x in rows];m=sum(b)/n
+    sd=math.sqrt(sum((x-m)**2 for x in b)/(n-1)) if n>1 else None
+    return {'trades':n,'winPct':round(100*sum(x['won'] for x in rows)/n,1),'avgAtPrint':round(sum(a)/n,4),'avgStressed':round(m,4),
+            'lower95':round(m-z*sd/math.sqrt(n),4) if sd else None,'lower3se':round(m-3*sd/math.sqrt(n),4) if sd else None}
 
 def left_bucket(f):
     if f is None:return None
@@ -65,6 +94,7 @@ class Study:
     def __init__(self,name='live'):
         self.name=name;self.hours=defaultdict(Cell);self.weekdays=defaultdict(Cell);self.calib=defaultdict(Cell);self.reversal=defaultdict(lambda:[0,0])
         self.rounds=deque(maxlen=400);self.grid=defaultdict(Cell);self.rule=deque(maxlen=2000);self.wallet_rounds=deque(maxlen=200)
+        self.hyp={h['id']:deque(maxlen=30000) for h in HYPOTHESES}
         self.learn_curve=deque(maxlen=600);self.totals={'rounds':0,'prints':0,'buys':0,'winnerUp':0,'winnerDown':0};self.started=time.time()
     @staticmethod
     def key(r):return (left_bucket(r.get('leftFrac')),price_bucket(r['price']),agree_bucket(r.get('agreeBps')))
@@ -83,6 +113,13 @@ class Study:
             ret=buy_return(float(pick['price']),pick['won'])
             self.rule.append({'slug':slug,'lane':lane,'end':end,'token':pick['token'],'price':pick['price'],'secondsLeft':pick.get('secondsLeft'),
                               'agreeBps':pick.get('agreeBps'),'won':pick['won'],'returnPerDollar':round(ret,4),'cell':self.cell_name(self.key(pick))})
+        # 1b) pre-registered hypotheses: fixed rule, one trade per round, costs stressed
+        for h in HYPOTHESES:
+            hk=tuple(h['key']);hp=next((r for r in buys if self.key(r)==hk),None)
+            if hp:
+                q=float(hp['ask']) if hp.get('ask') else float(hp['price']);q=min(.99,q+.01)
+                self.hyp[h['id']].append({'end':end,'slug':slug,'lane':lane,'token':hp['token'],'price':hp['price'],'won':bool(hp['won']),
+                    'atPrint':round(buy_return(float(hp['price']),hp['won']),4),'stressed':round(buy_return(q,hp['won']),4)})
         # 2) learn: first-touch return per cell (one value per round)
         first={}
         for r in buys:first.setdefault(self.key(r),r)
@@ -205,6 +242,16 @@ class Study:
         sd=math.sqrt(sum((x-m)**2 for x in rets)/(n-1)) if n>1 else None
         return {'trades':n,'winPct':round(100*sum(x['won'] for x in r)/n,1),'avgReturnPerDollar':round(m,4),
                 'lowerBound':round(m-2*sd/math.sqrt(n),4) if sd else None,'totalPer1DollarTrades':round(sum(rets),3),'recent':r[-10:]}
+    def hypotheses(self):
+        out=[]
+        for h in HYPOTHESES:
+            rows=list(self.hyp.get(h['id']) or []);fwd=[x for x in rows if x['end'] and float(x['end'])>=h['registeredAt']]
+            weeks={}
+            for x in rows:weeks.setdefault(_week(x['end']),[]).append(x)
+            f=_sum(fwd);verdict=('collecting' if f['trades']<300 else 'CONFIRMED' if (f.get('lower95') or -1)>0 else 'not confirmed')
+            out.append({**{k:h[k] for k in ('id','name','origin','rule','pass','registeredAt')},'forward':f,'all':_sum(rows),
+                        'byWeek':[{'week':w,**_sum(v)} for w,v in sorted(weeks.items())],'recent':fwd[-12:][::-1],'verdict':verdict})
+        return out
     def snapshot(self,tape=None,learner=None):
         rs=list(self.rounds)
         dec=[x['decidedSecondsLeft'] for x in rs if x.get('decidedSecondsLeft') is not None]
@@ -218,7 +265,7 @@ class Study:
              'patterns':self.patterns(),'rule':self.rule_summary(),'rounds':rs[-24:][::-1],'wallets':list(self.wallet_rounds)[-12:][::-1],
              'learnCurve':list(self.learn_curve)[-300:],
              'timeOfDay':self.time_of_day(),'weekdays':self.weekday_table(),'mistakes':self.mistakes(),'reversals':self.reversals(),
-             'bestWindows':self.best_windows(),'name':self.name}
+             'bestWindows':self.best_windows(),'name':self.name,'hypotheses':self.hypotheses(),'ledger':LEDGER}
         if tape is not None:
             out['live']=[{k:r.get(k) for k in ('t','lane','token','price','size','aggressor','pToken','pLearned','secondsLeft','leftFrac','agreeBps','spotVsOpenBps','action','learnedAction')} for r in list(tape.live)[-80:]][::-1]
             out['cloud']=[{'l':r.get('leftFrac'),'p':r['price'],'a':r.get('agreeBps'),'w':r.get('won'),'s':r.get('size'),'t':r.get('t'),'tok':r.get('token')} for r in list(tape.recent)[-400:]]
@@ -231,13 +278,14 @@ class Study:
                 'qualifyingPatterns':[p['cell'] for p in pats if p['qualifies']],'topPatterns':[[p['cell'],p['rounds'],p['avgReturnPerDollar'],p['lowerBound']] for p in pats[:5]],
                 'bestWindows':self.best_windows(),'mistakes':[[m['price'],m['rounds'],m['actualMinusPrice'],m['lower'],m['upper']] for m in self.mistakes()],
                 'reversals':self.reversals(),
+                'hypotheses':[{'id':h['id'],'verdict':h['verdict'],'forward':h['forward'],'all':h['all'],'byWeek':h['byWeek']} for h in self.hypotheses()],
                 'hours':[[h['utcHour'],(h['buysWithSpot'] or {}).get('rounds'),(h['buysWithSpot'] or {}).get('mean'),(h['buysWithSpot'] or {}).get('lower')] for h in self.time_of_day() if h['buysWithSpot']]}
     # ---- persistence ---------------------------------------------------------------------------------
     def save(self,path):
         st={'hours':{json.dumps(list(k)):c.export() for k,c in self.hours.items()},'weekdays':{json.dumps(list(k)):c.export() for k,c in self.weekdays.items()},
             'calib':{json.dumps(list(k)):c.export() for k,c in self.calib.items()},'reversal':dict(self.reversal),
             'rounds':list(self.rounds),'grid':{json.dumps(list(k)):c.export() for k,c in self.grid.items()},'rule':list(self.rule),
-            'wallets':list(self.wallet_rounds),'curve':list(self.learn_curve),'totals':self.totals,'started':self.started,'estimator':ESTIMATOR}
+            'wallets':list(self.wallet_rounds),'curve':list(self.learn_curve),'totals':self.totals,'started':self.started,'estimator':ESTIMATOR,'hyp':{k:list(v) for k,v in self.hyp.items()}}
         tmp=path+'.tmp'
         with gzip.open(tmp,'wt') as f:json.dump(st,f,separators=(',',':'),default=str)
         os.replace(tmp,path)
@@ -250,6 +298,8 @@ class Study:
         for name in ('hours','weekdays','calib'):
             for k,a in (st.get(name) or {}).items():getattr(self,name)[tuple(json.loads(k))]=Cell.load(a)
         for k,v in (st.get('reversal') or {}).items():self.reversal[k]=list(v)
+        for k,v in (st.get('hyp') or {}).items():
+            if k in self.hyp:self.hyp[k].extend(v)
         for k,a in (st.get('grid') or {}).items():
             kk=json.loads(k);self.grid[(kk[0],kk[1],kk[2])]=Cell.load(a)
         return True

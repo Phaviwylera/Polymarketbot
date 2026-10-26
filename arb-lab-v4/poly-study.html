@@ -71,7 +71,10 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
  <section class="p c8"><div class="ph"><span>◷ <b>Time of day</b> · when do buys with spot already on their side pay? (IST)</span><span id="todBadge">—</span></div><div class="pb"><canvas id="tod" style="width:100%;height:190px;display:block"></canvas>
   <div class="note" id="todNote">Bars: average return per $1 of taker buys made while spot was already on the token's side, by hour. Line: how wrong market prices were that hour (Brier). A window counts only with ≥ 20 rounds and a lower bound above 0.</div></div></section>
  <section class="p c4"><div class="ph"><span>⌖ <b>Market mistakes</b> · does price match reality?</span><span id="misBadge">—</span></div><div class="pb scroll" style="max-height:250px"><table id="mis"></table><div class="note" id="rev"></div></div></section>
- <section class="p c12" id="histPanel" style="display:none"><div class="ph"><span>⏮ <b>History backfill</b> · past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
+ <section class="p c12"><div class="ph"><span>⚖ <b>Pre-registered test</b> · fixed rule, judged only on rounds after it was registered</span><span id="hypBadge">—</span></div><div class="pb"><div id="hyp"></div>
+  <div class="scroll" style="max-height:200px"><table id="hypW"></table></div>
+  <details style="margin-top:10px"><summary class="dim" style="cursor:pointer">Evidence ledger · ideas tested and rejected</summary><div class="scroll" style="max-height:260px"><table id="ledger"></table></div></details></div></section>
+<section class="p c12" id="histPanel" style="display:none"><div class="ph"><span>⏮ <b>History backfill</b> · past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
  <section class="p c12 tor"><div class="ph"><span>◉ <b>Market torus</b> · every trade on the ring of the round</span><span>ring: time through the round · tube: price · drag to rotate</span></div>
   <div class="tbody" id="tbody"><canvas id="threads"></canvas>
    <div class="col" id="inputs"><h5>LIVE INPUTS · LATEST TRADE</h5></div>
@@ -324,13 +327,28 @@ function hist(s){
  $('histK').innerHTML=[['Past rounds studied',H.roundsDone,`${H.queue||0} still to fetch · ${H.days} days back`],['Past trades',H.tradesSeen,'every taker trade, with wallet'],
   ['Oldest round',day(H.oldestRound),'UTC'],['Newest round',day(H.newestRound),'UTC'],['Errors',H.errors||0,H.lastError||'none']].map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v??'—'}</b><em>${e}</em></div>`).join('');
 }
+function hyp(s){
+ const H=(s.hypotheses||[])[0];if(!H){$('hyp').innerHTML='<div class="dim">no hypothesis registered</div>';return;}
+ const f=H.forward||{},a=H.all||{},pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—';
+ $('hypBadge').textContent=H.id+' · '+H.verdict.toUpperCase();
+ $('hypBadge').className=H.verdict==='CONFIRMED'?'pos':H.verdict==='not confirmed'?'neg':'dim';
+ $('hyp').innerHTML=`<div style="margin-bottom:8px"><b>${H.name}</b></div>
+  <div class="kpis">${[['Forward trades',f.trades||0,`needs ≥ 300 · registered ${new Date(H.registeredAt*1000).toISOString().slice(0,16).replace('T',' ')} UTC`],
+   ['Forward win rate',ok(f.winPct)?f.winPct+'%':'—','one trade per round'],['Forward return / $',pc(f.avgStressed),'after fee + 1¢ slippage stress'],
+   ['Forward bad case',pc(f.lower95),'95% one-sided lower bound — must be > 0'],['All rounds (incl. discovery)',a.trades||0,`${pc(a.avgAtPrint)} at print · ${pc(a.avgStressed)} stressed`]]
+   .map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('')}</div>
+  <div class="note">${H.origin}. Rule: ${H.rule}. Pass: ${H.pass}</div>`;
+ $('hypW').innerHTML='<tr><th>week (UTC)</th><th class="r">trades</th><th class="r">win %</th><th class="r">at print</th><th class="r">stressed</th><th class="r">bad case</th></tr>'+
+  (H.byWeek||[]).map(w=>`<tr><td>${w.week}</td><td class="r">${w.trades}</td><td class="r">${w.winPct??'—'}</td><td class="r ${cls(w.avgAtPrint)}">${pc(w.avgAtPrint)}</td><td class="r ${cls(w.avgStressed)}">${pc(w.avgStressed)}</td><td class="r ${cls(w.lower95)}">${pc(w.lower95)}</td></tr>`).join('');
+ $('ledger').innerHTML='<tr><th>id</th><th>idea</th><th>verdict</th><th>evidence</th></tr>'+(s.ledger||[]).map(l=>`<tr><td>${l.id}</td><td style="white-space:normal">${l.idea}</td><td class="${l.verdict.startsWith('rejected')?'neg':'dim'}" style="white-space:normal">${l.verdict}</td><td style="white-space:normal">${l.evidence}</td></tr>`).join('');
+}
 // ---------- poll ----------
 async function poll(){
  try{const s=await (await fetch('/api/poly/study'+(SRC==='history'?'?source=history':''),{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
   const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p:not(.tor)').forEach(bump);curve(s);}
   if(!last)curve(s);
   torus(s);
-  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
+  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
  }catch(e){$('age').textContent='reconnecting…';}
 }
 setSrcLabel();initTorus();poll();setInterval(poll,3000);

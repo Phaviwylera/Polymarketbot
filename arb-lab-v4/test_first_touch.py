@@ -41,3 +41,22 @@ class FirstTouchTests(unittest.TestCase):
         h=ph.History(st.Study('history'),root=d,days=1);h.done={r['slug'] for r in rows}
         self.assertEqual(asyncio.run(h.rebuild()),3);self.assertEqual(h.study.totals['rounds'],3)
         self.assertEqual(asyncio.run(h.rebuild()),0)                    # not twice
+
+class HypothesisTests(unittest.TestCase):
+    def test_h1_records_one_stressed_trade_per_round_and_judges_forward_only(self):
+        s=st.Study('t');H=st.HYPOTHESES[0];R=H['registeredAt']
+        def rows(slug,end,won,price=.45,agree=-10,ask=None):
+            r={'t':end-280,'lane':'BTC','slug':slug,'roundEnd':end,'token':'UP','price':price,'size':5,'aggressor':'BUY',
+               'leftFrac':280/300,'secondsLeft':280,'agreeBps':agree,'won':won}
+            if ask:r['ask']=ask
+            return [r,dict(r,t=end-275,price=.47)]                       # a second print in the same cell: ignored
+        s.on_round(rows('old',R-600,True),'up')                          # discovery period: counted in 'all' only
+        s.on_round(rows('new',R+600,True,ask=.46),'up');s.on_round(rows('new2',R+900,False),'down')
+        s.on_round(rows('other',R+1200,True,agree=10),'up')             # spot WITH: not the hypothesis
+        h=s.hypotheses()[0];self.assertEqual(h['all']['trades'],3);self.assertEqual(h['forward']['trades'],2)
+        x=[t for t in s.hyp['H1'] if t['slug']=='new'][0]
+        self.assertAlmostEqual(x['stressed'],st.buy_return(.47,True),4)  # ask .46 + 1c stress
+        self.assertAlmostEqual(x['atPrint'],st.buy_return(.45,True),4)
+        self.assertEqual(h['verdict'],'collecting')
+        p=os.path.join(tempfile.mkdtemp(),'s.json.gz');s.save(p);s2=st.Study('t');self.assertTrue(s2.load(p));self.assertEqual(len(s2.hyp['H1']),3)
+        self.assertIn('hypotheses',s.compact());self.assertTrue(st.LEDGER)
