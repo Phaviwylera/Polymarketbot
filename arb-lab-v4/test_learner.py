@@ -48,7 +48,7 @@ class TapeLearnerTests(unittest.TestCase):
         rows=[x for k in range(30) for x in rnd_rows(rng,f's{k}',1e9+k*300,True)]
         for x in rows:x['modelAgeSec']=1.
         class S3:
-            async def list_get(self,prefix,days=7):return rows
+            async def list_get(self,prefix,days=7,exclude=None):return [r for r in rows if not (exclude and str(r.get("slug","")).startswith("history"))]
         tape.s3=S3();self.assertEqual(asyncio.run(tape.warm_start()),30);self.assertEqual(tape.learner.rounds,30)
         self.assertEqual(asyncio.run(tape.warm_start()),0)            # already has state: no double learning
     def test_edgelab_persists_learner(self):
