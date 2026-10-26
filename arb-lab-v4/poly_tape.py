@@ -78,7 +78,7 @@ class Agg:
 class Tape:
     def __init__(self,root=None,s3=None,now=time.time,learner=None):
         import poly_learner
-        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'};self.study_rebuilt=None
+        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'};self.study_rebuilt=None;self.jev=None
         self.root=root or os.path.join(os.getenv('POLY_DATA_DIR','/tmp'),'tape');self.s3=s3;self.now=now
         self.pending=defaultdict(list)          # slug -> rows awaiting the round's outcome
         self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.live=deque(maxlen=80);self.study=None;self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
@@ -118,6 +118,9 @@ class Tape:
             row.update(pLearned=round(pl,5),learnedAction=la,learnedEdge=le)
         except Exception:pass
         self.pending[slug].append(row);self.seen+=1;self.live.append(row)
+        if self.jev is not None:
+            try:self.jev.on_print(row)
+            except Exception as exc:self.last_error=f'jev: {type(exc).__name__}'
         return row
     def settle(self,slug,winner):
         rows=self.pending.pop(slug,[])

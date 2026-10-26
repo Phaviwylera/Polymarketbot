@@ -74,6 +74,7 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
  <section class="p c12"><div class="ph"><span>⚖ <b>Pre-registered test</b> · fixed rule, judged only on rounds after it was registered</span><span id="hypBadge">—</span></div><div class="pb"><div id="hyp"></div>
   <div class="scroll" style="max-height:200px"><table id="hypW"></table></div>
   <details style="margin-top:10px"><summary class="dim" style="cursor:pointer">Evidence ledger · ideas tested and rejected</summary><div class="scroll" style="max-height:260px"><table id="ledger"></table></div></details></div></section>
+<section class="p c12"><div class="ph"><span>◇ <b>Jev forecaster</b> · record-only · does it beat the market price?</span><span id="jevBadge">—</span></div><div class="pb"><div class="kpis" id="jevK"></div><div class="scroll" style="max-height:200px"><table id="jevT"></table></div><div class="note" id="jevN"></div></div></section>
 <section class="p c12" id="histPanel" style="display:none"><div class="ph"><span>⏮ <b>History backfill</b> · past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
  <section class="p c12 tor"><div class="ph"><span>◉ <b>Market torus</b> · every trade on the ring of the round</span><span>ring: time through the round · tube: price · drag to rotate</span></div>
   <div class="tbody" id="tbody"><canvas id="threads"></canvas>
@@ -342,13 +343,27 @@ function hyp(s){
   (H.byWeek||[]).map(w=>`<tr><td>${w.week}</td><td class="r">${w.trades}</td><td class="r">${w.winPct??'—'}</td><td class="r ${cls(w.avgAtPrint)}">${pc(w.avgAtPrint)}</td><td class="r ${cls(w.avgStressed)}">${pc(w.avgStressed)}</td><td class="r ${cls(w.lower95)}">${pc(w.lower95)}</td></tr>`).join('');
  $('ledger').innerHTML='<tr><th>id</th><th>idea</th><th>verdict</th><th>evidence</th></tr>'+(s.ledger||[]).map(l=>`<tr><td>${l.id}</td><td style="white-space:normal">${l.idea}</td><td class="${l.verdict.startsWith('rejected')?'neg':'dim'}" style="white-space:normal">${l.verdict}</td><td style="white-space:normal">${l.evidence}</td></tr>`).join('');
 }
+let jevAt=0;
+async function jev(){
+ if(Date.now()-jevAt<15000)return;jevAt=Date.now();
+ try{const j=await (await fetch('/api/poly/jev',{cache:'no-store'})).json();
+  if(!j.enabled){$('jevBadge').textContent='OFF';$('jevK').innerHTML='';$('jevT').innerHTML='';$('jevN').textContent='Off: no OpenRouter key on the server yet. Add OPENROUTER_API_KEY to the server settings file and restart.';return;}
+  const H=j.H2||{},a=j.all||{},b=v=>ok(v)?v.toFixed(4):'—',pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—';
+  $('jevBadge').textContent='H2 · '+String(H.verdict||'').toUpperCase();$('jevBadge').className=H.verdict==='CONFIRMED'?'pos':H.verdict==='not confirmed'?'neg':'dim';
+  $('jevK').innerHTML=[['Answers scored',a.n||0,`${j.calls||0} calls · $${(j.costUsd||0).toFixed(4)} spent`],['Brier · Jev',b(a.brierJev),'lower is better'],['Brier · market price',b(a.brierPrice),'the bar to beat'],
+   ['Brier · our learner',b(a.brierLearned),'same inputs, logistic'],['H2 trades',H.trades||0,`needs ≥ 300 · ${pc(H.avgReturnPerDollar)} / $ · bad case ${pc(H.lower95)}`]].map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('');
+  const C=j.byCheckpoint||{};
+  $('jevT').innerHTML='<tr><th>checkpoint</th><th class="r">answers</th><th class="r">Jev</th><th class="r">price</th><th class="r">learner</th></tr>'+['early','mid','late'].map(k=>{const c=C[k]||{};const w=ok(c.brierJev)&&ok(c.brierPrice)?(c.brierJev<c.brierPrice?'pos':'neg'):'';return `<tr><td>${k}</td><td class="r">${c.n||0}</td><td class="r ${w}">${b(c.brierJev)}</td><td class="r">${b(c.brierPrice)}</td><td class="r">${b(c.brierLearned)}</td></tr>`}).join('');
+  $('jevN').textContent=`Asked once at 80%, 50% and 20% of each round left: will UP win? Rule H2: ${H.rule}. Pass: ${H.pass}.`+(j.lastError?` Last error: ${j.lastError}`:'');
+ }catch(e){}
+}
 // ---------- poll ----------
 async function poll(){
  try{const s=await (await fetch('/api/poly/study'+(SRC==='history'?'?source=history':''),{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
   const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p:not(.tor)').forEach(bump);curve(s);}
   if(!last)curve(s);
   torus(s);
-  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
+  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);jev();last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
  }catch(e){$('age').textContent='reconnecting…';}
 }
 setSrcLabel();initTorus();poll();setInterval(poll,3000);

@@ -959,6 +959,15 @@ async def start_trade_tape():
     if not hasattr(edge,'settle_listeners'):edge.settle_listeners=[]
     edge.settle_listeners.append(_tape.settle)
     asyncio.create_task(_tape.loop());print('POLY_TAPE_ON',flush=True)
+    import poly_jev;jev=poly_jev.Jev()            # record-only; on only when OPENROUTER_API_KEY is set on the server
+    if jev.enabled:
+        _tape.jev=jev;edge.settle_listeners.append(jev.settle);asyncio.create_task(jev.loop());print('POLY_JEV_ON',flush=True)
+    else:poly_jev.CURRENT=jev
+
+@app.get("/api/poly/jev")
+async def poly_jev_report():
+    import poly_jev
+    return poly_jev.CURRENT.report() if poly_jev.CURRENT else {'enabled':False}
 
 @app.get("/api/poly/tape")
 async def poly_tape_report():
