@@ -82,7 +82,13 @@ def _tape_state():
 
 def _threshold_state():
     try:
-        import poly_threshold;t=poly_threshold.CURRENT;return t.compact() if t else None
+        import poly_threshold,time as _t;t=poly_threshold.CURRENT
+        if not t:return None
+        c=t.compact()   # plus the open positions, so a stuck resolution is visible without server access
+        c['openPositions']=[{'slug':p.get('slug'),'side':p.get('side'),'entryPrice':p.get('entryPrice'),
+                             'endAtUtc':_t.strftime('%Y-%m-%d %H:%M',_t.gmtime(float(p['endAt']))) if p.get('endAt') else None}
+                            for p in list(t.open.values())[:20]]
+        return c
     except Exception as exc:return {'error':type(exc).__name__}
 
 def _revision():
