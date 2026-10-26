@@ -35,8 +35,8 @@ class FirstTouchTests(unittest.TestCase):
     def test_history_rebuild_from_saved_day_files(self):
         d=tempfile.mkdtemp();rng=random.Random(5);rows=[]
         for k in range(3):rows+=fair_round(rng,f'btc-updown-5m-{k}',1_792_800_000+300*k,60)[0]
-        os.makedirs(os.path.join(d,'history_v2'))
-        with gzip.open(os.path.join(d,'history_v2','2026-10-05.jsonl.gz'),'wt') as f:
+        os.makedirs(os.path.join(d,'history_v3'))
+        with gzip.open(os.path.join(d,'history_v3','2026-10-05.jsonl.gz'),'wt') as f:
             for r in rows:f.write(json.dumps(r)+'\n')
         h=ph.History(st.Study('history'),root=d,days=1);h.done={r['slug'] for r in rows}
         self.assertEqual(asyncio.run(h.rebuild()),3);self.assertEqual(h.study.totals['rounds'],3)

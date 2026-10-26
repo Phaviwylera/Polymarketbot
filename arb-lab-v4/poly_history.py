@@ -18,7 +18,7 @@ from collections import defaultdict
 GAMMA='https://gamma-api.polymarket.com';DATA='https://data-api.polymarket.com';COINBASE='https://api.exchange.coinbase.com'
 LANES=(('BTC','btc',300,'BTC-USD'),('ETH','eth',300,'ETH-USD'),('BTC15','btc',900,'BTC-USD'),('ETH15','eth',900,'ETH-USD'))
 CURRENT=None
-VERSION='v2'   # v2: no-look-ahead spot; files are versioned so v1 state is never reloaded
+VERSION='v3'   # v2: no-look-ahead spot. v3: clean ordered refetch (v2 S3 day files lost chunks to same-key overwrites)
 
 class History:
     def __init__(self,study,root=None,s3=None,http=None,days=None):
@@ -154,6 +154,9 @@ class History:
                 n+=await asyncio.to_thread(rd)
             except Exception as exc:self.state['errors']+=1;self.state['lastError']=f'rebuild {name}: {type(exc).__name__}'
             self.state['rebuiltRounds']=n
+        # rounds marked done whose rows are missing are fetched again (they then join the study out of time order;
+        # the history snapshot reports how many, so a large number means a clean refetch is the better choice)
+        self.state['refetchAfterRebuild']=len(self.done-seen);self.done=set(seen)
         self.state['rebuiltRounds']=n;await self.flush();return n
     # ---- main loop ----------------------------------------------------------------------------------
     def plan(self,now=None):

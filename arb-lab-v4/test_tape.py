@@ -44,6 +44,10 @@ class TapeTests(unittest.TestCase):
             async def put(self,path,key,sha):put.append(key)
         tape.s3=S3();n=asyncio.run(tape.upload_closed_hours())
         self.assertEqual(n,1);self.assertTrue(put[0].startswith('polybot/tape/'));self.assertEqual([f for _,_,fs in os.walk(d) for f in fs],[])
+        # a late label re-creates the same hour file: the second upload must get a different key (no overwrite)
+        tape.now=lambda:T+6*3600+60
+        tape.on_print('BTC',pr('up',.55,slug='s2'),{'slug':'s2'},SIG);tape.settle('s2','up');asyncio.run(tape.upload_closed_hours())
+        self.assertEqual(len(put),2);self.assertNotEqual(put[0],put[1])
     def test_edgelab_settle_feeds_listeners(self):
         from poly_edge import EdgeLab
         lab=EdgeLab({});got=[];lab.settle_listeners=[lambda s,w:got.append((s,w))]

@@ -222,7 +222,8 @@ class Tape:
                 if hour_t+3600>cutoff:continue
                 import hashlib
                 sha=hashlib.sha256(open(path,'rb').read()).hexdigest()
-                await self.s3.put(path,f'polybot/tape/{day}/{name}',sha);os.remove(path);n+=1
+                # unique key: an hour file re-created by a late label must never overwrite the one already uploaded
+                await self.s3.put(path,f'polybot/tape/{day}/{name[:-len(".jsonl.gz")]}-{int(self.now())}.jsonl.gz',sha);os.remove(path);n+=1
             try:os.rmdir(d)
             except OSError:pass
         self.files_uploaded+=n;return n
