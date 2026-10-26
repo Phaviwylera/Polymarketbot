@@ -105,6 +105,19 @@ class ThresholdTests(unittest.IsolatedAsyncioTestCase):
         ms=await lane.discover('BTC',th.dt.datetime(2026,10,26,12,tzinfo=th.dt.timezone.utc).timestamp())
         self.assertEqual(len(ms),3);self.assertEqual({m['event'] for m in ms},{'bitcoin-above-on-october-27'})
 
+    async def test_resolution_asks_for_closed_markets(self):
+        calls=[]
+        class H(FakeHttp):
+            async def get(self,url,params=None):
+                if url.endswith('/markets'):
+                    calls.append(dict(params))
+                    return Resp([{'closed':True,'outcomePrices':'["0","1"]'}] if params.get('closed')=='true' else [])
+                return await super().get(url,params)
+        lane=th.ThresholdLane(http=H({}));st=Store()
+        lane.open['s']={'slug':'s','asset':'BTC','endAt':NOW,'side':'NO','shares':10.,'costUsd':5.,'entryPrice':.5}
+        await lane.resolve(st,NOW+700)
+        self.assertEqual(calls[0].get('closed'),'true');self.assertEqual(lane.open,{});self.assertTrue(lane.closed[0]['won'])
+
     def test_report_gate(self):
         lane=th.ThresholdLane()
         for i in range(70):

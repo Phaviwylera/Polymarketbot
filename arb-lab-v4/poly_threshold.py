@@ -204,7 +204,9 @@ class ThresholdLane:
         now=time.time() if now is None else now
         for slug,pos in list(self.open.items()):
             if now<pos['endAt']+600:continue
-            try:data=await self.get(GAMMA+'/markets',{'slug':slug})
+            try:   # Gamma leaves closed markets out unless asked; resolved ones are closed (same lookup as the main bot)
+                data=await self.get(GAMMA+'/markets',{'slug':slug,'closed':'true'})
+                if not (isinstance(data,list) and data):data=await self.get(GAMMA+'/markets',{'slug':slug})
             except Exception as exc:self._err('resolve',exc);continue
             m=(data or [None])[0] if isinstance(data,list) else data
             prices=[float(x) for x in (_jl((m or {}).get('outcomePrices')) or [])]

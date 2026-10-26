@@ -262,7 +262,9 @@ class Tape:
                 else:
                     import httpx
                     async with httpx.AsyncClient(timeout=15) as c:
-                        r=await c.get('https://gamma-api.polymarket.com/markets',params={'slug':slug});r.raise_for_status();d=r.json()
+                        r=await c.get('https://gamma-api.polymarket.com/markets',params={'slug':slug,'closed':'true'});r.raise_for_status();d=r.json()
+                        if not (isinstance(d,list) and d):
+                            r=await c.get('https://gamma-api.polymarket.com/markets',params={'slug':slug});r.raise_for_status();d=r.json()
                     m=d[0] if isinstance(d,list) and d else None
                 prices=json.loads(m['outcomePrices']) if m and isinstance(m.get('outcomePrices'),str) else (m or {}).get('outcomePrices')
                 outs=json.loads(m['outcomes']) if m and isinstance(m.get('outcomes'),str) else (m or {}).get('outcomes')
