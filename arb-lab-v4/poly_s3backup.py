@@ -79,8 +79,9 @@ class S3:
                 if k.isdigit():best=max(best or 0,int(k))
             return best
         return await asyncio.to_thread(run)
-    async def list_get(self,prefix,days=7):
-        """Labelled tape rows from the last `days` of hourly files under prefix (warm start of the learner)."""
+    async def list_get(self,prefix,days=7,exclude=None):
+        """Labelled tape rows from the last `days` of hourly files under prefix (warm start of the learner).
+        Keys starting with `exclude` (e.g. the history backfill under polybot/tape/history) are skipped."""
         def run():
             import io
             cut=time.time()-days*86400;rows=[];token=None
@@ -90,11 +91,34 @@ class S3:
                 r=self.c().list_objects_v2(**kw)
                 for o in r.get('Contents',[]):
                     if o['LastModified'].timestamp()<cut:continue
+                    if exclude and o['Key'].startswith(exclude):continue
                     body=self.c().get_object(Bucket=self.bucket,Key=o['Key'])['Body'].read()
                     with gzip.open(io.BytesIO(body),'rt') as f:rows+=[json.loads(l) for l in f if l.strip()]
                 if not r.get('IsTruncated'):break
                 token=r.get('NextContinuationToken')
             return rows
+        return await asyncio.to_thread(run)
+
+    async def keys(self,prefix):
+        """Every key under prefix, sorted by name."""
+        def run():
+            out=[];token=None
+            while True:
+                kw={'Bucket':self.bucket,'Prefix':prefix}
+                if token:kw['ContinuationToken']=token
+                r=self.c().list_objects_v2(**kw);out+=[o['Key'] for o in r.get('Contents',[])]
+                if not r.get('IsTruncated'):break
+                token=r.get('NextContinuationToken')
+            return sorted(out)
+        return await asyncio.to_thread(run)
+    async def get_bytes(self,key):
+        return await asyncio.to_thread(lambda:self.c().get_object(Bucket=self.bucket,Key=key)['Body'].read())
+    async def get_rows(self,key):
+        """Rows of one gzip JSONL object."""
+        def run():
+            import io
+            body=self.c().get_object(Bucket=self.bucket,Key=key)['Body'].read()
+            with gzip.open(io.BytesIO(body),'rt') as f:return [json.loads(l) for l in f if l.strip()]
         return await asyncio.to_thread(run)
 
 async def backup(url,s3,log=print,workdir=None):

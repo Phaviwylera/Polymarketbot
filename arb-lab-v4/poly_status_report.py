@@ -72,7 +72,7 @@ def _skill_state(engine):
 def _study_state():
     try:
         import poly_tape,poly_history;t=poly_tape.CURRENT;h=poly_history.CURRENT
-        return {'live':t.study.compact() if t and t.study else None,'history':h.study.compact() if h else None,'backfill':h.snapshot() if h else None}
+        return {'live':t.study.compact() if t and t.study else None,'history':h.study.compact() if h else None,'backfill':h.snapshot() if h else None,'liveRebuilt':getattr(t,'study_rebuilt',None) if t else None}
     except Exception as exc:return {'error':type(exc).__name__}
 
 def _tape_state():

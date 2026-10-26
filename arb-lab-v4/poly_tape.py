@@ -78,7 +78,7 @@ class Agg:
 class Tape:
     def __init__(self,root=None,s3=None,now=time.time,learner=None):
         import poly_learner
-        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'}
+        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'};self.study_rebuilt=None
         self.root=root or os.path.join(os.getenv('POLY_DATA_DIR','/tmp'),'tape');self.s3=s3;self.now=now
         self.pending=defaultdict(list)          # slug -> rows awaiting the round's outcome
         self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.live=deque(maxlen=80);self.study=None;self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
@@ -169,7 +169,7 @@ class Tape:
         if self.learner.rounds>0:self.warm={'state':'skipped: learner restored with history','rounds':self.learner.rounds};return 0
         rows=[]
         if self.s3 is not None and hasattr(self.s3,'list_get'):
-            try:rows+=await self.s3.list_get('polybot/tape/',days)
+            try:rows+=await self.s3.list_get('polybot/tape/',days,exclude='polybot/tape/history')
             except Exception as exc:self.warm={'state':'s3 error','error':type(exc).__name__}
         rows+=self._local_rows()
         seen=set();uniq=[]
@@ -178,6 +178,21 @@ class Tape:
             if k not in seen:seen.add(k);uniq.append(r)
         n=await asyncio.to_thread(self.replay,uniq)
         self.warm={'state':'done','rounds':n,'prints':len(uniq)};return n
+    async def rebuild_study(self,days=30):
+        """Live study empty (first run, or saved with an older estimator): replay labelled tape files into it.
+        Only the study is rebuilt; the learner keeps its own restored state."""
+        import poly_study
+        if self.study is None or self.study.totals['rounds']:return 0
+        rows=[]
+        if self.s3 is not None and hasattr(self.s3,'list_get'):
+            rows+=await self.s3.list_get('polybot/tape/',days,exclude='polybot/tape/history')
+        rows+=self._local_rows()
+        seen=set();uniq=[]
+        for r in rows:
+            k=(r.get('slug'),r.get('t'),r.get('token'),r.get('price'),r.get('size'))
+            if k not in seen:seen.add(k);uniq.append(r)
+        n=await asyncio.to_thread(poly_study.feed,self.study,uniq)
+        self.study_rebuilt={'state':'done','rounds':n,'prints':len(uniq)};return n
     def expire(self,max_age=3*3600):
         """Rounds whose outcome never arrived are dropped (not labelled) after max_age."""
         now=self.now()
@@ -220,7 +235,7 @@ class Tape:
                 'seenPrints':self.seen,'pendingRounds':len(self.pending),'pendingPrints':sum(len(v) for v in self.pending.values()),
                 'droppedPrints':self.dropped,'filesUploaded':self.files_uploaded,'error':self.last_error,'restoredState':self.restored,
                 'overall':self.agg.summary(self.with_model),'byLane':{k:a.summary(self.lane_model[k]) for k,a in self.lanes.items()},
-                'recentDecisionsBlockBootstrap':blk,'learner':self.learner.summary(),'warmStart':self.warm,
+                'recentDecisionsBlockBootstrap':blk,'learner':self.learner.summary(),'warmStart':self.warm,'studyRebuilt':self.study_rebuilt,
                 'rules':{'z':Z,'edgeBuffer':EDGE_BUFFER,'feeRate':FEE_RATE,'modelMaxAgeSec':MODEL_MAX_AGE_SEC},
                 'note':'prints in one round share one outcome: rounds, not prints, are the independent sample size',
                 'recent':[{k:r.get(k) for k in ('t','lane','token','price','pToken','pLearned','action','learnedAction','edge','won','returnPerDollar')} for r in list(self.recent)[-12:]]}
@@ -291,6 +306,8 @@ class Tape:
         await asyncio.sleep(120)                 # let the saved learner state restore first
         try:await self.warm_start()
         except Exception as exc:self.warm={'state':'error','error':type(exc).__name__}
+        try:await self.rebuild_study()
+        except Exception as exc:self.study_rebuilt={'state':'error','error':type(exc).__name__}
         tick=0
         while True:
             await asyncio.sleep(60);tick+=1

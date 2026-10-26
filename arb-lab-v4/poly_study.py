@@ -8,8 +8,12 @@ For each round:
   * the best entry anyone got on the winner (lowest taker BUY price) and what the market looked like then,
   * the biggest winning taker buys.
 Across rounds, a PATTERN GRID of taker buys: share of the round left x price paid x whether spot was already
-on that token's side ("with" / "flat" / "against"). Each cell keeps per-ROUND average returns after the taker
-fee, so its uncertainty is clustered by round (prints in a round share one outcome).
+on that token's side ("with" / "flat" / "against"). Each cell takes ONE value per round: the return after the taker fee
+of the FIRST taker buy that fell in the cell (a trade a bot could actually have made at that moment), so its
+uncertainty is clustered by round. Market calibration likewise uses the first print per price decile per round.
+Why first-touch: averaging ALL prints of a round within a cell is biased even in a perfectly fair market (a
+simulated fair market showed 60-70c tokens 'winning 6 points more often than priced'), because how long a price
+lingers in a band depends on where it ends. A single first-touch per round is a stopping time, so it is unbiased.
 "HOW IT SHOULD BE EXECUTED" (prequential): before learning from a round, the rule "buy the first print that falls
 in a cell whose round-mean minus 3 SE > 0 over >= MIN_ROUNDS earlier rounds" is applied to that round, one trade
 per round, and its result recorded. This tests whether the learned pattern would have worked on unseen rounds.
@@ -20,6 +24,7 @@ import gzip,json,math,os,time
 from collections import defaultdict,deque
 
 FEE_RATE=0.07;MIN_ROUNDS=20
+ESTIMATOR='first-touch'   # saved studies with another estimator are not reloaded (they are rebuilt from saved rows)
 # 180 cells are tested at once, so 2 SE would let several lucky cells through; 3 SE (~0.13% one-sided each)
 # keeps the expected number of false 'winning' cells well below one.
 Z=3.0
@@ -78,23 +83,27 @@ class Study:
             ret=buy_return(float(pick['price']),pick['won'])
             self.rule.append({'slug':slug,'lane':lane,'end':end,'token':pick['token'],'price':pick['price'],'secondsLeft':pick.get('secondsLeft'),
                               'agreeBps':pick.get('agreeBps'),'won':pick['won'],'returnPerDollar':round(ret,4),'cell':self.cell_name(self.key(pick))})
-        # 2) learn: per-round mean return per cell
-        per=defaultdict(list);wins=defaultdict(int)
-        for r in buys:
-            k=self.key(r);per[k].append(buy_return(float(r['price']),r['won']));wins[k]+=int(r['won'])
-        for k,v in per.items():self.grid[k].add_round(v,wins[k])
+        # 2) learn: first-touch return per cell (one value per round)
+        first={}
+        for r in buys:first.setdefault(self.key(r),r)
+        for k,r in first.items():self.grid[k].add_round([buy_return(float(r['price']),r['won'])],int(r['won']))
         # time of day / weekday (UTC, by the round's end): taker-buy returns overall and with spot already on the token side
         if end:
             tm=time.gmtime(float(end));h=tm.tm_hour;wd=tm.tm_wday
-            allb=[buy_return(float(r['price']),r['won']) for r in buys]
-            withb=[buy_return(float(r['price']),r['won']) for r in buys if agree_bucket(r.get('agreeBps'))=='with']
-            if allb:self.hours[('all',h)].add_round(allb,sum(r['won'] for r in buys));self.weekdays[('all',wd)].add_round(allb,sum(r['won'] for r in buys))
+            fa={};fw={}
+            for r in buys:
+                fa.setdefault(price_bucket(r['price']),r)
+                if agree_bucket(r.get('agreeBps'))=='with':fw.setdefault(price_bucket(r['price']),r)
+            allb=[buy_return(float(r['price']),r['won']) for r in fa.values()]
+            withb=[buy_return(float(r['price']),r['won']) for r in fw.values()]
+            if allb:
+                nw=sum(int(r['won']) for r in fa.values());self.hours[('all',h)].add_round(allb,nw);self.weekdays[('all',wd)].add_round(allb,nw)
             if withb:self.hours[('with',h)].add_round(withb,0)
             # market calibration error this round: Brier of traded prices
             self.hours[('brier',h)].add_round([(float(r['price'])-(1. if r['won'] else 0.))**2 for r in rows],0)
         # market mistakes: by price decile, does the token win more (or less) often than its price says?
-        dec=defaultdict(list)
-        for r in rows:dec[price_bucket(r['price'])].append((1. if r['won'] else 0.)-float(r['price']))
+        dec={}
+        for r in rows:dec.setdefault(price_bucket(r['price']),[(1. if r['won'] else 0.)-float(r['price'])])
         for b,v in dec.items():self.calib[(lane[:3] if not lane.endswith('15') else lane,b)].add_round(v,0);self.calib[('all',b)].add_round(v,0)
         # reversals: the side priced >= 70c with ~20% of the round left - how often does it still lose?
         late=[r for r in rows if r.get('leftFrac') is not None and .15<=r['leftFrac']<=.25]
@@ -228,13 +237,14 @@ class Study:
         st={'hours':{json.dumps(list(k)):c.export() for k,c in self.hours.items()},'weekdays':{json.dumps(list(k)):c.export() for k,c in self.weekdays.items()},
             'calib':{json.dumps(list(k)):c.export() for k,c in self.calib.items()},'reversal':dict(self.reversal),
             'rounds':list(self.rounds),'grid':{json.dumps(list(k)):c.export() for k,c in self.grid.items()},'rule':list(self.rule),
-            'wallets':list(self.wallet_rounds),'curve':list(self.learn_curve),'totals':self.totals,'started':self.started}
+            'wallets':list(self.wallet_rounds),'curve':list(self.learn_curve),'totals':self.totals,'started':self.started,'estimator':ESTIMATOR}
         tmp=path+'.tmp'
         with gzip.open(tmp,'wt') as f:json.dump(st,f,separators=(',',':'),default=str)
         os.replace(tmp,path)
     def load(self,path):
         if not os.path.exists(path):return False
         with gzip.open(path,'rt') as f:st=json.load(f)
+        if st.get('estimator')!=ESTIMATOR:self.discarded=st.get('estimator') or 'per-round-mean';return False
         self.rounds.extend(st.get('rounds') or []);self.rule.extend(st.get('rule') or []);self.wallet_rounds.extend(st.get('wallets') or [])
         self.learn_curve.extend(st.get('curve') or []);self.totals.update(st.get('totals') or {});self.started=st.get('started',self.started)
         for name in ('hours','weekdays','calib'):
@@ -243,3 +253,36 @@ class Study:
         for k,a in (st.get('grid') or {}).items():
             kk=json.loads(k);self.grid[(kk[0],kk[1],kk[2])]=Cell.load(a)
         return True
+
+
+def winner_of(rows):
+    r=rows[0];tok=str(r['token']).upper()
+    return tok if r['won'] else ('DOWN' if tok=='UP' else 'UP')
+def feed(study,rows,seen=None):
+    """Rebuild a study from saved labelled rows: grouped by round, oldest round first (keeps the rule prequential)."""
+    seen=set() if seen is None else seen;by=defaultdict(list)
+    for r in rows:
+        if r.get('won') is None or r.get('slug') in seen:continue
+        by[r['slug']].append(r)
+    order=sorted(by,key=lambda s:float(by[s][0].get('roundEnd') or max(float(x['t']) for x in by[s])))
+    n=0
+    for slug in order:
+        if study.on_round(by[slug],winner_of(by[slug]).lower()):n+=1
+        seen.add(slug)
+    return n
+
+def feed_lines(study,lines,seen=None):
+    """Streaming rebuild: JSON lines where each round's rows are contiguous (as the history backfill writes them)."""
+    seen=set() if seen is None else seen;cur=None;buf=[];n=0
+    def done():
+        nonlocal n
+        if buf and cur not in seen:
+            if study.on_round(buf,winner_of(buf).lower()):n+=1
+            seen.add(cur)
+    for line in lines:
+        if not line.strip():continue
+        r=json.loads(line)
+        if r.get('won') is None:continue
+        if r.get('slug')!=cur:done();cur=r.get('slug');buf=[]
+        buf.append(r)
+    done();return n

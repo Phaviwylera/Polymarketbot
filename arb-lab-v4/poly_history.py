@@ -117,17 +117,44 @@ class History:
         if self.s3 is None:return
         d=self.path('history_'+VERSION)
         for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            # unique key per upload: a day file can be re-created by later passes (retried rounds); never overwrite
             if name>=time.strftime('%Y-%m-%d',time.gmtime(time.time()-86400)):continue   # recent days may still grow
             p=os.path.join(d,name)
             try:
                 import hashlib
-                await self.s3.put(p,f'polybot/tape/history-{VERSION}/{name}',hashlib.sha256(open(p,'rb').read()).hexdigest());os.remove(p)
+                await self.s3.put(p,f'polybot/tape/history-{VERSION}/{name[:-len('.jsonl.gz')]}-{int(time.time())}.jsonl.gz',hashlib.sha256(open(p,'rb').read()).hexdigest());os.remove(p)
             except Exception as exc:self.state['lastError']=f'upload: {type(exc).__name__}'
     def load(self):
         try:
             if os.path.exists(self.path(f'history_done_{VERSION}.json')):self.done=set(json.load(open(self.path(f'history_done_{VERSION}.json'))))
             self.study.load(self.path(f'history_study_{VERSION}.json.gz'))
         except Exception as exc:self.state['lastError']=f'load: {type(exc).__name__}'
+    async def rebuild(self):
+        """The study is empty but rounds are marked done (estimator changed): replay the saved rows, one day file
+        at a time (S3 first, then local), oldest day first. No refetching from Polymarket."""
+        import poly_study
+        if self.study.totals['rounds'] or not self.done:return 0
+        src=[]
+        if self.s3 is not None and hasattr(self.s3,'keys'):
+            try:src+=[(k.rsplit('/',1)[-1],'s3',k) for k in await self.s3.keys(f'polybot/tape/history-{VERSION}/')]
+            except Exception as exc:self.state['lastError']=f'rebuild list: {type(exc).__name__}'
+        d=self.path('history_'+VERSION)
+        if os.path.isdir(d):src+=[(n,'local',os.path.join(d,n)) for n in os.listdir(d)]
+        seen=set();n=0;self.state['phase']='rebuilding study from saved rows'
+        for name,kind,where in sorted(src):
+            try:
+                import io
+                if kind=='s3':
+                    body=await self.s3.get_bytes(where)
+                    def rd(b=body):
+                        with gzip.open(io.BytesIO(b),'rt') as f:return poly_study.feed_lines(self.study,f,seen)
+                else:
+                    def rd(p=where):
+                        with gzip.open(p,'rt') as f:return poly_study.feed_lines(self.study,f,seen)
+                n+=await asyncio.to_thread(rd)
+            except Exception as exc:self.state['errors']+=1;self.state['lastError']=f'rebuild {name}: {type(exc).__name__}'
+            self.state['rebuiltRounds']=n
+        self.state['rebuiltRounds']=n;await self.flush();return n
     # ---- main loop ----------------------------------------------------------------------------------
     def plan(self,now=None):
         """All round starts from `days` ago up to 30 minutes ago, oldest first, across the four lanes."""
@@ -139,6 +166,8 @@ class History:
     async def loop(self,engine=None,first_delay=180):
         global CURRENT;CURRENT=self
         await asyncio.sleep(first_delay);self.load()
+        try:await self.rebuild()
+        except Exception as exc:self.state['lastError']=f'rebuild: {type(exc).__name__}'
         while True:
             st=getattr(engine,'storage',None) if engine else None
             if st is not None and not st.active:await asyncio.sleep(60);continue
