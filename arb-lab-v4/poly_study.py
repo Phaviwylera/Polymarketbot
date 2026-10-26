@@ -39,7 +39,7 @@ def fee(p):return FEE_RATE*p*(1-p)
 # stress on the entry price (the live ask is used when it was recorded).
 REGISTERED_AT=1793030305
 HYPOTHESES=[{'id':'H1','key':[5,4,'against'],
-  'name':'early overreaction: first 20% of the round, token at 40-50c, spot moving against it -> buy that token',
+  'name':'Early overreaction: in the first 20% of the round, buy a token at 40-50c when spot is moving against it',
   'origin':'found in history v3 (21 days, 16,435 rounds): 5,220 rounds, +4.8c per $1 after fee, 3-SE lower bound +0.5c (1 of ~180 cells tested)',
   'rule':'one trade per round: the first taker BUY print in the cell; entry = ask (live) or print price, +1c stress; taker fee',
   'pass':'forward rounds only: >= 300 trades and stressed mean - 1.645 SE > 0. Otherwise: not confirmed.',

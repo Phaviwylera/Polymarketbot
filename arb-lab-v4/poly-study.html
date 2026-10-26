@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE Study</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070c0e"><title>Poly/Edge study</title>
 <style>
 :root{color-scheme:dark;--bg:#070c0e;--panel:#0a1114;--panel2:#0c161a;--line:#1c2a2f;--line2:#233136;--dim:#6f8589;--dim2:#879b9f;--text:#e4edef;--cyan:#65d5ff;--green:#67f3a2;--amber:#ffc45a;--violet:#bdabff;--red:#ff7786;--mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Consolas,monospace}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text)}body{font:11px/1.45 var(--mono);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;min-width:320px;overflow-x:hidden}
@@ -60,45 +60,48 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
 .row-new{animation:flash 1.2s ease}@keyframes flash{from{background:rgba(101,213,255,.18)}}
 .note{color:var(--dim2);font-size:10px;margin-top:6px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-</style></head><body>
+</style><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/poly-skin.css?v=20"></head><body>
 <header class="top">
- <div class="logo">PE</div><div class="brand"><b>POLY/EDGE // STUDY</b><small>EVERY POLYMARKET TRADE · HOW WINS HAPPEN · MODEL TRAINING</small></div>
- <div class="mode"><span class="pill live" id="mode">STUDY MODE · NO TRADES</span><span class="pill" id="srcToggle" style="cursor:pointer" title="switch between the live study and weeks of past rounds">◐ LIVE</span><span class="pill" id="age">—</span><a class="pill" href="/poly">← Terminal</a></div>
+ <div class="logo">PE</div><div class="brand"><b>Poly/Edge study</b><small>Every Polymarket trade, how the wins happen, and what the model learns</small></div>
+ <div class="mode"><span class="lamp" id="mode">Study mode: trading paused</span><span class="stamp" id="age">—</span><div class="seg" role="group" aria-label="Data source"><button type="button" data-src="live" aria-pressed="true">Live</button><button type="button" data-src="history" aria-pressed="false" title="Weeks of past rounds from Polymarket">History</button></div><a class="btn" href="/poly">Open terminal</a></div>
 </header>
 <main>
- <section class="p c12"><div class="ph"><span>◆ <b>Study progress</b></span><span id="since">—</span></div><div class="pb"><div class="kpis" id="kpis"></div></div></section>
+ <section class="p c12"><div class="ph"><span><b>Study progress</b></span><span id="since">—</span></div><div class="pb"><div class="kpis" id="kpis"></div></div></section>
 
- <section class="p c8"><div class="ph"><span>◷ <b>Time of day</b> · when do buys with spot already on their side pay? (IST)</span><span id="todBadge">—</span></div><div class="pb"><canvas id="tod" style="width:100%;height:190px;display:block"></canvas>
+ <section class="p c8"><div class="ph"><span><b>Time of day</b> When buys with spot already on their side paid, by IST hour</span><span id="todBadge">—</span></div><div class="pb"><canvas id="tod" style="width:100%;height:190px;display:block"></canvas>
   <div class="note" id="todNote">Bars: average return per $1 of taker buys made while spot was already on the token's side, by hour. Line: how wrong market prices were that hour (Brier). A window counts only with ≥ 20 rounds and a lower bound above 0.</div></div></section>
- <section class="p c4"><div class="ph"><span>⌖ <b>Market mistakes</b> · does price match reality?</span><span id="misBadge">—</span></div><div class="pb scroll" style="max-height:250px"><table id="mis"></table><div class="note" id="rev"></div></div></section>
- <section class="p c12"><div class="ph"><span>⚖ <b>Pre-registered test</b> · fixed rule, judged only on rounds after it was registered</span><span id="hypBadge">—</span></div><div class="pb"><div id="hyp"></div>
+ <section class="p c4"><div class="ph"><span><b>Market mistakes</b> Does the price match how often tokens win?</span><span id="misBadge">—</span></div><div class="pb scroll" style="max-height:250px"><table id="mis"></table><div class="note" id="rev"></div></div></section>
+ <section class="p c12"><div class="ph"><span><b>Pre-registered test</b> A fixed rule, judged only on rounds after it was locked</span><span id="hypBadge">—</span></div><div class="pb"><div id="hyp"></div>
   <div class="scroll" style="max-height:200px"><table id="hypW"></table></div>
-  <details style="margin-top:10px"><summary class="dim" style="cursor:pointer">Evidence ledger · ideas tested and rejected</summary><div class="scroll" style="max-height:260px"><table id="ledger"></table></div></details></div></section>
-<section class="p c12"><div class="ph"><span>◇ <b>Jev forecaster</b> · record-only · does it beat the market price?</span><span id="jevBadge">—</span></div><div class="pb"><div class="kpis" id="jevK"></div><div class="scroll" style="max-height:200px"><table id="jevT"></table></div><div class="note" id="jevN"></div></div></section>
-<section class="p c12" id="histPanel" style="display:none"><div class="ph"><span>⏮ <b>History backfill</b> · past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
- <section class="p c12 tor"><div class="ph"><span>◉ <b>Market torus</b> · every trade on the ring of the round</span><span>ring: time through the round · tube: price · drag to rotate</span></div>
+  <details style="margin-top:10px"><summary>Evidence ledger: ideas tested and rejected</summary><div class="scroll" style="max-height:260px"><table id="ledger"></table></div></details></div></section>
+<section class="p c12"><div class="ph"><span><b>Jev forecaster</b> Records only. Does it beat the market price?</span><span id="jevBadge">—</span></div><div class="pb"><div class="kpis" id="jevK"></div><div class="scroll" style="max-height:200px"><table id="jevT"></table></div><div class="note" id="jevN"></div></div></section>
+<section class="p c12" id="histPanel" style="display:none"><div class="ph"><span><b>History backfill</b> Past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
+ <section class="p c12 tor"><div class="ph"><span><b>Market torus</b> Every trade, placed on the ring of its round</span><span>Around the ring: time. Through the tube: price. Drag to rotate.</span></div>
   <div class="tbody" id="tbody"><canvas id="threads"></canvas>
-   <div class="col" id="inputs"><h5>LIVE INPUTS · LATEST TRADE</h5></div>
+   <div class="col" id="inputs"><h5>Live inputs at the latest trade</h5></div>
    <div style="position:relative;min-width:0"><div class="ttl" id="ttl">—</div><canvas id="torus"></canvas></div>
-   <div class="col" id="fills"><h5>WINNING BUYS · RECENT ROUNDS</h5></div>
+   <div class="col" id="fills"><h5>Biggest winning buys, recent rounds</h5></div>
   </div>
   <div class="tleg"><span><i style="background:#ffd166"></i>live trade (round still open)</span><span><i style="background:#46e08a"></i>bought the winner</span><span><i style="background:#ff5d73"></i>bought a loser</span><span>spike length = trade size</span></div></section>
 
- <section class="p c6"><div class="ph"><span>⟋ <b>Model training</b> · learner vs market</span><span id="curveBadge">—</span></div><div class="pb"><canvas id="curve"></canvas><div class="note" id="curveNote">—</div></div></section>
- <section class="p c6"><div class="ph"><span>⚑ <b>How it should be executed</b> · rule tested on unseen rounds</span><span id="ruleBadge">—</span></div><div class="pb"><div id="rule"></div><div class="scroll" style="max-height:220px"><table id="ruleT"></table></div></div></section>
+ <section class="p c6"><div class="ph"><span><b>Model training</b> Learner against the market price</span><span id="curveBadge">—</span></div><div class="pb"><canvas id="curve"></canvas><div class="note" id="curveNote">—</div></div></section>
+ <section class="p c6"><div class="ph"><span><b>Rule on unseen rounds</b> How the winning patterns would have traded</span><span id="ruleBadge">—</span></div><div class="pb"><div id="rule"></div><div class="scroll" style="max-height:220px"><table id="ruleT"></table></div></div></section>
 
- <section class="p c12"><div class="ph"><span>▦ <b>Where winning buys happen</b> · average return per $1 after fee, by round</span><span>rows: share of round left · cols: price paid</span></div><div class="pb"><div class="hm" id="heat"></div>
+ <section class="p c12"><div class="ph"><span><b>Where winning buys happen</b> Return per $1 after fee</span><span>Rows: time left. Columns: price paid.</span></div><div class="pb"><div class="hm" id="heat"></div>
   <div class="note">Green = buying there made money on average; colour strength = how many rounds back it. A cell needs ≥ <span id="minr">20</span> rounds and a positive lower bound before the rule may use it.</div></div></section>
 
- <section class="p c12"><div class="ph"><span>★ <b>Winning patterns</b> · best cells so far</span><span id="patBadge">—</span></div><div class="pb scroll"><table id="pat"></table></div></section>
+ <section class="p c12"><div class="ph"><span><b>Best patterns so far</b></span><span id="patBadge">—</span></div><div class="pb scroll"><table id="pat"></table></div></section>
 
- <section class="p c12"><div class="ph"><span>⧉ <b>Resolved rounds</b> · how each one was won</span><span id="rBadge">—</span></div><div class="pb"><div class="rounds" id="rounds"></div></div></section>
+ <section class="p c12"><div class="ph"><span><b>Resolved rounds</b> How each one was won</span><span id="rBadge">—</span></div><div class="pb"><div class="rounds" id="rounds"></div></div></section>
 
- <section class="p c8"><div class="ph"><span>⇶ <b>Live tape</b> · every trade as it happens</span><span id="tapeBadge">—</span></div><div class="pb scroll"><table id="live"></table></div></section>
- <section class="p c4"><div class="ph"><span>◎ <b>Winning wallets</b> · per round</span><span>from the wallet study</span></div><div class="pb scroll"><div id="wallets"></div></div></section>
+ <section class="p c8"><div class="ph"><span><b>Live tape</b> Every trade as it happens</span><span id="tapeBadge">—</span></div><div class="pb scroll"><table id="live"></table></div></section>
+ <section class="p c4"><div class="ph"><span><b>Winning wallets</b> Top wallets in each round</span><span>From the wallet study</span></div><div class="pb scroll"><div id="wallets"></div></div></section>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+// canvas text without an explicit font uses the page face instead of the browser default
+{const f=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(...a){if(this.font==='10px sans-serif')this.font='500 11px Archivo,system-ui,sans-serif';return f.apply(this,a);};}
+
 (()=>{
 const $=id=>document.getElementById(id),ok=v=>v!==null&&v!==undefined&&isFinite(v);
 const fmt=(v,d=3)=>ok(v)?(+v).toFixed(d):'—',sg=(v,d=3)=>ok(v)?(v>=0?'+':'')+(+v).toFixed(d):'—',pct=v=>ok(v)?(+v).toFixed(1)+'%':'—';
@@ -110,14 +113,14 @@ function bump(el){if(!el)return;el.classList.remove('bump');void el.offsetWidth;
 function kpis(s){
  const t=s.totals||{},l=s.learner||{},r=s.rule||{},sm=s.summary||{},tp=s.tape||{};
  const items=[['Prints recorded',(tp.prints||0)+(tp.pending||0),`${tp.pending||0} waiting for their round`],
-  ['Rounds studied',t.rounds||0,`UP won ${t.winnerUp||0} · DOWN won ${t.winnerDown||0}`],
+  ['Rounds studied',t.rounds||0,`UP won ${t.winnerUp||0}, DOWN won ${t.winnerDown||0}`],
   ['Taker buys analysed',t.buys||0,`${sm.winnerBuyShareOfTakerBuyUsd!=null?(100*sm.winnerBuyShareOfTakerBuyUsd).toFixed(1)+'% of buy $ went to the winner':'—'}`],
   ['Decided with',ok(sm.medianDecidedSecondsLeft)?Math.round(sm.medianDecidedSecondsLeft)+'s left':'—','median: winner ≥ 80¢ and stays'],
   ['Best winner entry',ok(sm.medianBestWinnerEntry)?Math.round(100*sm.medianBestWinnerEntry)+'¢':'—','median cheapest price anyone paid for the winner'],
-  ['Learner vs market',l.rounds?`${fmt(l.brierLearned,4)} / ${fmt(l.brierPrice,4)}`:'learning',`${l.rounds||0} rounds · ${l.learnedBeatsPrice?'<span class="pos">beats market</span>':'not beating market yet'}`],
-  ['Rule on unseen rounds',r.trades?sg(r.avgReturnPerDollar,3)+'/$':'waiting',r.trades?`${r.trades} trades · ${pct(r.winPct)} wins`:`needs cells with ≥ ${s.minRoundsForRule} rounds`]];
+  ['Learner vs market',l.rounds?`${fmt(l.brierLearned,4)} / ${fmt(l.brierPrice,4)}`:'learning',`${l.rounds||0} rounds, ${l.learnedBeatsPrice?'<span class="pos">beats market</span>':'not beating market yet'}`],
+  ['Rule on unseen rounds',r.trades?sg(r.avgReturnPerDollar,3)+'/$':'waiting',r.trades?`${r.trades} trades, ${pct(r.winPct)} wins`:`needs cells with ≥ ${s.minRoundsForRule} rounds`]];
  $('kpis').innerHTML=items.map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('');
- $('since').textContent=ok(s.started)?'studying since '+new Date(s.started*1000).toISOString().slice(5,16).replace('T',' ')+' UTC':'—';
+ $('since').textContent=ok(s.started)?'Studying since '+new Date(s.started*1000).toISOString().slice(5,16).replace('T',' ')+' UTC':'—';
 }
 
 // ---------- heatmaps ----------
@@ -129,7 +132,7 @@ function heat(s){
   for(let i=names.length-1;i>=0;i--){h+=`<div class="lab">${names[i]}</div>`;(g[i]||[]).forEach((c,j)=>{
    if(!c){h+='<div style="background:#0f1a1e"></div>';return;}
    const m=c.mean,al=Math.min(1,.18+c.rounds/40),col=m>=0?`rgba(103,243,162,${al})`:`rgba(255,119,134,${al})`;
-   h+=`<div style="background:${col}" title="${names[i]} left · ${j*10}-${j*10+10}c · ${a}\navg ${sg(m)} per $1 · lower ${sg(c.lower)}\n${c.rounds} rounds · ${c.prints} buys · win ${pct(c.winPct)}">${Math.abs(m)>=.995?'':Math.round(m*100)}</div>`;});}
+   h+=`<div style="background:${col}" title="${names[i]} left, ${j*10}-${j*10+10}c, ${a}\navg ${sg(m)} per $1, lower ${sg(c.lower)}\n${c.rounds} rounds, ${c.prints} buys, win ${pct(c.winPct)}">${Math.abs(m)>=.995?'':Math.round(m*100)}</div>`;});}
   return h+'</div></div>';}).join('');
 }
 
@@ -139,7 +142,7 @@ function patterns(s){
  $('pat').innerHTML='<tr><th>pattern (where the buy happened)</th><th class="r">rounds</th><th class="r">win</th><th class="r">avg/$</th><th class="r">lower</th></tr>'+
   (p.length?p.map(x=>`<tr><td>${x.qualifies?'✅ ':''}${x.cell}</td><td class="r">${x.rounds}</td><td class="r">${pct(x.winPct)}</td><td class="r ${cls(x.avgReturnPerDollar)}">${sg(x.avgReturnPerDollar)}</td><td class="r ${cls(x.lowerBound)}">${sg(x.lowerBound)}</td></tr>`).join(''):'<tr><td class="dim">collecting rounds…</td></tr>');
  const r=s.rule||{};$('ruleBadge').textContent=r.trades?`${r.trades} trades`:'waiting';
- $('rule').innerHTML=r.trades?`<div class="kpis" style="margin-bottom:8px"><div class="kpi"><span>avg per $1</span><b class="${cls(r.avgReturnPerDollar)}">${sg(r.avgReturnPerDollar)}</b></div><div class="kpi"><span>win rate</span><b>${pct(r.winPct)}</b></div><div class="kpi"><span>lower bound</span><b class="${cls(r.lowerBound)}">${sg(r.lowerBound)}</b></div></div>`:
+ $('rule').innerHTML=r.trades?`<div class="kpis" style="margin-bottom:8px"><div class="kpi"><span>Average per $1</span><b class="${cls(r.avgReturnPerDollar)}">${sg(r.avgReturnPerDollar)}</b></div><div class="kpi"><span>Win rate</span><b>${pct(r.winPct)}</b></div><div class="kpi"><span>Lower bound</span><b class="${cls(r.lowerBound)}">${sg(r.lowerBound)}</b></div></div>`:
   `<div class="note">The rule: in each new round, take the first taker buy that falls in a pattern cell with ≥ ${s.minRoundsForRule} earlier rounds and a positive lower bound. It is judged only on rounds it had not learned from. ${r.note||''}</div>`;
  $('ruleT').innerHTML=(r.recent||[]).length?'<tr><th>lane</th><th>bought</th><th class="r">price</th><th class="r">left</th><th class="r">spot</th><th class="r">result/$</th></tr>'+r.recent.slice().reverse().map(x=>`<tr><td>${x.lane}</td><td>${x.token}</td><td class="r">${Math.round(100*x.price)}¢</td><td class="r">${ok(x.secondsLeft)?Math.round(x.secondsLeft)+'s':'—'}</td><td class="r">${sg(x.agreeBps,1)}</td><td class="r ${cls(x.returnPerDollar)}">${sg(x.returnPerDollar)}</td></tr>`).join(''):'';
 }
@@ -153,10 +156,10 @@ function rounds(s){
  const rs=s.rounds||[];$('rBadge').textContent=rs.length+' recent';const key=rs.map(r=>r.slug).join();if(key===lastRounds)return;lastRounds=key;
  $('rounds').innerHTML=rs.length?rs.slice(0,12).map((r,i)=>{const b=r.bestEntry||{},tw=(r.topWinningBuys||[])[0];
   return `<div class="rc" style="animation-delay:${i*40}ms"><div class="hd"><b>${r.lane}</b><span class="chip ${r.winner}">${r.winner} won</span></div><canvas data-i="${i}"></canvas>
-  <div class="ln">decided ${ok(r.decidedSecondsLeft)?Math.round(r.decidedSecondsLeft)+'s before close':'only at the end'} · spot ${sg(r.finalSpotVsOpenBps,1)} bps</div>
-  <div class="ln">best winner entry <b class="pos">${ok(b.price)?Math.round(100*b.price)+'¢':'—'}</b>${ok(b.secondsLeft)?' with '+Math.round(b.secondsLeft)+'s left':''}${ok(b.agreeBps)?' · spot '+sg(b.agreeBps,1):''}</div>
-  <div class="ln">${r.prints} prints · $${Math.round(r.volumeUsd)} · buys on winner ${r.winnerBuys} / loser ${r.loserBuys}</div>
-  ${tw?`<div class="ln">top winning buy ${Math.round(tw.size)} sh @ ${Math.round(100*tw.price)}¢${ok(tw.secondsLeft)?' · '+Math.round(tw.secondsLeft)+'s left':''}</div>`:''}
+  <div class="ln">decided ${ok(r.decidedSecondsLeft)?Math.round(r.decidedSecondsLeft)+'s before close':'only at the end'}, spot ${sg(r.finalSpotVsOpenBps,1)} bps</div>
+  <div class="ln">best winner entry <b class="pos">${ok(b.price)?Math.round(100*b.price)+'¢':'—'}</b>${ok(b.secondsLeft)?' with '+Math.round(b.secondsLeft)+'s left':''}${ok(b.agreeBps)?', spot '+sg(b.agreeBps,1):''}</div>
+  <div class="ln">${r.prints} prints, $${Math.round(r.volumeUsd)}, buys on winner ${r.winnerBuys} / loser ${r.loserBuys}</div>
+  ${tw?`<div class="ln">top winning buy ${Math.round(tw.size)} sh @ ${Math.round(100*tw.price)}¢${ok(tw.secondsLeft)?', '+Math.round(tw.secondsLeft)+'s left':''}</div>`:''}
   ${r.ruleTrade?`<div class="ln">rule bought ${r.ruleTrade.token} @ ${Math.round(100*r.ruleTrade.price)}¢ → <b class="${cls(r.ruleTrade.returnPerDollar)}">${sg(r.ruleTrade.returnPerDollar)}</b>/$</div>`:''}</div>`;}).join(''):'<div class="dim">waiting for the first round to resolve (5-15 min)…</div>';
  document.querySelectorAll('#rounds canvas').forEach(c=>{const r=rs[+c.dataset.i];spark(c,r.path,r.winner);});
 }
@@ -171,20 +174,20 @@ function live(s){
 }
 function wallets(s){
  const W=s.wallets||[];$('wallets').innerHTML=W.length?W.map(w=>`<div class="rc" style="margin-bottom:8px"><div class="hd"><b>${w.lane}</b><span class="chip ${w.winner}">${w.winner} won</span></div>
-  ${(w.top||[]).map(x=>`<div class="ln"><span class="cy">${x.wallet}</span> <b class="${cls(x.pnl)}">${sg(x.pnl,2)}</b> · ${x.buys} buys $${fmt(x.buyUsd,0)} · ${ok(x.avgEntrySec)?'entered ~'+Math.round(x.avgEntrySec)+'s in':''} @ ${ok(x.avgPrice)?Math.round(100*x.avgPrice)+'¢':'—'}</div>`).join('')}</div>`).join(''):'<div class="dim">waiting for the wallet study (rounds are fetched a few minutes after they resolve)…</div>';
+  ${(w.top||[]).map(x=>`<div class="ln"><span class="cy">${x.wallet}</span> <b class="${cls(x.pnl)}">${sg(x.pnl,2)}</b>, ${x.buys} buys $${fmt(x.buyUsd,0)}, ${ok(x.avgEntrySec)?'entered ~'+Math.round(x.avgEntrySec)+'s in':''} @ ${ok(x.avgPrice)?Math.round(100*x.avgPrice)+'¢':'—'}</div>`).join('')}</div>`).join(''):'<div class="dim">waiting for the wallet study (rounds are fetched a few minutes after they resolve)…</div>';
 }
 
 // ---------- learner curve (animated draw) ----------
 let curveData=[],curveT=0;
 function curve(s){
  curveData=s.learnCurve||[];const l=s.learner||{};$('curveBadge').innerHTML=l.rounds?(l.learnedBeatsPrice?'<span class="pos">beats market</span>':'<span class="amb">behind market</span>'):'learning';
- const w=l.weights||{};$('curveNote').innerHTML=l.rounds?`Each round is scored before the model learns from it. What it has learned so far (weights): spot-vs-open <b>${sg(w.spotAgree,3)}</b> · late spot <b>${sg(w.spotAgreeXlate,3)}</b> · model disagreement <b>${sg(w.modelMinusPrice,3)}</b> · market price <b>${fmt(w.logitPrice,3)}</b>`:'The learner starts as the market price and only moves away from it when settled trades show it should.';
+ const w=l.weights||{};$('curveNote').innerHTML=l.rounds?`Each round is scored before the model learns from it. What it has learned so far (weights): spot-vs-open <b>${sg(w.spotAgree,3)}</b>, late spot <b>${sg(w.spotAgreeXlate,3)}</b>, model disagreement <b>${sg(w.modelMinusPrice,3)}</b>, market price <b>${fmt(w.logitPrice,3)}</b>`:'The learner starts as the market price and only moves away from it when settled trades show it should.';
  curveT=0;
 }
 function drawCurve(){
  const c=$('curve'),r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);if(c.width!==Math.round(r.width*d)){c.width=r.width*d;c.height=r.height*d;}
  const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,r.width,r.height);const D=curveData.filter(x=>ok(x.brierLearned)&&ok(x.brierPrice));
- const w=r.width,h=r.height,L=34,B=h-18;g.fillStyle='#6f8589';g.font='9px ui-monospace';
+ const w=r.width,h=r.height,L=34,B=h-18;g.fillStyle='#6f8589';g.font='500 10.5px Archivo,system-ui,sans-serif';
  if(D.length<2){g.fillText('the curve appears after a few rounds resolve…',L,h/2);return;}
  const vals=D.flatMap(x=>[x.brierLearned,x.brierPrice,x.brierModel].filter(ok)),mn=Math.min(...vals),mx=Math.max(...vals),pad=(mx-mn)*.12||.01;
  const X=i=>L+i/(D.length-1)*(w-L-8),Y=v=>B-(v-(mn-pad))/((mx+pad)-(mn-pad))*(B-8);
@@ -281,31 +284,31 @@ function torus(s){
  const L0=live[0];latestLane=L0?L0.lane:null;const same=live.filter(r=>r.lane===latestLane).slice(0,40).reverse(),up=r=>r.token==='UP'?r.price:1-r.price;
  const upP=L0?up(L0):null,mUp=L0&&ok(L0.pToken)?(L0.token==='UP'?L0.pToken:1-L0.pToken):null,lUp=L0&&ok(L0.pLearned)?(L0.token==='UP'?L0.pLearned:1-L0.pLearned):null;
  const sl=L0&&ok(L0.secondsLeft)?Math.max(0,L0.secondsLeft):null;
- const inputs=[['SPOT − OPEN',L0&&ok(L0.spotVsOpenBps)?sg(L0.spotVsOpenBps,1)+' bps':'—','where spot is vs the round open','#ff9f43',same.map(r=>r.spotVsOpenBps)],
-  ['TIME LEFT',ok(sl)?Math.floor(sl/60)+':'+String(Math.floor(sl%60)).padStart(2,'0'):'—',(latestLane||'—')+' round','#e8eefc',same.map(r=>r.secondsLeft)],
-  ['MODEL P(UP)',ok(mUp)?mUp.toFixed(3):'—','our model for UP','#46e08a',same.map(r=>ok(r.pToken)?(r.token==='UP'?r.pToken:1-r.pToken):null),0,1],
-  ['LEARNER P(UP)',ok(lUp)?lUp.toFixed(3):'—','market-anchored learner','#65d5ff',same.map(r=>ok(r.pLearned)?(r.token==='UP'?r.pLearned:1-r.pLearned):null),0,1],
-  ['UP PRICE',ok(upP)?upP.toFixed(3):'—','last trade, as UP probability','#ff5d73',same.map(up),0,1]];
- const ic=$('inputs');if(ic.children.length!==inputs.length+1){ic.innerHTML='<h5>LIVE INPUTS · LATEST TRADE</h5>'+inputs.map((x,i)=>`<div class="inp" style="--c:${x[3]}" id="inp${i}"><div class="t"><span>${x[0]}</span><b></b></div><small></small><canvas></canvas></div>`).join('');}
+ const inputs=[['Spot vs open',L0&&ok(L0.spotVsOpenBps)?sg(L0.spotVsOpenBps,1)+' bps':'—','where spot is vs the round open','#ff9f43',same.map(r=>r.spotVsOpenBps)],
+  ['Time left',ok(sl)?Math.floor(sl/60)+':'+String(Math.floor(sl%60)).padStart(2,'0'):'—',(latestLane||'—')+' round','#e8eefc',same.map(r=>r.secondsLeft)],
+  ['Model P(up)',ok(mUp)?mUp.toFixed(3):'—','our model for UP','#46e08a',same.map(r=>ok(r.pToken)?(r.token==='UP'?r.pToken:1-r.pToken):null),0,1],
+  ['Learner P(up)',ok(lUp)?lUp.toFixed(3):'—','market-anchored learner','#65d5ff',same.map(r=>ok(r.pLearned)?(r.token==='UP'?r.pLearned:1-r.pLearned):null),0,1],
+  ['Up price',ok(upP)?upP.toFixed(3):'—','last trade, as UP probability','#ff5d73',same.map(up),0,1]];
+ const ic=$('inputs');if(ic.children.length!==inputs.length+1){ic.innerHTML='<h5>Live inputs at the latest trade</h5>'+inputs.map((x,i)=>`<div class="inp" style="--c:${x[3]}" id="inp${i}"><div class="t"><span>${x[0]}</span><b></b></div><small></small><canvas></canvas></div>`).join('');}
  anchors.inputs=inputs.map((x,i)=>{const el=$('inp'+i);el.querySelector('b').textContent=x[1];el.querySelector('small').textContent=x[2];sparkT(el.querySelector('canvas'),x[4],x[3],x[5],x[6]);
   const lf=L0?(ok(L0.leftFrac)?L0.leftFrac:.5):.5;return {el,uv:L0?[...uvOf(lf,L0.price).map((a,j)=>a+(i-2)*.03*(j?1:.4)),.02]:null,color:x[3]};});
  // right: biggest recent winning buys
  const wins=[];(s.rounds||[]).forEach(r=>(r.topWinningBuys||[]).slice(0,2).forEach(b=>wins.push({...b,lane:r.lane,winner:r.winner,profit:(+b.size||0)*(1-(+b.price||0))})));
  wins.sort((a,b)=>b.profit-a.profit);const top=wins.slice(0,7),fc=$('fills');
- fc.innerHTML='<h5>WINNING BUYS · RECENT ROUNDS</h5>'+(top.length?top.map((b,i)=>`<div class="fill win" id="fill${i}" style="animation-delay:${i*50}ms"><div class="t"><span>${b.lane} · BUY ${b.winner}</span><b>+$${b.profit.toFixed(2)}</b></div><small>${Math.round(b.size)} sh @ ${Math.round(100*b.price)}¢${ok(b.secondsLeft)?' · '+Math.round(b.secondsLeft)+'s left':''}${ok(b.agreeBps)?' · spot '+sg(b.agreeBps,1):''}</small><i style="width:${Math.max(8,Math.min(100,100*b.profit/top[0].profit))}%"></i></div>`).join(''):'<div class="fill"><small>waiting for the first rounds to resolve…</small></div>');
+ fc.innerHTML='<h5>Biggest winning buys, recent rounds</h5>'+(top.length?top.map((b,i)=>`<div class="fill win" id="fill${i}" style="animation-delay:${i*50}ms"><div class="t"><span>${b.lane}: bought ${b.winner}</span><b>+$${b.profit.toFixed(2)}</b></div><small>${Math.round(b.size)} sh @ ${Math.round(100*b.price)}¢${ok(b.secondsLeft)?', '+Math.round(b.secondsLeft)+'s left':''}${ok(b.agreeBps)?', spot '+sg(b.agreeBps,1):''}</small><i style="width:${Math.max(8,Math.min(100,100*b.profit/top[0].profit))}%"></i></div>`).join(''):'<div class="fill"><small>waiting for the first rounds to resolve…</small></div>');
  anchors.fills=top.map((b,i)=>{const lf=ok(b.secondsLeft)?b.secondsLeft/(String(b.lane).endsWith('15')?900:300):.5;return {el:$('fill'+i),uv:[...uvOf(lf,b.price),.06],color:'#ffd166'};});
- $('ttl').textContent=L0?`${latestLane} · MODEL P(UP) ${ok(mUp)?mUp.toFixed(3):'—'} · PRICE ${ok(upP)?upP.toFixed(3):'—'} · LEARNER ${ok(lUp)?lUp.toFixed(3):'—'}`:'waiting for trades…';
+ $('ttl').textContent=L0?`${latestLane}: model ${ok(mUp)?mUp.toFixed(3):'—'}, price ${ok(upP)?upP.toFixed(3):'—'}, learner ${ok(lUp)?lUp.toFixed(3):'—'}`:'Waiting for trades…';
 }
 
 // ---------- time of day / mistakes / history ----------
 let SRC=(()=>{try{return localStorage.getItem('studySrc')||'live'}catch(e){return 'live'}})();
-function setSrcLabel(){const t=$('srcToggle');if(t)t.textContent=SRC==='live'?'◐ LIVE':'◑ HISTORY';}
-document.addEventListener('click',e=>{if(e.target&&e.target.id==='srcToggle'){SRC=SRC==='live'?'history':'live';try{localStorage.setItem('studySrc',SRC)}catch(_){}setSrcLabel();last=null;lastRounds='';poll();}});
+function setSrcLabel(){document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.src===SRC)));}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.seg button');if(b&&b.dataset.src!==SRC){SRC=b.dataset.src;try{localStorage.setItem('studySrc',SRC)}catch(_){}setSrcLabel();last=null;lastRounds='';poll();}});
 function tod(s){
  const T=s.timeOfDay||[],c=$('tod');if(!c)return;const r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);c.width=r.width*d;c.height=r.height*d;const g=c.getContext('2d');g.scale(d,d);
  const w=r.width,h=r.height,L=36,B=h-20,mid=(B+8)/2;const rows=[...Array(24)].map((_,i)=>T.find(x=>x.istHour===i)||{istHour:i});
  const vals=rows.map(x=>x.buysWithSpot?x.buysWithSpot.mean:null).filter(ok),mx=Math.max(.05,...vals.map(Math.abs));
- g.strokeStyle='#1c2a2f';g.beginPath();g.moveTo(L,mid);g.lineTo(w-6,mid);g.stroke();g.fillStyle='#6f8589';g.font='9px ui-monospace';g.fillText('+'+mx.toFixed(2),2,14);g.fillText('-'+mx.toFixed(2),2,B);g.fillText('0',L-10,mid+3);
+ g.strokeStyle='#1c2a2f';g.beginPath();g.moveTo(L,mid);g.lineTo(w-6,mid);g.stroke();g.fillStyle='#6f8589';g.font='500 10.5px Archivo,system-ui,sans-serif';g.fillText('+'+mx.toFixed(2),2,14);g.fillText('-'+mx.toFixed(2),2,B);g.fillText('0',L-10,mid+3);
  const bw=(w-L-8)/24,best=new Set((s.bestWindows||[]).map(x=>x.istHour));
  rows.forEach((x,i)=>{const c2=x.buysWithSpot,X=L+i*bw;if(i%3===0){g.fillStyle='#6f8589';g.fillText(String(i).padStart(2,'0'),X+1,h-6);}
   if(!c2)return;const v=c2.mean,hh=Math.abs(v)/mx*(mid-10),al=Math.min(1,.25+c2.rounds/40);
@@ -319,24 +322,24 @@ function tod(s){
 function mistakes(s){
  const M=s.mistakes||[];$('misBadge').textContent=M.filter(x=>x.reading!=='priced fairly so far').length+' flagged';
  $('mis').innerHTML='<tr><th>price</th><th class="r">rounds</th><th class="r">won − price</th><th>reading</th></tr>'+(M.length?M.map(x=>`<tr><td>${x.price}</td><td class="r">${x.rounds}</td><td class="r ${cls(x.actualMinusPrice)}">${sg(x.actualMinusPrice,3)}</td><td class="${x.reading.startsWith('tokens here win MORE')?'pos':x.reading.startsWith('tokens here win LESS')?'neg':'dim'}" style="white-space:normal">${x.reading}</td></tr>`).join(''):'<tr><td class="dim">collecting…</td></tr>');
- const R=s.reversals||{};$('rev').innerHTML='<b>Reversals</b> (side priced ≥ 70¢ with ~20% of the round left that still lost): '+(Object.keys(R).length?Object.entries(R).map(([k,v])=>`${k} ${v.leaderLost}/${v.rounds} (${pct(v.leaderLostPct)})`).join(' · '):'collecting');
+ const R=s.reversals||{};$('rev').innerHTML='<b>Reversals</b> (side priced ≥ 70¢ with ~20% of the round left that still lost): '+(Object.keys(R).length?Object.entries(R).map(([k,v])=>`${k} ${v.leaderLost}/${v.rounds} (${pct(v.leaderLostPct)})`).join(', '):'collecting');
 }
 function hist(s){
  const H=s.history,p=$('histPanel');if(!H){p.style.display='none';return;}p.style.display='';
  const day=t=>ok(t)?new Date(t*1000).toISOString().slice(5,16).replace('T',' '):'—';
  $('histBadge').textContent=H.phase||'—';
- $('histK').innerHTML=[['Past rounds studied',H.roundsDone,`${H.queue||0} still to fetch · ${H.days} days back`],['Past trades',H.tradesSeen,'every taker trade, with wallet'],
+ $('histK').innerHTML=[['Past rounds studied',H.roundsDone,`${H.queue||0} still to fetch, ${H.days} days back`],['Past trades',H.tradesSeen,'every taker trade, with wallet'],
   ['Oldest round',day(H.oldestRound),'UTC'],['Newest round',day(H.newestRound),'UTC'],['Errors',H.errors||0,H.lastError||'none']].map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v??'—'}</b><em>${e}</em></div>`).join('');
 }
 function hyp(s){
  const H=(s.hypotheses||[])[0];if(!H){$('hyp').innerHTML='<div class="dim">no hypothesis registered</div>';return;}
  const f=H.forward||{},a=H.all||{},pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—';
- $('hypBadge').textContent=H.id+' · '+H.verdict.toUpperCase();
+ $('hypBadge').textContent=H.id+': '+H.verdict.charAt(0).toUpperCase()+H.verdict.slice(1).toLowerCase();
  $('hypBadge').className=H.verdict==='CONFIRMED'?'pos':H.verdict==='not confirmed'?'neg':'dim';
  $('hyp').innerHTML=`<div style="margin-bottom:8px"><b>${H.name}</b></div>
-  <div class="kpis">${[['Forward trades',f.trades||0,`needs ≥ 300 · registered ${new Date(H.registeredAt*1000).toISOString().slice(0,16).replace('T',' ')} UTC`],
-   ['Forward win rate',ok(f.winPct)?f.winPct+'%':'—','one trade per round'],['Forward return / $',pc(f.avgStressed),'after fee + 1¢ slippage stress'],
-   ['Forward bad case',pc(f.lower95),'95% one-sided lower bound — must be > 0'],['All rounds (incl. discovery)',a.trades||0,`${pc(a.avgAtPrint)} at print · ${pc(a.avgStressed)} stressed`]]
+  <div class="kpis">${[['Forward trades',f.trades||0,`Needs 300. Locked ${new Date(H.registeredAt*1000).toISOString().slice(0,16).replace('T',' ')} UTC`],
+   ['Forward win rate',ok(f.winPct)?f.winPct+'%':'—','One trade per round'],['Forward return per $1',pc(f.avgStressed),'After the fee and 1¢ extra slippage'],
+   ['Forward bad case',pc(f.lower95),'95% lower bound. Must stay above zero'],['All rounds, including discovery',a.trades||0,`${pc(a.avgAtPrint)} at the traded price, ${pc(a.avgStressed)} with slippage`]]
    .map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('')}</div>
   <div class="note">${H.origin}. Rule: ${H.rule}. Pass: ${H.pass}</div>`;
  $('hypW').innerHTML='<tr><th>week (UTC)</th><th class="r">trades</th><th class="r">win %</th><th class="r">at print</th><th class="r">stressed</th><th class="r">bad case</th></tr>'+
@@ -347,11 +350,11 @@ let jevAt=0;
 async function jev(){
  if(Date.now()-jevAt<15000)return;jevAt=Date.now();
  try{const j=await (await fetch('/api/poly/jev',{cache:'no-store'})).json();
-  if(!j.enabled){$('jevBadge').textContent='OFF';$('jevK').innerHTML='';$('jevT').innerHTML='';$('jevN').textContent='Off: no OpenRouter key on the server yet. Add OPENROUTER_API_KEY to the server settings file and restart.';return;}
+  if(!j.enabled){$('jevBadge').textContent='Off';$('jevK').innerHTML='';$('jevT').innerHTML='';$('jevN').textContent='Off: no OpenRouter key on the server yet. Add OPENROUTER_API_KEY to the server settings file and restart.';return;}
   const H=j.H2||{},a=j.all||{},b=v=>ok(v)?v.toFixed(4):'—',pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—';
-  $('jevBadge').textContent='H2 · '+String(H.verdict||'').toUpperCase();$('jevBadge').className=H.verdict==='CONFIRMED'?'pos':H.verdict==='not confirmed'?'neg':'dim';
-  $('jevK').innerHTML=[['Answers scored',a.n||0,`${j.calls||0} calls · $${(j.costUsd||0).toFixed(4)} spent`],['Brier · Jev',b(a.brierJev),'lower is better'],['Brier · market price',b(a.brierPrice),'the bar to beat'],
-   ['Brier · our learner',b(a.brierLearned),'same inputs, logistic'],['H2 trades',H.trades||0,`needs ≥ 300 · ${pc(H.avgReturnPerDollar)} / $ · bad case ${pc(H.lower95)}`]].map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('');
+  {const v=String(H.verdict||'');$('jevBadge').textContent='H2: '+v.charAt(0).toUpperCase()+v.slice(1).toLowerCase();}$('jevBadge').className=H.verdict==='CONFIRMED'?'pos':H.verdict==='not confirmed'?'neg':'dim';
+  $('jevK').innerHTML=[['Answers scored',a.n||0,`${j.calls||0} calls, $${(j.costUsd||0).toFixed(4)} spent`],['Jev Brier score',b(a.brierJev),'Lower is better'],['Market price Brier score',b(a.brierPrice),'The bar to beat'],
+   ['Learner Brier score',b(a.brierLearned),'Same inputs, logistic model'],['H2 trades',H.trades||0,`Needs 300. ${pc(H.avgReturnPerDollar)} per $1, bad case ${pc(H.lower95)}`]].map(([k,v,e])=>`<div class="kpi"><span>${k}</span><b>${v}</b><em>${e}</em></div>`).join('');
   const C=j.byCheckpoint||{};
   $('jevT').innerHTML='<tr><th>checkpoint</th><th class="r">answers</th><th class="r">Jev</th><th class="r">price</th><th class="r">learner</th></tr>'+['early','mid','late'].map(k=>{const c=C[k]||{};const w=ok(c.brierJev)&&ok(c.brierPrice)?(c.brierJev<c.brierPrice?'pos':'neg'):'';return `<tr><td>${k}</td><td class="r">${c.n||0}</td><td class="r ${w}">${b(c.brierJev)}</td><td class="r">${b(c.brierPrice)}</td><td class="r">${b(c.brierLearned)}</td></tr>`}).join('');
   $('jevN').textContent=`Asked once at 80%, 50% and 20% of each round left: will UP win? Rule H2: ${H.rule}. Pass: ${H.pass}.`+(j.lastError?` Last error: ${j.lastError}`:'');
@@ -359,15 +362,15 @@ async function jev(){
 }
 // ---------- poll ----------
 async function poll(){
- try{const s=await (await fetch('/api/poly/study'+(SRC==='history'?'?source=history':''),{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='STUDY OFF';return;}
-  const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){document.querySelectorAll('.p:not(.tor)').forEach(bump);curve(s);}
+ try{const s=await (await fetch('/api/poly/study'+(SRC==='history'?'?source=history':''),{cache:'no-store'})).json();if(s.enabled===false){$('mode').textContent='Study is off';$('mode').classList.add('off');return;}
+  const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){curve(s);}
   if(!last)curve(s);
   torus(s);
-  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);jev();last=s;$('age').textContent='updated '+new Date().toISOString().slice(11,19)+' UTC';
- }catch(e){$('age').textContent='reconnecting…';}
+  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);jev();last=s;$('age').textContent='Updated '+new Date().toISOString().slice(11,19)+' UTC';
+ }catch(e){$('age').textContent='Reconnecting…';}
 }
 setSrcLabel();initTorus();poll();setInterval(poll,3000);
 // gentle tilt on hover for the panels
-if(matchMedia('(hover:hover) and (pointer:fine)').matches)document.querySelectorAll('.p:not(.tor)').forEach(p=>{p.addEventListener('pointermove',e=>{const r=p.getBoundingClientRect();p.style.setProperty('--ty',((e.clientX-r.left)/r.width-.5)*3+'deg');p.style.setProperty('--tx',(.5-(e.clientY-r.top)/r.height)*3+'deg');});p.addEventListener('pointerleave',()=>{p.style.setProperty('--ty','0deg');p.style.setProperty('--tx','0deg');});});
+if(false)document.querySelectorAll('.p:not(.tor)').forEach(p=>{p.addEventListener('pointermove',e=>{const r=p.getBoundingClientRect();p.style.setProperty('--ty',((e.clientX-r.left)/r.width-.5)*3+'deg');p.style.setProperty('--tx',(.5-(e.clientY-r.top)/r.height)*3+'deg');});p.addEventListener('pointerleave',()=>{p.style.setProperty('--ty','0deg');p.style.setProperty('--tx','0deg');});});
 })();
 </script></body></html>

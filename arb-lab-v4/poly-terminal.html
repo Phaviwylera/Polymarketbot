@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070c0e"><title>POLY/EDGE Terminal</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070c0e"><title>Poly/Edge terminal</title>
 <style>
 :root{color-scheme:dark;--bg:#070c0e;--panel:#0a1114;--panel2:#0c161a;--line:#1c2a2f;--line2:#233136;--dim:#6f8589;--dim2:#879b9f;--text:#e4edef;--cyan:#65d5ff;--green:#67f3a2;--amber:#ffc45a;--violet:#bdabff;--red:#ff7786;--mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text)}body{font:11px/1.4 var(--mono);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;min-width:320px}
@@ -96,38 +96,38 @@ main{perspective:1400px}
 @media(min-width:1201px){#pPrice,#pLife{display:flex;flex-direction:column}#pPrice>.pb,#pLife>.pb{flex:1;display:flex;min-height:0}
  #pPrice .price{flex:1;height:auto}#candles,#lifecycle{height:auto!important;flex:1}#candles{min-height:206px}#lifecycle{min-height:118px}
  .rowA>.stack{grid-template-rows:minmax(0,1fr) auto}}
-</style></head><body>
-<header class="top"><div class="brand"><div class="logo">PE</div><div><b>POLY/EDGE // PAPER BOT</b><small id="sub">BTC · ETH · 5M + 15M UP/DOWN · PAPER ONLY</small></div></div>
+</style><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/poly-skin.css?v=20"></head><body>
+<header class="top"><div class="brand"><div class="logo">PE</div><div><b>Poly/Edge paper bot</b><small id="sub">BTC and ETH up/down rounds, 5 and 15 minutes. Paper money only.</small></div></div>
 <div class="chips" id="chips"></div>
-<div class="links"><a href="/study" style="color:var(--amber);font-weight:700;margin-right:12px">STUDY ◉</a><a href="/api/poly/dev/report" target="_blank" rel="noopener">Live report ↗</a></div>
+<div class="links"><a class="accent" href="/study">Open study</a><a href="/api/poly/dev/report" target="_blank" rel="noopener">Live report</a></div>
 <div class="clock"><b id="clock">--:--:--</b><span id="clock2">UTC</span></div></header>
-<div class="ticker"><div class="tag" id="feedTag">LIVE FEED</div><div style="overflow:hidden;flex:1"><div class="tape" id="tape">Connecting to paper engine…</div></div></div>
+<div class="ticker"><div class="tag" id="feedTag">Live feed</div><div style="overflow:hidden;flex:1"><div class="tape" id="tape">Connecting to paper engine…</div></div></div>
 <main>
 <section class="row rowA">
- <article class="p" id="pWallet"><div class="ph"><span>▣ Wallet <b>· paper</b></span><span class="badge" id="walletBadge">—</span></div><div class="pb">
-  <div class="mut" id="lifeLabel" style="font-size:9px;letter-spacing:.08em">ALL-TIME PAPER P&amp;L</div><div class="big" id="lifePnl">—</div>
+ <article class="p" id="pWallet"><div class="ph"><span><b>Wallet</b> Paper money</span><span class="badge" id="walletBadge">—</span></div><div class="pb">
+  <div class="mut" id="lifeLabel" style="font-size:12px">All-time paper P&amp;L</div><div class="big" id="lifePnl">—</div>
   <div class="mut" id="lifeSub" style="margin-top:3px">—</div>
-  <div class="kv"><div><span>EQUITY</span><b id="equity">—</b></div><div><span>ACCOUNT P&amp;L</span><b id="sessPnl">—</b></div><div><span>WIN RATE</span><b id="winRate">—</b></div><div><span>AVG TRADE</span><b id="avgTrade">—</b></div><div><span>MAX DD</span><b id="maxDd">—</b></div><div><span>OPEN</span><b id="openPos">—</b></div></div>
-  <div class="rules"><div class="rh"><span>CURRENT RULES</span><em id="rulesDesc">—</em></div><table id="rulesTbl"><thead><tr><th></th><th>TRADES</th><th>WIN</th><th>AVG</th><th>NET</th><th>PF</th></tr></thead><tbody></tbody></table></div>
+  <div class="kv"><div><span>Equity</span><b id="equity">—</b></div><div><span>Account P&amp;L</span><b id="sessPnl">—</b></div><div><span>Win rate</span><b id="winRate">—</b></div><div><span>Avg trade</span><b id="avgTrade">—</b></div><div><span>Max drawdown</span><b id="maxDd">—</b></div><div><span>Open</span><b id="openPos">—</b></div></div>
+  <div class="rules"><div class="rh"><span>Current rules</span><em id="rulesDesc">—</em></div><table id="rulesTbl"><thead><tr><th></th><th>Trades</th><th>Win</th><th>Avg</th><th>Net</th><th>PF</th></tr></thead><tbody></tbody></table></div>
   <div class="bars" id="exposure"></div></div></article>
- <article class="p" id="pPrice"><div class="ph"><span>◷ <b id="priceTitle">BTC</b> price · 10s candles</span><div class="tabs" id="laneTabs"></div></div><div class="pb"><div class="price"><canvas id="candles" style="height:206px"></canvas><div class="ladder" id="ladder"></div></div></div></article>
+ <article class="p" id="pPrice"><div class="ph"><span><b id="priceTitle">BTC</b> <b>price</b> 10-second candles</span><div class="tabs" id="laneTabs"></div></div><div class="pb"><div class="price"><canvas id="candles" style="height:206px"></canvas><div class="ladder" id="ladder"></div></div></div></article>
  <div class="stack">
-  <article class="p" id="pLife"><div class="ph"><span>⇢ Market lifecycle · <b>round → fill → resolve</b></span><span class="badge" id="lifeBadge">—</span></div><div class="pb" style="padding:6px 10px"><canvas id="lifecycle" style="height:118px"></canvas></div></article>
-  <article class="p" id="pGrid"><div class="ph"><span>▦ Resolution grid · <b>live expiries</b></span><span class="badge" id="resBadge">—</span></div><div class="pb" style="padding:8px"><div class="grid" id="resgrid"></div></div></article>
+  <article class="p" id="pLife"><div class="ph"><span><b>Market lifecycle</b> From round open to fill to resolution</span><span class="badge" id="lifeBadge">—</span></div><div class="pb" style="padding:6px 10px"><canvas id="lifecycle" style="height:118px"></canvas></div></article>
+  <article class="p" id="pGrid"><div class="ph"><span><b>Resolution grid</b> Live expiries</span><span class="badge" id="resBadge">—</span></div><div class="pb" style="padding:8px"><div class="grid" id="resgrid"></div></div></article>
  </div>
 </section>
-<article class="p" id="pAudit"><div class="ph"><span>⚖ Research audit · <b>walk-forward · fees · experiments · shadow lanes</b></span><span class="badge" id="auditBadge">—</span></div>
+<article class="p" id="pAudit"><div class="ph"><span><b>Research audit</b> Walk-forward tests, fees, experiments and shadow lanes</span><span class="badge" id="auditBadge">—</span></div>
  <div class="pb rules audit" style="margin-top:0;border-top:0;padding-top:4px"><table id="auditTbl"><tbody><tr><td>loading…</td></tr></tbody></table></div></article>
-<article class="p" id="pShell"><div class="ph"><span>◉ Neural shell · <b id="shellLane">BTC</b> · inputs → gates → decision core</span><span class="badge" id="shellBadge">—</span></div>
+<article class="p" id="pShell"><div class="ph"><span><b>Decision path</b> <b id="shellLane">BTC</b>: inputs, gates, then the decision</span><span class="badge" id="shellBadge">—</span></div>
  <div class="shell"><div class="inputs" id="inputs"></div><div class="netwrap"><canvas id="net"></canvas>
-  <div class="conf"><span>CALIBRATED P(UP) · <span id="confLane" style="display:inline">—</span></span><b id="confP">—</b><div class="meter"><i id="confBar" style="width:0"></i></div>
-  <span id="confEdge">EDGE AFTER FEES —</span><span id="confStrat" style="margin-top:4px">STRATEGY —</span><span id="confSize" style="margin-top:2px">SIZING —</span><span id="confMaker" style="margin-top:2px">MAKER —</span></div></div></div>
+  <div class="conf"><span>Calibrated P(up), <span id="confLane" style="display:inline">—</span></span><b id="confP">—</b><div class="meter"><i id="confBar" style="width:0"></i></div>
+  <span id="confEdge">Edge after fees: —</span><span id="confStrat" style="margin-top:4px">Strategy: —</span><span id="confSize" style="margin-top:2px">Sizing: —</span><span id="confMaker" style="margin-top:2px">Maker: —</span></div></div></div>
  <div class="timelines" id="timelines"></div></article>
 <section class="row rowC">
- <article class="p" id="pMatrix"><div class="ph"><span>✦ Edge matrix · <b>model vs market</b></span><span class="badge" id="matrixBadge">—</span></div><div class="pb"><div class="matrix"><div><canvas id="scatter" style="height:220px"></canvas><canvas id="hist" style="height:46px;margin-top:4px"></canvas></div><div class="etable" id="etable"></div></div></div></article>
- <article class="p" id="pFlow"><div class="ph"><span>⇶ Money flow · <b>where the trades go</b></span><span class="badge" id="flowBadge">—</span></div><div class="pb"><canvas id="sankey" style="height:276px"></canvas></div></article>
+ <article class="p" id="pMatrix"><div class="ph"><span><b>Edge matrix</b> Model against market</span><span class="badge" id="matrixBadge">—</span></div><div class="pb"><div class="matrix"><div><canvas id="scatter" style="height:220px"></canvas><canvas id="hist" style="height:46px;margin-top:4px"></canvas></div><div class="etable" id="etable"></div></div></div></article>
+ <article class="p" id="pFlow"><div class="ph"><span><b>Money flow</b> Where the trades go</span><span class="badge" id="flowBadge">—</span></div><div class="pb"><canvas id="sankey" style="height:276px"></canvas></div></article>
 </section>
 </main>
 <footer class="foot" id="foot">Loading…</footer>
-<script src="/poly-terminal.js?v=19.0" defer></script>
+<script src="/poly-terminal.js?v=20.0" defer></script>
 </body></html>

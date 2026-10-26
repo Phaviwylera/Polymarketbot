@@ -983,6 +983,9 @@ async def poly_study_snapshot(source:str='live'):
     if _history:snap['history']=_history.snapshot()
     return snap
 
+@app.get('/poly-skin.css')
+async def poly_skin_css():return FileResponse(ROOT/'poly-skin.css',media_type='text/css',headers={'Cache-Control':'no-store'})
+
 @app.get('/study')
 async def study_page():return FileResponse(ROOT/'poly-study.html',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
 

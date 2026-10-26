@@ -1,0 +1,128 @@
+/* POLY/EDGE skin v20: shared chrome for the terminal and the study page.
+   Colours are the pages' own variables (unchanged). This file only changes type, buttons, widgets and motion.
+   Idea: an instrument panel, not a card kit. Figures lead, labels recede, chrome stays quiet.
+   Loaded last; `body` prefixes outrank the pages' single-class rules without !important. */
+:root{--ui:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;--r:10px;--r-sm:7px}
+
+/* ---- type ---------------------------------------------------------------------------------------- */
+body{font:13px/1.45 var(--ui);font-variant-numeric:tabular-nums;letter-spacing:0;font-variation-settings:"wdth" 100}
+body code,body .mono{font-family:var(--mono);font-size:.92em}
+body b,body strong{font-weight:600}
+
+/* ---- top bar ------------------------------------------------------------------------------------- */
+body .top{gap:16px;padding:10px 18px;background:var(--bg)}
+body .logo{width:32px;height:32px;border-radius:8px;font:700 12px var(--ui);letter-spacing:.02em}
+body .brand b{font:650 15px/1.2 var(--ui);letter-spacing:0;font-variation-settings:"wdth" 108}
+body .brand small{font-size:12px;letter-spacing:0;color:var(--dim2);margin-top:1px;text-transform:none}
+
+/* status lamp (replaces the pulsing pill) */
+.lamp{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text)}
+.lamp::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 3px rgba(255,196,90,.14)}
+.lamp.off::before{background:var(--dim);box-shadow:none}
+.stamp{font-size:12px;color:var(--dim)}
+
+/* ---- buttons: one system ------------------------------------------------------------------------- */
+.btn,body .links a,body .tabs button,body a.pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:var(--r-sm);
+ background:var(--panel);color:var(--text);font:500 12.5px var(--ui);letter-spacing:0;text-transform:none;text-decoration:none;cursor:pointer;
+ transition:background-color .15s,border-color .15s,color .15s}
+.btn:hover,body .links a:hover,body .tabs button:hover,body a.pill:hover{background:var(--panel2);border-color:#2f4249;color:var(--text);text-decoration:none}
+.btn:focus-visible,body .links a:focus-visible,body .tabs button:focus-visible,.seg button:focus-visible,body a:focus-visible,body summary:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.btn.accent,body .links a.accent{color:var(--amber);border-color:#4d3f1d}
+.btn.accent:hover,body .links a.accent:hover{background:rgba(255,196,90,.07);border-color:#6a5626}
+
+/* segmented control: Live / History, and the terminal's lane tabs */
+.seg,body .tabs{display:inline-flex;gap:0;padding:2px;border:1px solid var(--line2);border-radius:var(--r-sm);background:var(--bg)}
+.seg button,body .tabs button{height:26px;padding:0 11px;border:0;border-radius:5px;background:transparent;color:var(--dim2);font:500 12px var(--ui);cursor:pointer}
+.seg button:hover,body .tabs button:hover{background:transparent;color:var(--text);border:0}
+.seg button[aria-pressed="true"],body .tabs button.on{background:var(--panel2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line2)}
+
+/* ---- panels -------------------------------------------------------------------------------------- */
+body .p{border-radius:var(--r);border:1px solid var(--line);box-shadow:none;transform:none;transition:none;animation:none}
+body .p:hover,body .p.bump{transform:none;box-shadow:none;animation:none}
+body .ph{padding:11px 14px;gap:12px;font-size:12.5px;letter-spacing:0;text-transform:none;color:var(--dim2);align-items:baseline}
+body .ph>span:first-child{min-width:0}
+body .ph b{font-weight:600;color:var(--text);font-size:13.5px}
+body .ph .t{color:var(--text);font-weight:600;font-size:13.5px;margin-right:8px}
+body .pb{padding:14px}
+
+/* state tag on the right of a panel header */
+body .ph .badge,body .ph>span[id$="Badge"],body #hypBadge,body #jevBadge{display:inline-flex;align-items:center;gap:6px;border:0;padding:0;border-radius:0;
+ font-size:12px;letter-spacing:0;text-transform:none;color:var(--dim2);white-space:nowrap}
+body .ph .badge::before,body .ph>span[id$="Badge"]::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.8}
+body .ph .badge.live{color:var(--green)}body .ph .badge.warn{color:var(--amber)}body .ph .badge.bad{color:var(--red)}
+body .ph>span[id$="Badge"].pos{color:var(--green)}body .ph>span[id$="Badge"].neg{color:var(--red)}
+
+/* ---- readout strip (replaces boxed KPI cards) ---------------------------------------------------- */
+body .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0;row-gap:14px}
+body .kpi{background:none;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:2px 16px}
+body .kpi:first-child{border-left:0;padding-left:0}
+body .kpi span{font-size:12px;letter-spacing:0;text-transform:none;color:var(--dim2)}
+body .kpi b{display:block;font:600 24px/1.15 var(--ui);font-variation-settings:"wdth" 112;letter-spacing:-.01em;margin:3px 0 2px}
+body .kpi em{font-size:12px;color:var(--dim);line-height:1.35}
+@media(max-width:620px){body .kpis{grid-template-columns:1fr 1fr;row-gap:0}
+ body .kpi,body .kpi:first-child{border-left:0;border-top:1px solid var(--line);padding:10px 0}
+ body .kpi:nth-child(-n+2){border-top:0;padding-top:0}body .kpi:nth-child(even){padding-left:14px;border-left:1px solid var(--line)}}
+
+/* terminal: wallet figures */
+body .big{font:650 40px/1 var(--ui);font-variation-settings:"wdth" 112;letter-spacing:-.02em;text-shadow:none}
+body .kv{gap:0;row-gap:12px;margin-top:14px}
+body .kv>div{background:none;border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:none;padding:0 12px}
+body .kv>div:nth-child(3n+1){border-left:0;padding-left:0}
+body .kv div span{font-size:12px;letter-spacing:0;color:var(--dim2);text-transform:none}
+body .kv div b{display:block;font:600 16px/1.3 var(--ui);font-variation-settings:"wdth" 108}
+
+/* terminal: lane quotes in the top bar */
+body .chips .chip{background:none;border:0;border-left:1px solid var(--line);border-radius:0;padding:0 14px;min-width:0;box-shadow:none}
+body .chips .chip:first-child{border-left:0}
+body .chips .chip span{font-size:12px;letter-spacing:0;color:var(--dim2)}
+body .chips .chip b{font:600 14px var(--ui);font-variation-settings:"wdth" 108}
+body .clock b{font:600 20px var(--ui);font-variation-settings:"wdth" 112}
+body .clock span{font-size:12px}
+
+/* ---- tables -------------------------------------------------------------------------------------- */
+body table{font-size:12.5px}
+body th{font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--dim);padding:6px 8px;border-bottom:1px solid var(--line)}
+body td{padding:7px 8px;border-bottom:1px solid rgba(28,42,47,.55)}
+body tr:last-child td{border-bottom:0}
+body .rules th,body .rules .rh{font-size:12px;letter-spacing:0;text-transform:none}
+body .rules td:first-child{font-size:12.5px;letter-spacing:0;color:var(--dim2)}
+body .audit td:first-child{width:200px;white-space:normal}
+body .etable{font-size:12px}body .etable .h{font-size:12px;letter-spacing:0}
+body .ladder{font-size:12px}body .ladder .h{font-size:12px;letter-spacing:0}
+
+/* ---- notes, details ------------------------------------------------------------------------------ */
+body .note{font-size:12.5px;line-height:1.5;color:var(--dim2);max-width:80ch;text-align:left}
+body details>summary{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:var(--r-sm);
+ color:var(--text);font-size:12.5px;cursor:pointer;list-style:none;margin-top:12px}
+body details>summary::-webkit-details-marker{display:none}
+body details>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--dim2);border-bottom:1.5px solid var(--dim2);transform:rotate(-45deg);transition:transform .15s}
+body details[open]>summary::before{transform:rotate(45deg)}
+
+/* ---- study page specifics ------------------------------------------------------------------------ */
+body .hm h4,body .col h5{font-size:12px;letter-spacing:0;text-transform:none;font-weight:500}
+body .grid{font-size:10px}
+body .rc{box-shadow:none;animation:none;border-radius:var(--r-sm)}
+body .chip.UP,body .chip.DOWN{font-size:11.5px;border-radius:5px;padding:2px 7px}
+body .rc .ln{font-size:12px}
+body .fill,body .inp{animation:none}
+body .inp .t,body .fill .t span{letter-spacing:0;font-size:12px}
+body .inp small,body .fill small{font-size:11px}
+body .ttl{letter-spacing:0;font-size:12.5px}
+body .legend,body .tleg{font-size:12px}
+
+/* terminal: feed ticker tag */
+body .ticker .tag{font:600 11.5px var(--ui);letter-spacing:0}
+
+@media(prefers-reduced-motion:reduce){.btn,.seg button,body details>summary::before{transition:none}}
+
+/* ---- pass 2 ---------------------------------------------------------------------------------------- */
+body .ph{flex-wrap:wrap;row-gap:4px}
+body .ph>span:first-child>b:first-of-type{margin-right:8px}
+body .ph>span:first-child{color:var(--dim)}
+body .tabs button{white-space:nowrap}
+body .kv>div{padding:0 10px}
+body .kv div span{white-space:nowrap;font-size:11.5px}
+body .kv div b{font-size:15px}
+body #lifeLabel{letter-spacing:0;text-transform:none}
+body .bar span{font-size:12px}
+body .rules td:first-child{text-transform:none}
