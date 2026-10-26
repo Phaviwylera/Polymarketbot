@@ -32,6 +32,12 @@ class HistoryTests(unittest.TestCase):
         self.assertTrue(up['won']);self.assertGreater(up['spotVsOpenBps'],0);self.assertAlmostEqual(up['leftFrac'],100/300,3)
         self.assertEqual(h.study.wallet_rounds[-1]['winner'],'UP')
         self.assertEqual(asyncio.run(h.round('BTC','btc',300,'BTC-USD',START)),0)        # never twice
+    def test_spot_has_no_look_ahead(self):
+        h=ph.History(st.Study('history'),root=tempfile.mkdtemp(),http=Http(),days=1)
+        asyncio.run(h.round('BTC','btc',300,'BTC-USD',START))
+        up=[x for x in h.buffer[next(iter(h.buffer))] if x['token']=='UP'][0]       # trade at START+200 (minute 3)
+        self.assertAlmostEqual(up['spotVsOpenBps'],(80004/80000-1)*1e4,2)           # minute 2's close (ended START+180), not minute 3's
+        self.assertEqual(h.snapshot()['version'],'v2')
     def test_plan_is_oldest_first_and_skips_done(self):
         h=ph.History(st.Study('history'),root=tempfile.mkdtemp(),http=Http(),days=1)
         p=h.plan(now=START+86400);self.assertEqual(p,sorted(p));self.assertTrue(all(x[0]+x[3]<=START+86400-1800 for x in p))
@@ -39,7 +45,7 @@ class HistoryTests(unittest.TestCase):
     def test_flush_and_resume(self):
         d=tempfile.mkdtemp();h=ph.History(st.Study('history'),root=d,http=Http(),days=1)
         asyncio.run(h.round('BTC','btc',300,'BTC-USD',START));asyncio.run(h.flush())
-        self.assertTrue(os.listdir(os.path.join(d,'history')))
+        self.assertTrue(os.listdir(os.path.join(d,'history_v2')))
         h2=ph.History(st.Study('history'),root=d,http=Http(),days=1);h2.load()
         self.assertIn('btc-updown-5m-%d'%START,h2.done);self.assertEqual(h2.study.totals['rounds'],1)
     def test_unresolved_market_is_retried_later(self):

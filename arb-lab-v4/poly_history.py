@@ -6,6 +6,8 @@ For each past round (oldest first, so the history study's rule stays prequential
   * Coinbase 1-minute candles: spot at each trade and at the round's open, for spot-vs-open context
     (Polymarket resolves on Chainlink; Coinbase is a close proxy used for study only).
 Rows go to a separate history Study (never mixed with the live one) and to S3 (polybot/history/...).
+Spot at a trade is the close of the last minute that had FULLY closed before the trade (no look-ahead: v1 used the
+close of the minute containing the trade, up to 60 s in the future, which leaked late-round outcomes; v1 results discarded).
 Progress is saved, so restarts resume. Paced gently (one round every ~0.7 s) to stay polite to public APIs.
 Off with POLY_HISTORY=0; depth with POLY_HISTORY_DAYS (default 21).
 """
@@ -16,6 +18,7 @@ from collections import defaultdict
 GAMMA='https://gamma-api.polymarket.com';DATA='https://data-api.polymarket.com';COINBASE='https://api.exchange.coinbase.com'
 LANES=(('BTC','btc',300,'BTC-USD'),('ETH','eth',300,'ETH-USD'),('BTC15','btc',900,'BTC-USD'),('ETH15','eth',900,'ETH-USD'))
 CURRENT=None
+VERSION='v2'   # v2: no-look-ahead spot; files are versioned so v1 state is never reloaded
 
 class History:
     def __init__(self,study,root=None,s3=None,http=None,days=None):
@@ -78,13 +81,13 @@ class History:
             except (KeyError,TypeError,ValueError):continue
             if ts>1e12:ts/=1000
             if outc not in ('UP','DOWN') or side not in ('BUY','SELL') or not 0<price<1 or size<=0:continue
-            sp=await self.spot_at(product,ts);spot=sp[1] if sp else None
+            sp=await self.spot_at(product,ts-60);spot=sp[1] if sp else None   # previous minute's close: known at ts
             bps=(spot/opn-1)*1e4 if spot and opn else None
             left=max(0.,min(1.,(end-ts)/interval))
             rows.append({'t':ts,'lane':lane,'slug':slug,'roundEnd':end,'token':outc,'price':price,'size':size,'aggressor':side,
                          'leftFrac':round(left,4),'secondsLeft':round(end-ts,1),'spotVsOpenBps':None if bps is None else round(bps,2),
                          'agreeBps':None if bps is None else round(bps if outc=='UP' else -bps,2),'won':outc==winner,
-                         'wallet':str(t.get('proxyWallet') or '')[:42],'pToken':None,'hist':True})
+                         'wallet':str(t.get('proxyWallet') or '')[:42],'pToken':None,'hist':True,'v':VERSION})
         self.done.add(slug)
         if rows:
             self.study.on_round(rows,winner.lower())
@@ -102,28 +105,28 @@ class History:
     # ---- files / persistence ------------------------------------------------------------------------
     async def flush(self):
         for day,rows in list(self.buffer.items()):
-            d=self.path('history');os.makedirs(d,exist_ok=True);p=os.path.join(d,f'{day}.jsonl.gz')
+            d=self.path('history_'+VERSION);os.makedirs(d,exist_ok=True);p=os.path.join(d,f'{day}.jsonl.gz')
             with gzip.open(p,'at') as f:
                 for r in rows:f.write(json.dumps(r,separators=(',',':'))+'\n')
             self.buffer.pop(day,None)
         try:
-            with open(self.path('history_done.json'),'w') as f:json.dump(sorted(self.done),f)
-            self.study.save(self.path('history_study.json.gz'))
+            with open(self.path(f'history_done_{VERSION}.json'),'w') as f:json.dump(sorted(self.done),f)
+            self.study.save(self.path(f'history_study_{VERSION}.json.gz'))
         except Exception as exc:self.state['lastError']=f'save: {type(exc).__name__}'
     async def upload(self):
         if self.s3 is None:return
-        d=self.path('history')
+        d=self.path('history_'+VERSION)
         for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
             if name>=time.strftime('%Y-%m-%d',time.gmtime(time.time()-86400)):continue   # recent days may still grow
             p=os.path.join(d,name)
             try:
                 import hashlib
-                await self.s3.put(p,f'polybot/tape/history/{name}',hashlib.sha256(open(p,'rb').read()).hexdigest());os.remove(p)
+                await self.s3.put(p,f'polybot/tape/history-{VERSION}/{name}',hashlib.sha256(open(p,'rb').read()).hexdigest());os.remove(p)
             except Exception as exc:self.state['lastError']=f'upload: {type(exc).__name__}'
     def load(self):
         try:
-            if os.path.exists(self.path('history_done.json')):self.done=set(json.load(open(self.path('history_done.json'))))
-            self.study.load(self.path('history_study.json.gz'))
+            if os.path.exists(self.path(f'history_done_{VERSION}.json')):self.done=set(json.load(open(self.path(f'history_done_{VERSION}.json'))))
+            self.study.load(self.path(f'history_study_{VERSION}.json.gz'))
         except Exception as exc:self.state['lastError']=f'load: {type(exc).__name__}'
     # ---- main loop ----------------------------------------------------------------------------------
     def plan(self,now=None):
@@ -149,4 +152,4 @@ class History:
                 await asyncio.sleep(.7)
             await self.flush();await self.upload()
             await asyncio.sleep(900)                       # then pick up newly resolved rounds every 15 min
-    def snapshot(self):return {**self.state,'days':self.days,'studied':len(self.done)}
+    def snapshot(self):return {**self.state,'days':self.days,'studied':len(self.done),'version':VERSION,'spot':'previous fully-closed minute (no look-ahead)'}
