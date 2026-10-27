@@ -340,6 +340,9 @@ class PolyServerDemo:
         ask=best_ask if best_ask is not None else (min(asks) if asks else None)
         self.bbo[side]={'bid':bid,'ask':ask,'bidSize':float(bids.get(bid,0)), 'askSize':float(asks.get(ask,0))}
         now=time.time()
+        for _f in getattr(self,'book_listeners',()):   # record-only lanes (fast maker) see every book change
+            try:_f(self.lane,side,self.bbo,self.market,now)
+            except Exception:pass
         if now-self._depth_publish_at.get(side,0)>=.2:
             self._depth_publish_at[side]=now
             self.depth[side]={key:[{'price':px,'size':qty} for px,qty in sorted(levels.items(),reverse=key=='bids')[:3]] for key,levels in book.items()}
@@ -506,11 +509,14 @@ class PolyServerDemo:
                         try:
                             import poly_experiments as _px;_px.d_on_print(d,self.trade_prints[-1])
                         except Exception:pass
+                    for _f in getattr(self,'print_listeners',()):
+                        try:_f(self.lane,self.trade_prints[-1],self.market)
+                        except Exception:pass
                     tape=getattr(self,'tape',None)
                     if tape is not None:   # shadow: score this market trade with the model (never trades)
                         try:tape.on_print(self.lane,self.trade_prints[-1],self.market,(self.edge.signals.get(self.lane) if self.edge else None),self.momentum_decision,
                                      {'spot':self.spot,'open':self.open_ref,'openTrusted':self.open_trusted,
-                                      'bbo':{k:{'bid':self.bbo[k].get('bid'),'ask':self.bbo[k].get('ask')} for k in ('up','down')}})
+                                      'bbo':{k:{'bid':self.bbo[k].get('bid'),'ask':self.bbo[k].get('ask'),'bidSize':self.bbo[k].get('bidSize')} for k in ('up','down')}})
                         except Exception:pass
                     # Apply this print before a subsequently received book/risk update.
                     inv=(self.paper or {}).get('inventory')

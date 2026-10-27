@@ -61,8 +61,8 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
 .note{color:var(--dim2);font-size:10px;margin-top:6px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-.lanes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0}
-.lane{padding:0 18px;border-left:1px solid var(--line);min-width:0}.lane:first-child{border-left:0;padding-left:0}
+.lanes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;row-gap:22px}
+.lane{padding:0 18px;border-left:1px solid var(--line);min-width:0}.lane:nth-child(3n+1){border-left:0;padding-left:0}
 .lane h4{margin:0 0 2px;font-size:14px;font-weight:600;color:var(--text)}.lane .why{color:var(--dim2);font-size:12.5px;margin:0 0 10px;max-width:46ch}
 .lane .fig{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid rgba(28,42,47,.55);font-size:12.5px}.lane .fig:last-of-type{border-bottom:0}
 .lane .fig span{color:var(--dim2)}.lane .fig b{font-weight:600;text-align:right}
@@ -364,7 +364,7 @@ async function lanes(){
   const pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—',b4=v=>ok(v)?v.toFixed(4):'—',n=v=>ok(v)?v:'—';
   const vcls=v=>v==='CONFIRMED'?'pos':v==='not confirmed'?'neg':'';const vt=v=>v?v.charAt(0).toUpperCase()+v.slice(1).toLowerCase():'—';
   const fig=(k,v)=>`<div class="fig"><span>${k}</span><b>${v}</b></div>`;
-  const M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
+  const F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
   const off=o=>o.enabled===false?'<div class="dim">Off on the server.</div>':'';
   $('lanes').innerHTML=`
   <div class="lane"><h4>Maker quotes (M1)</h4><p class="why">Resting bids at the best bid on both tokens, behind the existing queue. Earns the spread and pays no taker fee, but gets picked off.</p>${off(M)}
@@ -379,7 +379,15 @@ async function lanes(){
   <div class="lane"><h4>Event markets (E1)</h4><p class="why">Slower markets: politics, sports, news. Buy the 80–95¢ favourite three days out, the classic favourite–longshot test.</p>${off(E)}
    <div class="verdict ${vcls(e1.verdict)}">${vt(e1.verdict)}</div>
    ${fig('Past markets studied',`${n(E.historyMarkets)} (${E.phase||'—'})`)}${fig('History, +2¢ cost',`${n(eh.n)} trades, ${pc(eh.mean)} per $`)}
-   ${fig('History bad case',pc(eh.lower95))}${fig('Forward trades',`${n(ef.n)} (needs 100), ${pc(ef.mean)}`)}${fig('3-day calibration',`${n(e3.markets)} markets`)}</div>`;
+   ${fig('History bad case',pc(eh.lower95))}${fig('Forward trades',`${n(ef.n)} (needs 100), ${pc(ef.mean)}`)}${fig('3-day calibration',`${n(e3.markets)} markets`)}</div>
+  <div class="lane"><h4>Fast maker (M2)</h4><p class="why">Requotes on every book change with 250 ms latency, quotes equal shares on both tokens, completes the pair or cuts the loss.</p>${off(F)}
+   <div class="verdict ${vcls(m2.verdict)}">${vt(m2.verdict)}</div>
+   ${fig('Rounds with a fill',`${n(m2.rounds)} (needs 300), fill rate ${ok(F.fillRate)?(100*F.fillRate).toFixed(0)+'%':'—'}`)}${fig('Pairs completed',n(F.pairsCompleted))}${fig('Stopped out',n(F.stoppedOut))}
+   ${fig('P&L per $',`${pc(m2.avgPerDollar)}, bad case ${pc(m2.lower95)}`)}${fig('Paper P&L',ok(m2.pnlUsd)?'$'+m2.pnlUsd.toFixed(2):'—')}</div>
+  <div class="lane"><h4>Polymarket vs Kalshi (K1)</h4><p class="why">Same 15-minute rounds on two exchanges. UP on one plus DOWN on the other under $1 after fees is a gap, if both settle the same way.</p>${off(K)}
+   <div class="verdict ${vcls(k1.verdict)}">${vt(k1.verdict)}</div>
+   ${fig('Rounds matched, settled',`${n(K.matched)} scans, ${n(K.roundsSettled)} rounds`)}${fig('Gaps seen',n(K.gapsSeen))}${fig('Gap trades',`${n(k1.trades)} (needs 100)`)}
+   ${fig('P&L per pair',`${pc(k1.avgPnlPerPair)}, bad case ${pc(k1.lower95)}`)}${fig('Exchanges disagree',ok(K.venuesDisagreePct)?K.venuesDisagreePct+'% of rounds':'—')}</div>`;
   $('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
  }catch(e){}
 }

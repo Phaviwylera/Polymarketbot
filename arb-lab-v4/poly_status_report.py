@@ -77,7 +77,7 @@ def _study_state():
 
 def _lanes_state():
     out={}
-    for name in ('poly_maker','poly_xmarket','poly_events'):
+    for name in ('poly_maker','poly_xmarket','poly_events','poly_fastmaker','poly_kalshi'):
         try:
             import importlib;m=importlib.import_module(name);out[name[5:]]=m.CURRENT.compact() if m.CURRENT else None
         except Exception as exc:out[name[5:]]={'error':type(exc).__name__}
