@@ -86,6 +86,9 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
 <section class="p c12"><div class="ph"><span><b>Jev forecaster</b> Records only. Does it beat the market price?</span><span id="jevBadge">—</span></div><div class="pb"><div class="kpis" id="jevK"></div><div class="scroll" style="max-height:200px"><table id="jevT"></table></div><div class="note" id="jevN"></div></div></section>
 <section class="p c12"><div class="ph"><span><b>New approaches</b> Edges that don't need a better prediction. Record only, judged on rounds after they were locked</span><span id="lanesAt">—</span></div>
  <div class="pb"><div class="lanes" id="lanes"><div class="dim">Loading…</div></div></div></section>
+<section class="p c12"><div class="ph"><span><b>Rival bots</b> What the profitable public up/down accounts actually do, from their own trades</span><span id="rivAt">—</span></div>
+ <div class="pb"><div class="scroll"><table id="riv"><tr><td class="dim">The first study runs a few minutes after a restart, then every 6 hours.</td></tr></table></div>
+ <div class="note">Read-only. Pair cost under $1 means the spread itself pays. Their profit also includes volume-tier taker rebates (up to 44–50% of taker fees at $4M–$10M a month), which a small account cannot get.</div></div></section>
 <section class="p c12" id="histPanel" style="display:none"><div class="ph"><span><b>History backfill</b> Past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
  <section class="p c12 tor"><div class="ph"><span><b>Market torus</b> Every trade, placed on the ring of its round</span><span>Around the ring: time. Through the tube: price. Drag to rotate.</span></div>
   <div class="tbody" id="tbody"><canvas id="threads"></canvas>
@@ -357,6 +360,17 @@ function hyp(s){
   (H.byWeek||[]).map(w=>`<tr><td>${w.week}</td><td class="r">${w.trades}</td><td class="r">${w.winPct??'—'}</td><td class="r ${cls(w.avgAtPrint)}">${pc(w.avgAtPrint)}</td><td class="r ${cls(w.avgStressed)}">${pc(w.avgStressed)}</td><td class="r ${cls(w.lower95)}">${pc(w.lower95)}</td></tr>`).join('');
  $('ledger').innerHTML='<tr><th>id</th><th>idea</th><th>verdict</th><th>evidence</th></tr>'+(s.ledger||[]).map(l=>`<tr><td>${l.id}</td><td style="white-space:normal">${l.idea}</td><td class="${l.verdict.startsWith('rejected')?'neg':'dim'}" style="white-space:normal">${l.verdict}</td><td style="white-space:normal">${l.evidence}</td></tr>`).join('');
 }
+function rivals(R){
+ const res=(R||{}).results||{},names=Object.keys(res);if(!names.length)return;
+ const pc=v=>ok(v)?(100*v).toFixed(1)+'%':'—',usd=v=>ok(v)?(v<0?'−$':'$')+Math.abs(v).toFixed(2):'—',c=v=>ok(v)?v.toFixed(3):'—';
+ const rows=[['Rounds traded (3 days)',x=>x.rounds],['Both sides bought',x=>ok(x.bothSidesPct)?x.bothSidesPct+'%':'—'],['Average pair cost',x=>c(x.avgPairCost)],
+  ['Pairs costing under $1',x=>ok(x.pairCostUnder1Pct)?x.pairCostUnder1Pct+'%':'—'],['Maker share of shares',x=>ok(x.makerSharePct)?x.makerSharePct+'%':'—'],
+  ['First buy, share of window',x=>ok(x.medianFirstBuyFrac)?pc(x.medianFirstBuyFrac):'—'],['Merges (last 500)',x=>x.merges??'—'],['Rounds settled in sample',x=>x.settledRounds],
+  ['P&L before fees',x=>usd(x.pnlBeforeFees)],['Taker fees paid',x=>usd(x.takerFees)],['P&L after fees',x=>usd(x.pnlAfterFees)],
+  ['Plus maker rebate (est.)',x=>usd(x.pnlWithMakerRebate)],['Taker rebate needed to break even',x=>ok(x.takerRebateNeededToBreakEvenPct)?x.takerRebateNeededToBreakEvenPct+'%':'—']];
+ $('riv').innerHTML='<tr><th></th>'+names.map(n=>`<th class="r">@${n}</th>`).join('')+'</tr>'+rows.map(([k,f])=>`<tr><td>${k}</td>${names.map(n=>`<td class="r">${res[n].error?(k==='Rounds traded (3 days)'?'<span class="neg">'+res[n].error+'</span>':''):f(res[n])}</td>`).join('')}</tr>`).join('');
+ if(R.lastRunAt)$('rivAt').textContent='Studied '+new Date(R.lastRunAt*1000).toISOString().slice(5,16).replace('T',' ')+' UTC';
+}
 let lanesAt=0;
 async function lanes(){
  if(Date.now()-lanesAt<20000)return;lanesAt=Date.now();
@@ -388,7 +402,7 @@ async function lanes(){
    <div class="verdict ${vcls(k1.verdict)}">${vt(k1.verdict)}</div>
    ${fig('Rounds matched, settled',`${n(K.matched)} scans, ${n(K.roundsSettled)} rounds`)}${fig('Gaps seen',n(K.gapsSeen))}${fig('Gap trades',`${n(k1.trades)} (needs 100)`)}
    ${fig('P&L per pair',`${pc(k1.avgPnlPerPair)}, bad case ${pc(k1.lower95)}`)}${fig('Exchanges disagree',ok(K.venuesDisagreePct)?K.venuesDisagreePct+'% of rounds':'—')}</div>`;
-  $('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
+  rivals(L.rivals);$('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
  }catch(e){}
 }
 let jevAt=0;

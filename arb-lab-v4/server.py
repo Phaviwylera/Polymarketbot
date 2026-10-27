@@ -975,6 +975,9 @@ async def start_trade_tape():
             if not hasattr(_ln,'print_listeners'):_ln.print_listeners=[]
             _ln.book_listeners.append(fmk.on_book);_ln.print_listeners.append(fmk.on_print)
         edge.settle_listeners.append(fmk.settle);asyncio.create_task(fmk.loop());print('POLY_FASTMAKER_ON',flush=True)
+    import poly_rivals                                # read-only study of public rival bot accounts
+    rv=poly_rivals.Rivals()
+    if rv.enabled:asyncio.create_task(rv.loop());print('POLY_RIVALS_ON',flush=True)
     ks=poly_kalshi.Kalshi(engines=poly_server_engine.engines)
     if ks.enabled:edge.settle_listeners.append(ks.settle);asyncio.create_task(ks.loop());print('POLY_KALSHI_ON',flush=True)
     import poly_jev;jev=poly_jev.Jev()            # record-only; on only when OPENROUTER_API_KEY is set on the server
@@ -985,9 +988,9 @@ async def start_trade_tape():
 @app.get("/api/poly/lanes")
 async def poly_new_lanes():
     """Maker (M1), cross-market (X1) and event-market (E1) lanes, record-only."""
-    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi
+    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals
     out={}
-    for name,mod in (('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi)):
+    for name,mod in (('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi),('rivals',poly_rivals)):
         try:out[name]=mod.CURRENT.report() if mod.CURRENT else {'enabled':False}
         except Exception as exc:out[name]={'error':type(exc).__name__}
     return out

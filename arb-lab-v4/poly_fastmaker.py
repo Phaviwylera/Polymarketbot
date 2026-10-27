@@ -23,15 +23,16 @@ PAIR_SHARES=5.0;MIN_EDGE=0.01;LATENCY=0.25;STOP_MOVE=0.10;START_AT=0.95;FLATTEN_
 REGISTERED_AT=1793085345   # 2026-10-27 07:15 UTC: forward results count only after this
 CURRENT=None
 def fee(p):return FEE_RATE*p*(1-p)
+def rebate(p):return 0.20*FEE_RATE*p*(1-p)    # maker share of crypto taker fees (estimate: assumes our fills match fee-paying takers)
 OTHER={'up':'down','down':'up'}
 
 class Round:
-    __slots__=('slug','lane','end','interval','bbo','q','pending','inv','cash','flattened','events','closed')
+    __slots__=('slug','lane','end','interval','bbo','q','pending','inv','cash','flattened','events','closed','reb')
     def __init__(self,slug,lane,end,interval):
         self.slug=slug;self.lane=lane;self.end=end;self.interval=interval
         self.bbo={'up':{},'down':{}};self.q={'up':None,'down':None};self.pending={'up':None,'down':None}
         self.inv={'up':[0.,0.],'down':[0.,0.]}   # side -> [shares, cost]
-        self.cash=0.;self.flattened=0;self.events=0.;self.closed=False
+        self.cash=0.;self.flattened=0;self.events=0.;self.closed=False;self.reb=0.
 
 class FastMaker:
     def __init__(self,root=None):
@@ -126,7 +127,7 @@ class FastMaker:
                 eat=min(q['ahead'],size);q['ahead']-=eat;fill=min(room,size-eat)
             else:fill=0.
             if fill>0:
-                r.inv[side]=[sh+fill,cost+fill*q['price']];self.state['fills']+=1
+                r.inv[side]=[sh+fill,cost+fill*q['price']];self.state['fills']+=1;r.reb+=fill*rebate(q['price'])
                 for s in ('up','down'):self._requote(r,s,t)
         except Exception as exc:self._err(exc)
     def settle(self,slug,winner):
@@ -138,7 +139,7 @@ class FastMaker:
         pnl=pay-held+r.cash;cost=held+r.events                           # cash already nets flattened cost
         pairs=min(r.inv['up'][0],r.inv['down'][0])
         self.done.append({'slug':slug,'lane':r.lane,'end':r.end,'fills':1,'pairs':round(pairs,4),'flattened':r.flattened,
-                          'costUsd':round(cost,4),'cashUsd':round(r.cash,4),'pnlUsd':round(pnl,4),
+                          'costUsd':round(cost,4),'cashUsd':round(r.cash,4),'pnlUsd':round(pnl,4),'rebateUsd':round(r.reb,5),
                           'perDollar':round(pnl/cost,4) if cost>0 else None})
         self.state['rounds']+=1;return 1
     # ---- report --------------------------------------------------------------------------------------
@@ -151,6 +152,7 @@ class FastMaker:
                 'M2':{'rule':'quote both tokens for equal shares at the best bid (pair <= 99c), complete the pair after a fill, stop-loss 10c, flatten at 15% left; 250 ms latency, back of the queue',
                       'pass':f'>= {MIN_ROUNDS} rounds with a fill and mean P&L per $ - 1.645 SE > 0','registeredAt':REGISTERED_AT,
                       'rounds':n,'avgPerDollar':None if m is None else round(m,4),'lower95':lo,'pnlUsd':round(sum(x['pnlUsd'] for x in fwd),3),
+                      'rebateUsd':round(sum(x.get('rebateUsd') or 0 for x in fwd),4),
                       'verdict':'collecting' if n<MIN_ROUNDS else ('CONFIRMED' if lo is not None and lo>0 else 'not confirmed')},
                 'roundsSeen':allr,'roundsFilled':len(filled),'fillRate':round(len(filled)/allr,3) if allr else None,
                 'pairsCompleted':sum(1 for x in filled if (x.get('pairs') or 0)>=PAIR_SHARES-1e-6),

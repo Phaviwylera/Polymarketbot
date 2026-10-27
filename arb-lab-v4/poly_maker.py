@@ -32,6 +32,8 @@ FEE_RATE=float(os.getenv('POLY_MAKER_FEE_RATE','0'))
 REGISTERED_AT=1793071725   # 2026-10-27 03:28 UTC: forward results count only after this
 CURRENT=None
 def fee(p):return FEE_RATE*p*(1-p)
+REBATE=0.20*0.07          # makers share 20% of crypto taker fees, pro rata by fee-equivalent 0.07 p(1-p) per share
+def rebate(p):return REBATE*p*(1-p)
 
 class Maker:
     def __init__(self,root=None):
@@ -123,13 +125,13 @@ class Maker:
         if not r or winner not in ('up','down'):return 0
         W=winner.upper();out={'slug':slug,'lane':r['lane'],'roundEnd':r['roundEnd'],'winner':W,'v':{}}
         for v in VARIANTS:
-            qs=r['v'][v];pnl=0.;cost=0.;fills=0
+            qs=r['v'][v];pnl=0.;cost=0.;fills=0;reb=0.
             for tok,q in qs.items():
                 if q['filled']<=0:continue
-                fills+=1;won=tok==W;cost+=q['cost']
+                fills+=1;won=tok==W;cost+=q['cost'];reb+=q['filled']*rebate(q['cost']/q['filled'])
                 pnl+=q['filled']*(1. if won else 0.)-q['cost']-fee(q['cost']/q['filled'])*q['filled']
             both=all(q['filled']>0 for q in qs.values()) and len(qs)==2
-            out['v'][v]={'quotes':len(qs),'fills':fills,'both':both,'costUsd':round(cost,4),'pnlUsd':round(pnl,4),
+            out['v'][v]={'quotes':len(qs),'fills':fills,'both':both,'costUsd':round(cost,4),'pnlUsd':round(pnl,4),'rebateUsd':round(reb,5),
                          'perDollar':round(pnl/cost,4) if cost>0 else None,
                          'fillPrices':{tok:round(q['cost']/q['filled'],3) for tok,q in qs.items() if q['filled']>0}}
         self.done.append(out);self.state['rounds']+=1;return 1
@@ -140,10 +142,11 @@ class Maker:
         filled=[x for x in rs if x['costUsd']>0];n=len(filled)
         per=[x['perDollar'] for x in filled];m=sum(per)/n if n else None
         sd=math.sqrt(sum((x-m)**2 for x in per)/(n-1)) if n>1 else None
-        tot=sum(x['pnlUsd'] for x in filled);cost=sum(x['costUsd'] for x in filled)
+        tot=sum(x['pnlUsd'] for x in filled);cost=sum(x['costUsd'] for x in filled);reb=sum(x.get('rebateUsd') or 0 for x in filled)
         return {'rounds':len(rs),'roundsFilled':n,'fillRate':round(n/len(rs),3) if rs else None,
                 'bothFilled':sum(1 for x in rs if x['both']),'pnlUsd':round(tot,3),'costUsd':round(cost,2),
-                'perDollarPooled':round(tot/cost,4) if cost else None,'perDollarMean':None if m is None else round(m,4),
+                'perDollarPooled':round(tot/cost,4) if cost else None,'rebateUsd':round(reb,4),
+                'perDollarWithRebate':round((tot+reb)/cost,4) if cost else None,'perDollarMean':None if m is None else round(m,4),
                 'lower95':round(m-1.645*sd/math.sqrt(n),4) if sd else None}
     def report(self):
         rows=list(self.done);fwd=[r for r in rows if float(r.get('roundEnd') or 0)>=REGISTERED_AT]
