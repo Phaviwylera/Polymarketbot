@@ -72,7 +72,14 @@ class PairAcc:
         eq=0.;peak=0.;dd=0.
         for r in sorted(rows,key=lambda x:x['end']):eq+=r['v']['wallet']['pnlUsd'];peak=max(peak,eq);dd=max(dd,peak-eq)
         gw=sum(r['v']['wallet']['pnlUsd'] for r in rows if r['v']['wallet']['pnlUsd']>0);gl=-sum(r['v']['wallet']['pnlUsd'] for r in rows if r['v']['wallet']['pnlUsd']<0)
-        return {'startedAt':WALLET_START,'startingBalance':WALLET_BALANCE,'balance':round(WALLET_BALANCE+pnl-open_cost,2),
+        fl={}
+        for r in rows:
+            x=r['v']['wallet']['pnlUsd'];a=fl.setdefault(r['lane'],{'lane':r['lane'],'strategy':'PAIR_ACC','trades':0,'wins':0,'losses':0,'pnl':0.,'won':0.,'lost':0.})
+            a['trades']+=1;a['pnl']+=x
+            if x>0:a['wins']+=1;a['won']+=x
+            else:a['losses']+=1;a['lost']+=-x
+        flows=[{**a,'pnl':round(a['pnl'],3),'won':round(a['won'],3),'lost':round(a['lost'],3)} for a in fl.values()]
+        return {'startedAt':WALLET_START,'startingBalance':WALLET_BALANCE,'flows':flows,'balance':round(WALLET_BALANCE+pnl-open_cost,2),
                 'equity':round(WALLET_BALANCE+pnl,2),'pnlUsd':round(pnl,2),'feesUsd':round(fees,2),'trades':len(rows),'wins':wins,
                 'winRate':round(100*wins/len(rows),1) if rows else None,'openCostUsd':round(open_cost,2),'open':opens,'openRounds':len(opens),
                 'avgPnlUsd':round(pnl/len(rows),3) if rows else None,'maxDrawdownUsd':round(dd,2),'profitFactor':round(gw/gl,2) if gl>0 else None,
@@ -163,7 +170,7 @@ class PairAcc:
                       'forward':f,'verdict':'collecting' if f['rounds']<MIN_ROUNDS else ('CONFIRMED' if (f['lower95'] or -1)>0 else 'not confirmed')},
                 'variants':{v:self._sum(rows,v) for v in VARIANTS},'wallet':self.wallet(),'recent':[r for r in rows if r.get('filled')][-6:][::-1]}
     def compact(self):
-        r=self.report();r.pop('recent',None);r['wallet']={k:v for k,v in r['wallet'].items() if k not in ('recent','open')};return r
+        r=self.report();r.pop('recent',None);r['wallet']={k:v for k,v in r['wallet'].items() if k not in ('recent','open','flows')};return r
     def save(self):
         tmp=self.path()+'.tmp'
         with gzip.open(tmp,'wt') as f:json.dump({'done':list(self.done),'state':self.state},f,separators=(',',':'))

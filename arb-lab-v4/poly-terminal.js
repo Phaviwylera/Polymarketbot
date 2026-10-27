@@ -277,9 +277,10 @@
 
  // ---------- money flow sankey ----------
  function sankey(s){
-  const f=(s.edge?.flows||[]).filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
-  if(!f.length){text(g,'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
-  const SN={MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING (old)',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
+  const PW=window.PAIR_WALLET;   // the pair-accumulator wallet trades now: its settled rounds join the flow
+  const f=[...(s.edge?.flows||[]),...((PW&&PW.flows)||[])].filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
+  if(!f.length){text(g,PW?'no settled rounds since the fresh start yet':'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
+  const SN={PAIR_ACC:'PAIR ACCUMULATOR',MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING (old)',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
   const total=f.reduce((a,x)=>a+x.trades,0),wins=f.reduce((a,x)=>a+x.wins,0),losses=total-wins,pad=6,top=14,usable=h-top-8-22*4;
   const col=(items,weights,X)=>{const gap=pad*(items.length-1),sc=(usable-gap)/total;let y=top;return Object.fromEntries(items.map((k,i)=>{const hh=weights[i]*sc,r={x:X,y,h:hh,used:0,usedR:0};y+=Math.max(hh,22)+pad;return [k,r];}));};
   const LX=86,MX=w*.48,RX=w-92,NW=10;
@@ -294,7 +295,7 @@
   strats.forEach(k=>{const fl=f.filter(x=>x.strategy===k);node(nM[k],SN[k]||k,C.text,`${signed(fl.reduce((a,x)=>a+x.pnl,0))}`,true);});
   const won=f.reduce((a,x)=>a+x.won,0),lost=f.reduce((a,x)=>a+x.lost,0);node(nR.WIN,'WINS '+wins,C.green,signed(won),true);if(losses)node(nR.LOSS,'LOSSES '+losses,C.red,signed(-lost),true);
   text(g,'LANE',LX,9,C.dim,8.5);text(g,'STRATEGY',MX,9,C.dim,8.5);text(g,'OUTCOME',RX,9,C.dim,8.5);
-  const fa=(s.edge?.flowsAllTime||[]),ta=fa.reduce((a,x)=>a+x.trades,0),na=fa.reduce((a,x)=>a+x.pnl,0),since=s.edge?.flowsSince;
+  const fa=[...(s.edge?.flowsAllTime||[]),...((PW&&PW.flows)||[])],ta=fa.reduce((a,x)=>a+x.trades,0),na=fa.reduce((a,x)=>a+x.pnl,0),since=s.edge?.flowsSince||(PW&&PW.startedAt);
   set('flowBadge',`${total} closed${since?' since reset '+new Date(since*1000).toISOString().slice(5,10):''}, net ${signed(won-lost)}${since&&ta>total?`, all-time ${ta}, ${signed(na)}`:''}`);
  }
 
