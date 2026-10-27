@@ -41,3 +41,14 @@ class MakerTests(unittest.TestCase):
         m.on_print(pr(E-250,'UP',.47,5,'BUY',.83,bid=.46,bs=30))
         p=m.q['btc-updown-5m-1']['v']['peg']['UP'];self.assertEqual(p['price'],.46);self.assertEqual(p['ahead'],30);self.assertEqual(p['reposts'],1)
         self.assertEqual(m.q['btc-updown-5m-1']['v']['join']['UP']['price'],.45)
+    def test_pair_equal_shares_and_guard(self):
+        m=self.m;m.on_print(pr(E-260,'UP',.46,5,'BUY',.87,bid=.45,obid=.50))     # .45+.50 <= .98: both legs
+        q=m.q['btc-updown-5m-1']['v'];self.assertEqual(q['pair']['UP']['shares'],5.);self.assertEqual(q['pair']['DOWN']['shares'],5.)
+        m.on_print(pr(E-250,'UP',.30,5,'SELL',.83,bid=.33,obid=.62))              # UP bid moved 12c: guard cancels
+        self.assertEqual(q['pairGuard']['DOWN']['state'],'cancelled');self.assertEqual(q['pairGuard']['UP']['state'],'filled')
+        self.assertEqual(q['pair']['DOWN']['state'],'resting')
+        m.on_print(pr(E-240,'DOWN',.49,5,'SELL',.8,bid=.50,obid=.33))             # trade-through on DOWN fills the pair
+        m.settle('btc-updown-5m-1','up');p=m.done[-1]['v']['pair']
+        self.assertTrue(p['both']);self.assertAlmostEqual(p['pnlUsd'],5-5*.45-5*.50,4)    # locked spread
+    def test_pair_not_posted_when_bids_cost_too_much(self):
+        m=self.m;m.on_print(pr(E-260,'UP',.5,5,'BUY',.87,bid=.49,obid=.50));self.assertEqual(m.q['btc-updown-5m-1']['v']['pair'],{})

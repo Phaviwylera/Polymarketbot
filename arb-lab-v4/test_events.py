@@ -42,3 +42,9 @@ class EventTests(unittest.TestCase):
         asyncio.run(e.scan_forward());self.assertIn('f|3d',e.fwd)
         e.now=lambda:end+4000;asyncio.run(e.resolve_forward())
         self.assertEqual(len(e.fwd_closed),1);f=e.report()['E1']['forward'];self.assertEqual(f['n'],1);self.assertAlmostEqual(f['mean'],1/.89-1,3)
+    def test_wider_settings_restart_the_day_walk(self):
+        e=pe.Events(root=tempfile.mkdtemp());e.state['dayCursor']=123;e.save()
+        import gzip,json as js
+        st=js.load(gzip.open(e.path(),'rt'));st['cfg']=[60,50000.];js.dump(st,gzip.open(e.path(),'wt'))
+        e2=pe.Events(root=e.root);e2.load();self.assertIsNone(e2.state['dayCursor'])
+        e3=pe.Events(root=e.root);e3.state['dayCursor']=5;e3.save();e4=pe.Events(root=e.root);e4.load();self.assertEqual(e4.state['dayCursor'],5)

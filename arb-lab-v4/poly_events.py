@@ -1,7 +1,7 @@
 """Event-market lane E1 (record-only; places no orders): are slower Polymarket markets (politics, sports, news,
 culture...) mispriced in a way that pays, e.g. the favourite-longshot bias?
 
-History (backfill, about BACKFILL_DAYS of closed binary Yes/No markets with volume >= MIN_VOLUME, excluding the
+History (backfill, BACKFILL_DAYS (120) of closed binary Yes/No markets with volume >= MIN_VOLUME ($10k), excluding the
 crypto up/down and above-$X markets that other lanes study):
   * the YES price at fixed horizons before each market's SCHEDULED end (7d, 3d, 1d, 6h; the last price at or before
     that moment, within 6 h), only while the market was still open: a trader then could not know when it would close,
@@ -20,7 +20,7 @@ from collections import deque
 
 GAMMA='https://gamma-api.polymarket.com';CLOB='https://clob.polymarket.com'
 HORIZONS=((7*86400,'7d'),(3*86400,'3d'),(86400,'1d'),(6*3600,'6h'))
-BACKFILL_DAYS=int(os.getenv('POLY_EVENTS_DAYS','60'));MIN_VOLUME=float(os.getenv('POLY_EVENTS_MIN_VOLUME','50000'))
+BACKFILL_DAYS=int(os.getenv('POLY_EVENTS_DAYS','120'));MIN_VOLUME=float(os.getenv('POLY_EVENTS_MIN_VOLUME','10000'))
 FAV_LO,FAV_HI=0.80,0.95;STRESS=0.02;RULE_H='3d';MIN_FWD=100;SCAN_SEC=1800;TOL=6*3600
 REGISTERED_AT=1793071725   # 2026-10-27 03:28 UTC: forward results count only after this
 CURRENT=None
@@ -203,7 +203,7 @@ class Events:
     # ---- persistence and loop ------------------------------------------------------------------------
     def save(self):
         st={'hist':list(self.hist.values()),'done':sorted(self.done),'fwd':self.fwd,'fwdClosed':list(self.fwd_closed),
-            'cursor':self.state.get('dayCursor')}
+            'cursor':self.state.get('dayCursor'),'cfg':[BACKFILL_DAYS,MIN_VOLUME]}
         tmp=self.path()+'.tmp'
         with gzip.open(tmp,'wt') as f:json.dump(st,f,separators=(',',':'))
         os.replace(tmp,self.path())
@@ -211,7 +211,9 @@ class Events:
         if not os.path.exists(self.path()):return False
         with gzip.open(self.path(),'rt') as f:st=json.load(f)
         self.hist={r['slug']:r for r in st.get('hist') or []};self.done=set(st.get('done') or []);self.fwd.update(st.get('fwd') or {})
-        self.fwd_closed.extend(st.get('fwdClosed') or []);self.state['dayCursor']=st.get('cursor');self.state['studied']=len(self.hist)
+        self.fwd_closed.extend(st.get('fwdClosed') or []);self.state['studied']=len(self.hist)
+        # wider settings than the saved run: walk the days again (studied markets are skipped by slug, so only new ones load)
+        self.state['dayCursor']=st.get('cursor') if st.get('cfg')==[BACKFILL_DAYS,MIN_VOLUME] else None
         return True
     async def loop(self,first_delay=240):
         global CURRENT;CURRENT=self

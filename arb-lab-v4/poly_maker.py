@@ -10,7 +10,10 @@ Honest fills, using the order book and the trades that actually printed:
 Variants (all recorded on the same prints):
   join    - static quote at the best bid when posted,
   improve - static quote 1c above the best bid (front of the queue, pays 1c more; only if still below the ask),
-  peg     - re-pegs to the current best bid whenever it changes (goes to the back of the queue each time).
+  peg     - re-pegs to the current best bid whenever it changes (goes to the back of the queue each time),
+  pair    - (added after M1 was registered; exploratory) EQUAL shares on UP and DOWN at their best bids, posted together
+            only when the two bids cost <= 98c a pair, so a double fill locks in the spread,
+  pairGuard - pair, but anything still resting is cancelled once either token's bid moves 10c from where it was posted.
 Filled shares are held to resolution: P&L = shares x (1 if the token won else 0) - shares x price - maker fee.
 Maker fee default 0 (POLY_MAKER_FEE_RATE to stress it); no rebate is assumed.
 Both tokens filled in one round = spread captured (cost of UP + DOWN below $1).
@@ -22,7 +25,8 @@ from __future__ import annotations
 import gzip,json,math,os,time
 from collections import deque
 
-VARIANTS=('join','improve','peg')
+VARIANTS=('join','improve','peg','pair','pairGuard')
+PAIRS=('pair','pairGuard');PAIR_SHARES=5.0;PAIR_MAX_COST=0.98;GUARD_MOVE=0.10
 STAKE=5.0;POST_AT=0.9;CANCEL_AT=0.1;LATENCY=0.5;MIN_ROUNDS=300
 FEE_RATE=float(os.getenv('POLY_MAKER_FEE_RATE','0'))
 REGISTERED_AT=1793071725   # 2026-10-27 03:28 UTC: forward results count only after this
@@ -44,6 +48,7 @@ class Maker:
     def _post(self,quote_slot,tok,bid,size,ask,t,variant):
         if bid is None or not 0.01<=float(bid)<=0.98:return None
         bid=float(bid);ahead=float(size or 0)
+        if variant in PAIRS:return {'token':tok,'price':bid,'ahead':ahead,'shares':PAIR_SHARES,'filled':0.,'cost':0.,'postedAt':t,'state':'resting','reposts':0}
         if variant=='improve':
             if ask is None or bid+0.01>=float(ask)-1e-9:return None   # would cross the spread: not a maker order
             bid=round(bid+0.01,2);ahead=0.
@@ -63,7 +68,17 @@ class Maker:
             if len(self.q)>400:self.q.pop(next(iter(self.q)))
         # post any quote not yet posted (a token's book may only appear on a later print)
         if lf>=CANCEL_AT:
+            for v in PAIRS:   # both legs at once, or not at all
+                if r['v'][v] or r.get('pairTried'):continue
+                (b1,s1,_),(b2,s2,_)=books['UP'],books['DOWN']
+                if b1 is None or b2 is None:continue
+                r['pairTried']=v=='pairGuard'
+                if float(b1)+float(b2)<=PAIR_MAX_COST and 0.01<=float(b1)<=0.98 and 0.01<=float(b2)<=0.98:
+                    for tok,(bid,size,ask) in books.items():
+                        qq=self._post(r,tok,bid,size,ask,t,v)
+                        if qq:r['v'][v][tok]=qq
             for v in VARIANTS:
+                if v in PAIRS:continue
                 for tok,(bid,size,ask) in books.items():
                     if tok not in r['v'][v]:
                         qq=self._post(r,tok,bid,size,ask,t,v)
@@ -90,6 +105,14 @@ class Maker:
                     # filled shares keep their price; the remainder moves
                     q['price']=float(bid);q['ahead']=float(bsize or 0);q['postedAt']=t;q['reposts']+=1
                     q['shares']=q['filled']+round((STAKE-q['cost'])/float(bid),4) if STAKE>q['cost'] else q['filled']
+        # pairGuard: cancel what is still resting once either token's bid has moved GUARD_MOVE from its post
+        g=r['v'].get('pairGuard') or {}
+        for tk,q in g.items():
+            bid=(books.get(tk) or (None,))[0]
+            if q['state']=='resting' and bid is not None and abs(float(bid)-q['price'])>=GUARD_MOVE-1e-9:
+                for q2 in g.values():
+                    if q2['state']=='resting':q2['state']='cancelled'
+                break
         # cancel everything once the round is nearly over
         if lf<CANCEL_AT:
             for v in VARIANTS:
