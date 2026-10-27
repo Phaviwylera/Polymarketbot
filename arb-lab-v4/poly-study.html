@@ -378,7 +378,7 @@ async function lanes(){
   const pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—',b4=v=>ok(v)?v.toFixed(4):'—',n=v=>ok(v)?v:'—';
   const vcls=v=>v==='CONFIRMED'?'pos':v==='not confirmed'?'neg':'';const vt=v=>v?v.charAt(0).toUpperCase()+v.slice(1).toLowerCase():'—';
   const fig=(k,v)=>`<div class="fig"><span>${k}</span><b>${v}</b></div>`;
-  const P=L.pairacc||{},r1=P.R1||{},rf=r1.forward||{},F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
+  const EA=L.eventarb||{},n1=EA.N1||{},s1=EA.S1||{},EM=L.eventmaker||{},m3=EM.M3||{},P=L.pairacc||{},r1=P.R1||{},rf=r1.forward||{},F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
   const off=o=>o.enabled===false?'<div class="dim">Off on the server.</div>':'';
   $('lanes').innerHTML=`
   <div class="lane"><h4>Maker quotes (M1)</h4><p class="why">Resting bids at the best bid on both tokens, behind the existing queue. Earns the spread and pays no taker fee, but gets picked off.</p>${off(M)}
@@ -406,7 +406,19 @@ async function lanes(){
    <div class="verdict ${vcls(r1.verdict)}">${vt(r1.verdict)}</div>
    ${fig('Rounds with fills',`${n(rf.rounds)} (needs 300)`)}${fig('Both sides / avg pair cost',`${ok(rf.bothSidesPct)?rf.bothSidesPct+'%':'—'}, ${ok(rf.avgPairCost)?rf.avgPairCost.toFixed(3):'—'}`)}
    ${fig('P&L per $, no rebate',`${pc(rf.perDollar)}, bad case ${pc(rf.lower95)}`)}${fig('Paper P&L, fees paid',`${ok(rf.pnlUsd)?'$'+rf.pnlUsd.toFixed(2):'—'}, $${ok(rf.feesUsd)?rf.feesUsd.toFixed(2):'—'}`)}
-   ${fig('If Gold-tier rebate (18%)',ok(rf.pnlGoldUsd)?'$'+rf.pnlGoldUsd.toFixed(2):'—')}</div>`;
+   ${fig('If Gold-tier rebate (18%)',ok(rf.pnlGoldUsd)?'$'+rf.pnlGoldUsd.toFixed(2):'—')}</div>
+  <div class="lane"><h4>NegRisk baskets (N1)</h4><p class="why">Multi-outcome events: one YES of every outcome always pays $1. A basket under $1 after fees is a locked gain.</p>${off(EA)}
+   <div class="verdict ${vcls(n1.verdict)}">${vt(n1.verdict)}</div>
+   ${fig('Events checked, eligible',`${n(EA.events)}, ${n(EA.eventsEligible)}`)}${fig('Basket gaps, conversion gaps',`${n(EA.basketGaps)}, ${n(EA.conversionGaps)}`)}
+   ${fig('Basket trades settled',`${n(n1.n)} (needs 30), open ${n(EA.openBaskets)}`)}${fig('Return per $',`${pc(n1.mean)}, bad case ${pc(n1.lower95)}`)}</div>
+  <div class="lane"><h4>Resolution window (S1)</h4><p class="why">After the result is known but before Polymarket finalises it, buy the 90–99.5¢ leader. Risk: disputes and invalid (50¢) results.</p>${off(EA)}
+   <div class="verdict ${vcls(s1.verdict)}">${vt(s1.verdict)}</div>
+   ${fig('Candidates now, open trades',`${n(EA.s1Candidates)}, ${n(EA.openS1)}`)}${fig('Settled trades',`${n(s1.n)} (needs 100), wins ${ok(s1.winPct)?s1.winPct+'%':'—'}`)}
+   ${fig('Return per $',`${pc(s1.mean)}, bad case ${pc(s1.lower95)}`)}${fig('Invalid / lost',`${n(s1.invalidResolutions)} / ${n(s1.losses)}`)}</div>
+  <div class="lane"><h4>Slow-market maker (M3)</h4><p class="why">Joins the best bid and ask on ~20 busy sports and politics markets, leaning against its inventory. Earns spread and rebate if not picked off.</p>${off(EM)}
+   <div class="verdict ${vcls(m3.verdict)}">${vt(m3.verdict)}</div>
+   ${fig('Markets quoted, fills',`${n(EM.markets)}, ${n(EM.fills)}`)}${fig('Market-days with fills',`${n(m3.marketDays)} (needs 50)`)}
+   ${fig('P&L per market-day',`${pc(m3.avgPerMarketDay)}, bad case ${pc(m3.lower95)}`)}${fig('Paper P&L (marked), rebate',`${ok(EM.pnlMtmUsd)?'$'+EM.pnlMtmUsd.toFixed(2):'—'}, $${ok(EM.rebateUsd)?EM.rebateUsd.toFixed(3):'—'}`)}</div>`;
   rivals(L.rivals);$('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
  }catch(e){}
 }
