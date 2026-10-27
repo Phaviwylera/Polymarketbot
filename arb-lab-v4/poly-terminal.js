@@ -87,6 +87,22 @@
   const acctEq=p.accountEquity??p.equity,acctPnl=p.accountPnl??p.totalPnl;set('equity',money(acctEq));set('sessPnl',signed(acctPnl),cls(acctPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
   set('maxDd',money(p.maxDrawdownUsd));const open=LANES.filter(l=>s.assets?.[l]?.paper?.position).length;set('openPos',open+' / '+LANES.length);
   rules(s.rulesScorecard);audit();
+  // The pair-accumulator wallet is the account that trades now (owner fresh start; momentum paused): show it here.
+  const W=window.PAIR_WALLET;
+  if(W){
+   const ws=new Date(W.startedAt*1000).toISOString().slice(5,16).replace('T',' ')+' UTC';
+   set('lifeLabel','Paper P&L since fresh start');set('lifePnl',signed(W.pnlUsd),'big '+cls(W.pnlUsd));
+   set('lifeSub',`${W.trades} settled rounds, $${W.startingBalance} paper since ${ws}. Pair accumulator (GoodFallen's method); momentum paused`+(p.archivedTrades?`. Earlier ${p.archivedTrades} trades ${signed(p.archivedRealizedPnl)} kept for analysis`:''));
+   set('equity',money(W.equity));set('sessPnl',signed(W.pnlUsd),cls(W.pnlUsd));set('winRate',W.trades?W.winRate.toFixed(0)+'%':'—');
+   set('avgTrade',W.trades?signed(W.avgPnlUsd,3):'—',cls(W.avgPnlUsd));set('maxDd',money(W.maxDrawdownUsd));
+   set('openPos',W.openRounds?`${W.openRounds}, ${money(W.openCostUsd)}`:'0');
+   set('rulesDesc',`pair accumulator: UP + DOWN under 97¢, $1 clips, hold to settlement, since ${ws}`);
+   const tb=document.querySelector('#rulesTbl tbody'),r=s.rulesScorecard||{};
+   if(tb){const row=(label,m,hl)=>{if(!m||!m.trades)return `<tr${hl?' class="hl"':''}><td>${label}</td><td>0</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>`;
+     const wr=m.winRatePct,wc=wr>=70?'pos':wr<50?'neg':'';
+     return `<tr${hl?' class="hl"':''}><td>${label}</td><td>${m.trades}</td><td class="${wc}">${wr.toFixed(0)}%</td><td class="${cls(m.avgPnlUsd)}">${signed(m.avgPnlUsd,2)}</td><td class="${cls(m.netPnlUsd)}">${signed(m.netPnlUsd,2)}</td><td>${m.profitFactor==null?'—':m.profitFactor.toFixed(2)}</td></tr>`;};
+    tb.innerHTML=row('Pair wallet',{trades:W.trades,winRatePct:W.winRate||0,avgPnlUsd:W.avgPnlUsd,netPnlUsd:W.pnlUsd,profitFactor:W.profitFactor},true)+row('Momentum (paused)',r.sinceRulesLive)+row('All time',r.allHistory);}
+  }
   const b=$('walletBadge');b.textContent=p.riskLocked?'Portfolio locked':'Paper only';b.className='badge '+(p.riskLocked?'bad':'live');
   $('exposure').innerHTML=(p.assets||[]).map(a=>{const pos=s.assets?.[a.asset]?.paper?.position,cost=pos?Number(pos.entryTotalCost||0):0,eq=Number(a.equity||0),alloc=Number(a.allocation||1);
    const used=Math.min(100,100*cost/alloc),gain=Math.max(-100,Math.min(100,100*(eq-alloc)/alloc));

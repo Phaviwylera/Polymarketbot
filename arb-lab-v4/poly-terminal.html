@@ -139,11 +139,11 @@ main{perspective:1400px}
 </section>
 </main>
 <footer class="foot" id="foot">Loading…</footer>
-<script src="/poly-terminal.js?v=20.0" defer></script>
+<script src="/poly-terminal.js?v=20.1" defer></script>
 <script>
 (()=>{const $=id=>document.getElementById(id),ok=v=>v!==null&&v!==undefined&&isFinite(v);
 const usd=v=>ok(v)?(v<0?'−$':'$')+Math.abs(v).toFixed(2):'—',cls=v=>ok(v)?(v>0?'pos':v<0?'neg':''):'';
-async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();const w=((L.pairacc||{}).wallet)||null;if(!w)return;
+async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();const w=((L.pairacc||{}).wallet)||null;if(!w)return;window.PAIR_WALLET=w;
  const b=$('pairBadge');b.textContent=w.guard?w.guard:'Trading on paper';b.className='badge '+(w.guard?'warn':'live');
  $('pairK').innerHTML=[['Balance',usd(w.balance),''],['Equity',usd(w.equity),''],['P&L since start',usd(w.pnlUsd),cls(w.pnlUsd)],['Rounds traded',w.trades,''],['Win rate',ok(w.winRate)?w.winRate+'%':'—',''],['Fees paid',usd(w.feesUsd),'']]
   .map(([k,v,c])=>`<div><span>${k}</span><b class="${c}">${v}</b></div>`).join('');
@@ -151,6 +151,6 @@ async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'n
  const R=w.recent||[];if(!R.length)return;
  $('pairT').innerHTML='<thead><tr><th>Round</th><th>Won</th><th>UP</th><th>DOWN</th><th>Pair cost</th><th>Buys</th><th>Cost</th><th>Fees</th><th>P&amp;L</th></tr></thead><tbody>'+R.map(r=>`<tr><td>${r.lane} ${new Date((r.end-300)*1000).toISOString().slice(11,16)}</td><td>${r.winner||'—'}</td><td>${r.up}</td><td>${r.down}</td><td>${ok(r.pairCost)?r.pairCost.toFixed(3):'—'}</td><td>${r.fills}</td><td>${usd(r.costUsd)}</td><td>${usd(r.feesUsd)}</td><td class="${cls(r.pnlUsd)}">${usd(r.pnlUsd)}</td></tr>`).join('')+'</tbody>';
 }catch(e){}}
-pair();setInterval(pair,10000);})();
+pair();setInterval(pair,5000);})();
 </script>
 </body></html>

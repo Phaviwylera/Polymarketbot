@@ -69,9 +69,13 @@ class PairAcc:
                 c=b.inv['up'][1]+b.inv['down'][1];open_cost+=c
                 opens.append({'slug':r['slug'],'lane':r['lane'],'up':round(b.inv['up'][0],2),'down':round(b.inv['down'][0],2),'costUsd':round(c,2)})
         wins=sum(1 for r in rows if r['v']['wallet']['pnlUsd']>0)
+        eq=0.;peak=0.;dd=0.
+        for r in sorted(rows,key=lambda x:x['end']):eq+=r['v']['wallet']['pnlUsd'];peak=max(peak,eq);dd=max(dd,peak-eq)
+        gw=sum(r['v']['wallet']['pnlUsd'] for r in rows if r['v']['wallet']['pnlUsd']>0);gl=-sum(r['v']['wallet']['pnlUsd'] for r in rows if r['v']['wallet']['pnlUsd']<0)
         return {'startedAt':WALLET_START,'startingBalance':WALLET_BALANCE,'balance':round(WALLET_BALANCE+pnl-open_cost,2),
                 'equity':round(WALLET_BALANCE+pnl,2),'pnlUsd':round(pnl,2),'feesUsd':round(fees,2),'trades':len(rows),'wins':wins,
-                'winRate':round(100*wins/len(rows),1) if rows else None,'openCostUsd':round(open_cost,2),'open':opens,
+                'winRate':round(100*wins/len(rows),1) if rows else None,'openCostUsd':round(open_cost,2),'open':opens,'openRounds':len(opens),
+                'avgPnlUsd':round(pnl/len(rows),3) if rows else None,'maxDrawdownUsd':round(dd,2),'profitFactor':round(gw/gl,2) if gl>0 else None,
                 'guard':getattr(self,'wguard',None) or ('paused until '+time.strftime('%H:%M UTC',time.gmtime(self.wpause)) if time.time()<getattr(self,'wpause',0.) else None),
                 'limits':{'lossLimit':WALLET_LOSS_LIMIT,'perSideMaxUsd':VARIANTS['wallet']['max'],'clipUsd':VARIANTS['wallet']['clip']},
                 'recent':[{'slug':r['slug'],'lane':r['lane'],'end':r['end'],'winner':r.get('winner'),**{k:r['v']['wallet'][k] for k in ('up','down','pairCost','fills','costUsd','feesUsd','pnlUsd')}} for r in rows[-20:][::-1]]}
