@@ -12,7 +12,10 @@ Rule (inferred from that evidence; parameters fixed here before the forward test
   * at most MAX_SHARES per side per round; hold everything to settlement.
 Costs: taker fee 0.07 p (1 - p) per share. Results are reported at our real tier (no taker rebate) and, for
 comparison only, at a Gold-tier 18% taker rebate (which needs $200k+ monthly weighted volume).
-Variants: 'replica' TARGET 0.97 (their observed average), 'strict' TARGET 0.95.
+Variants: 'replica' TARGET 0.97 (their observed average), 'strict' TARGET 0.95, and 'wallet': the same rule sized
+for a $200 PAPER WALLET ($1 clips, at most $6 bought per side per round, at most $3 lopsided), with the main
+account's guards: no new entries after an $8 loss since the wallet's start, and a 1 h pause after giving back half of
+a gain of $4 or more. The wallet keeps a running balance and a trade list for the terminal.
 Pre-registered R1 (REGISTERED_AT, variant replica, no rebate): pass = >= 300 rounds with fills and mean round
 P&L per $ - 1.645 SE > 0.  Off with POLY_PAIRACC=0.
 """
@@ -20,8 +23,13 @@ from __future__ import annotations
 import gzip,json,math,os,time
 from collections import deque
 
-VARIANTS={'replica':0.97,'strict':0.95}
 CLIP=5.0;MAX_SHARES=60.;MAX_IMBALANCE=20.;FIRST_MAX=0.50;START_AT=0.02;STOP_AT=0.95;LATENCY=0.25
+# per variant: pair-cost target and sizing, in shares ('sh') or dollars of cost ('usd')
+VARIANTS={'replica':{'target':0.97,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb':MAX_IMBALANCE},
+          'strict':{'target':0.95,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb':MAX_IMBALANCE},
+          'wallet':{'target':0.97,'unit':'usd','clip':1.0,'max':6.0,'imb':3.0}}
+WALLET_BALANCE=200.0;WALLET_LOSS_LIMIT=8.0;GIVEBACK_ARM=4.0;GIVEBACK_FRACTION=0.5;GIVEBACK_PAUSE=3600.
+WALLET_START=float(os.getenv('POLY_PAIRACC_WALLET_START') or 1793087927)   # owner fresh start, 2026-10-27 07:58 UTC
 FEE_RATE=0.07;GOLD_REBATE=0.18;MIN_ROUNDS=300
 LANES=('BTC','ETH')                       # the 5-minute lanes, as observed
 REGISTERED_AT=1793087467   # 2026-10-27 07:51 UTC: forward results count only after this
@@ -38,6 +46,35 @@ class PairAcc:
         self.cur={};self.wait={};self.done=deque(maxlen=20000)
         self.state={'bookEvents':0,'fills':0,'rounds':0,'errors':0,'lastError':None}
     def path(self):return os.path.join(self.root,'pairacc_state.json.gz')
+    # ---- the $200 paper wallet -----------------------------------------------------------------------
+    def wallet_rows(self):
+        return [r for r in self.done if r.get('filled') and (r.get('v') or {}).get('wallet') and float(r.get('end') or 0)>=WALLET_START]
+    def wallet_pnl(self):return sum(r['v']['wallet']['pnlUsd'] for r in self.wallet_rows())
+    def wallet_open(self,t=None):
+        """Guards (same limits as the main paper account): loss limit since the wallet's start, and give-back pause."""
+        t=time.time() if t is None else t
+        if t<WALLET_START:return False
+        pnl=self.wallet_pnl();self.wpeak=max(getattr(self,'wpeak',0.),pnl)
+        if pnl<=-WALLET_LOSS_LIMIT:self.wguard=f'loss limit: {pnl:+.2f} since the wallet started; no new entries';return False
+        if t<getattr(self,'wpause',0.):return False
+        if self.wpeak>=GIVEBACK_ARM and pnl<=self.wpeak*GIVEBACK_FRACTION:
+            self.wpause=t+GIVEBACK_PAUSE;self.wpeak=pnl;self.wguard=f'gave back half of the gain: paused 1 h at {pnl:+.2f}';return False
+        self.wguard=None;return True
+    def wallet(self):
+        rows=self.wallet_rows();pnl=self.wallet_pnl();fees=sum(r['v']['wallet']['feesUsd'] for r in rows)
+        open_cost=0.;opens=[]
+        for r in list(self.cur.values())+list(self.wait.values()):
+            b=r['v'].get('wallet')
+            if b and b.fills:
+                c=b.inv['up'][1]+b.inv['down'][1];open_cost+=c
+                opens.append({'slug':r['slug'],'lane':r['lane'],'up':round(b.inv['up'][0],2),'down':round(b.inv['down'][0],2),'costUsd':round(c,2)})
+        wins=sum(1 for r in rows if r['v']['wallet']['pnlUsd']>0)
+        return {'startedAt':WALLET_START,'startingBalance':WALLET_BALANCE,'balance':round(WALLET_BALANCE+pnl-open_cost,2),
+                'equity':round(WALLET_BALANCE+pnl,2),'pnlUsd':round(pnl,2),'feesUsd':round(fees,2),'trades':len(rows),'wins':wins,
+                'winRate':round(100*wins/len(rows),1) if rows else None,'openCostUsd':round(open_cost,2),'open':opens,
+                'guard':getattr(self,'wguard',None) or ('paused until '+time.strftime('%H:%M UTC',time.gmtime(self.wpause)) if time.time()<getattr(self,'wpause',0.) else None),
+                'limits':{'lossLimit':WALLET_LOSS_LIMIT,'perSideMaxUsd':VARIANTS['wallet']['max'],'clipUsd':VARIANTS['wallet']['clip']},
+                'recent':[{'slug':r['slug'],'lane':r['lane'],'end':r['end'],'winner':r.get('winner'),**{k:r['v']['wallet'][k] for k in ('up','down','pairCost','fills','costUsd','feesUsd','pnlUsd')}} for r in rows[-20:][::-1]]}
     def _err(self,exc):self.state['errors']+=1;self.state['lastError']=f'{type(exc).__name__}: {str(exc)[:100]}'
     def _round(self,lane,market):
         slug=(market or {}).get('slug');end=(market or {}).get('endTs')
@@ -51,14 +88,19 @@ class PairAcc:
         if any(b.fills for b in r['v'].values()):self.wait[r['slug']]=r
         else:self.done.append({'slug':r['slug'],'lane':r['lane'],'end':r['end'],'filled':False})
     @staticmethod
-    def decide(b,bbo,target):
+    def clip_shares(cfg,a):return cfg['clip'] if cfg['unit']=='sh' else round(cfg['clip']/a,2)
+    @staticmethod
+    def decide(b,bbo,target,cfg=None):
         """Which side to take now (or None), given inventory b and the book. Pure, for testing."""
+        cfg=cfg or {'target':target,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb':MAX_IMBALANCE}
         best=None
         for side,other in (('up','down'),('down','up')):
             a=(bbo.get(side) or {}).get('ask')
             if a is None or not 0.01<=float(a)<=0.99:continue
-            a=float(a);sh,cost=b.inv[side];osh,ocost=b.inv[other]
-            if sh+CLIP>MAX_SHARES+1e-9 or sh-osh>=MAX_IMBALANCE-1e-9:continue
+            a=float(a);sh,cost=b.inv[side];osh,ocost=b.inv[other];n=PairAcc.clip_shares(cfg,a)
+            if cfg['unit']=='sh':
+                if sh+n>cfg['max']+1e-9 or sh-osh>=cfg['imb']-1e-9:continue
+            elif cost+n*a>cfg['max']+1e-9 or (cost-ocost)>=cfg['imb']-1e-9:continue
             if sh==0 and osh==0:ok=a<=FIRST_MAX
             elif osh>0:ok=a+ocost/osh<=target+1e-9
             else:ok=False                                     # only one leg so far and it is this one: wait for the other
@@ -72,14 +114,16 @@ class PairAcc:
             self.state['bookEvents']+=1
             frac=1-(r['end']-t)/300.
             if frac<START_AT or frac>STOP_AT:return
-            for v,target in VARIANTS.items():
-                b=r['v'][v];pick=self.decide(b,bbo,target)
+            for v,cfg in VARIANTS.items():
+                if v=='wallet' and not self.wallet_open(t):continue
+                b=r['v'][v];pick=self.decide(b,bbo,cfg['target'],cfg)
                 if not pick:continue
                 s,a=pick
                 if t-b.last[s]<LATENCY:continue
                 size=float(((bbo.get(s) or {}).get('askSize')) or 0)
-                n=min(CLIP,size,MAX_SHARES-b.inv[s][0])
-                if n<1:continue
+                n=self.clip_shares(cfg,a)
+                n=min(n,size,(cfg['max']-b.inv[s][0]) if cfg['unit']=='sh' else n)
+                if n<1 or n*a<0.999:continue                 # Polymarket's $1 minimum order
                 b.inv[s][0]+=n;b.inv[s][1]+=n*a;b.fees+=n*fee(a);b.fills+=1;b.last[s]=t;self.state['fills']+=1
         except Exception as exc:self._err(exc)
     def settle(self,slug,winner):
@@ -87,7 +131,7 @@ class PairAcc:
             if r['slug']==slug:self._park(r);self.cur.pop(lane,None)
         r=self.wait.pop(slug,None)
         if r is None or winner not in ('up','down'):return 0
-        out={'slug':slug,'lane':r['lane'],'end':r['end'],'filled':True,'v':{}}
+        out={'slug':slug,'lane':r['lane'],'end':r['end'],'filled':True,'winner':winner.upper(),'v':{}}
         for v,b in r['v'].items():
             cost=b.inv['up'][1]+b.inv['down'][1]
             if cost<=0:out['v'][v]=None;continue
@@ -113,9 +157,9 @@ class PairAcc:
                 'R1':{'rule':'replica of the observed rival pattern: take 5-share clips at the ask of whichever side keeps the pair cost <= 0.97; first leg <= 50c; through 2-95% of each 5m window; hold to settlement',
                       'pass':f'>= {MIN_ROUNDS} rounds with fills and mean P&L per $ (no taker rebate) - 1.645 SE > 0','registeredAt':REGISTERED_AT,
                       'forward':f,'verdict':'collecting' if f['rounds']<MIN_ROUNDS else ('CONFIRMED' if (f['lower95'] or -1)>0 else 'not confirmed')},
-                'variants':{v:self._sum(rows,v) for v in VARIANTS},'recent':[r for r in rows if r.get('filled')][-6:][::-1]}
+                'variants':{v:self._sum(rows,v) for v in VARIANTS},'wallet':self.wallet(),'recent':[r for r in rows if r.get('filled')][-6:][::-1]}
     def compact(self):
-        r=self.report();r.pop('recent',None);return r
+        r=self.report();r.pop('recent',None);r['wallet']={k:v for k,v in r['wallet'].items() if k not in ('recent','open')};return r
     def save(self):
         tmp=self.path()+'.tmp'
         with gzip.open(tmp,'wt') as f:json.dump({'done':list(self.done),'state':self.state},f,separators=(',',':'))

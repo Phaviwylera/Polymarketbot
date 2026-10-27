@@ -16,6 +16,7 @@ ALLOCATIONS={k:v[2] for k,v in LANES.items()}
 LANE_STOP_FLOOR=.30   # spread + both taker fees on 5 shares near 50c is ~$0.22; a smaller stop blocks entries
 TOTAL_BALANCE=sum(ALLOCATIONS.values())
 PORTFOLIO_LOSS_LIMIT=6.0
+OWNER_FRESH_START_AT=1793087927.0   # owner asked for a fresh $200 paper balance (2026-10-27 07:58 UTC); history is kept
 # Overnight guards measured from the fresh start (realized P&L across every session since it):
 # - stop new entries for good if it falls to -$8 (owner decides what happens next);
 # - once it has reached +$4, pause entries for an hour whenever half the peak gain is given back.
@@ -158,8 +159,8 @@ class PaperPortfolio:
         """Owner-requested fresh start (POLY_FRESH_START_AT, unix seconds): the paper account restarts at
         $200 and the headline P&L counts only trades after it. Earlier sessions stay in the ledger history
         for analysis (trade CSV, backtests, readiness evidence). Applied once, only when flat."""
-        try:at=float(os.environ.get('POLY_FRESH_START_AT') or 0)
-        except ValueError:return 0.
+        try:at=max(float(os.environ.get('POLY_FRESH_START_AT') or 0),OWNER_FRESH_START_AT)
+        except ValueError:at=OWNER_FRESH_START_AT
         return at if at>self.epoch+1 else 0.
     def apply_fresh_start(self,now=None):
         at=self.fresh_start_due()

@@ -96,6 +96,12 @@ main{perspective:1400px}
 @media(min-width:1201px){#pPrice,#pLife{display:flex;flex-direction:column}#pPrice>.pb,#pLife>.pb{flex:1;display:flex;min-height:0}
  #pPrice .price{flex:1;height:auto}#candles,#lifecycle{height:auto!important;flex:1}#candles{min-height:206px}#lifecycle{min-height:118px}
  .rowA>.stack{grid-template-rows:minmax(0,1fr) auto}}
+
+.pairk{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0}.pairk>div{padding:0 14px;border-left:1px solid var(--line)}.pairk>div:first-child{border-left:0;padding-left:0}
+.pairk span{display:block;color:var(--dim2);font-size:12px}.pairk b{display:block;font-size:20px;font-weight:600;margin-top:2px}
+.ptbl{width:100%;border-collapse:collapse;font-size:12.5px}.ptbl th{color:var(--dim);font-weight:500;text-align:right;padding:5px 8px;border-bottom:1px solid var(--line)}.ptbl th:first-child,.ptbl td:first-child{text-align:left}
+.ptbl td{text-align:right;padding:6px 8px;border-bottom:1px solid rgba(28,42,47,.55)}
+@media(max-width:820px){.pairk{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:12px}.pairk>div:nth-child(odd){border-left:0;padding-left:0}}
 </style><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/poly-skin.css?v=20"></head><body>
 <header class="top"><div class="brand"><div class="logo">PE</div><div><b>Poly/Edge paper bot</b><small id="sub">BTC and ETH up/down rounds, 5 and 15 minutes. Paper money only.</small></div></div>
 <div class="chips" id="chips"></div>
@@ -116,6 +122,10 @@ main{perspective:1400px}
   <article class="p" id="pGrid"><div class="ph"><span><b>Resolution grid</b> Live expiries</span><span class="badge" id="resBadge">—</span></div><div class="pb" style="padding:8px"><div class="grid" id="resgrid"></div></div></article>
  </div>
 </section>
+<article class="p" id="pPair"><div class="ph"><span><b>Pair accumulator wallet</b> Paper money. GoodFallen's method as seen in their public trades</span><span class="badge" id="pairBadge">—</span></div>
+ <div class="pb"><div class="pairk" id="pairK"></div><div class="mut" id="pairOpen" style="margin:8px 0 4px">—</div>
+  <div style="max-height:260px;overflow:auto"><table class="ptbl" id="pairT"><tbody><tr><td class="mut">Waiting for the first round to settle.</td></tr></tbody></table></div>
+  <div class="mut" style="margin-top:8px;font-size:12px;max-width:90ch">$1 clips at the real ask of whichever side keeps UP + DOWN under 97¢, through each 5-minute BTC/ETH round, held to settlement. Pays the full taker fee (no rebate at our size). Stops after an $8 loss; pauses an hour after giving back half of a $4+ gain.</div></div></article>
 <article class="p" id="pAudit"><div class="ph"><span><b>Research audit</b> Walk-forward tests, fees, experiments and shadow lanes</span><span class="badge" id="auditBadge">—</span></div>
  <div class="pb rules audit" style="margin-top:0;border-top:0;padding-top:4px"><table id="auditTbl"><tbody><tr><td>loading…</td></tr></tbody></table></div></article>
 <article class="p" id="pShell"><div class="ph"><span><b>Decision path</b> <b id="shellLane">BTC</b>: inputs, gates, then the decision</span><span class="badge" id="shellBadge">—</span></div>
@@ -130,4 +140,17 @@ main{perspective:1400px}
 </main>
 <footer class="foot" id="foot">Loading…</footer>
 <script src="/poly-terminal.js?v=20.0" defer></script>
+<script>
+(()=>{const $=id=>document.getElementById(id),ok=v=>v!==null&&v!==undefined&&isFinite(v);
+const usd=v=>ok(v)?(v<0?'−$':'$')+Math.abs(v).toFixed(2):'—',cls=v=>ok(v)?(v>0?'pos':v<0?'neg':''):'';
+async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();const w=((L.pairacc||{}).wallet)||null;if(!w)return;
+ const b=$('pairBadge');b.textContent=w.guard?w.guard:'Trading on paper';b.className='badge '+(w.guard?'warn':'live');
+ $('pairK').innerHTML=[['Balance',usd(w.balance),''],['Equity',usd(w.equity),''],['P&L since start',usd(w.pnlUsd),cls(w.pnlUsd)],['Rounds traded',w.trades,''],['Win rate',ok(w.winRate)?w.winRate+'%':'—',''],['Fees paid',usd(w.feesUsd),'']]
+  .map(([k,v,c])=>`<div><span>${k}</span><b class="${c}">${v}</b></div>`).join('');
+ $('pairOpen').textContent=(w.open||[]).length?'Open now: '+w.open.map(o=>`${o.lane} ${o.up} UP / ${o.down} DOWN for ${usd(o.costUsd)}`).join(', '):'No open rounds. Started '+new Date(w.startedAt*1000).toISOString().slice(0,16).replace('T',' ')+' UTC with '+usd(w.startingBalance)+'.';
+ const R=w.recent||[];if(!R.length)return;
+ $('pairT').innerHTML='<thead><tr><th>Round</th><th>Won</th><th>UP</th><th>DOWN</th><th>Pair cost</th><th>Buys</th><th>Cost</th><th>Fees</th><th>P&amp;L</th></tr></thead><tbody>'+R.map(r=>`<tr><td>${r.lane} ${new Date((r.end-300)*1000).toISOString().slice(11,16)}</td><td>${r.winner||'—'}</td><td>${r.up}</td><td>${r.down}</td><td>${ok(r.pairCost)?r.pairCost.toFixed(3):'—'}</td><td>${r.fills}</td><td>${usd(r.costUsd)}</td><td>${usd(r.feesUsd)}</td><td class="${cls(r.pnlUsd)}">${usd(r.pnlUsd)}</td></tr>`).join('')+'</tbody>';
+}catch(e){}}
+pair();setInterval(pair,10000);})();
+</script>
 </body></html>
