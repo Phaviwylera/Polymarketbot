@@ -21,7 +21,7 @@
  function bump(el,down){if(!el||matchMedia('(prefers-reduced-motion:reduce)').matches)return;const now=Date.now();if(now-(bumpAt.get(el)||0)<1500)return;bumpAt.set(el,now);
   el.classList.remove('bump','down');void el.offsetWidth;el.classList.add('bump');if(down)el.classList.add('down');setTimeout(()=>el.classList.remove('bump','down'),650);}
  let S=null,lane='BTC',busy=false;
- const buf={};LANES.forEach(l=>buf[l]={lead:[],impulse:[],spread:[],imbalance:[],vol:[],edge:[],smart:[],decision:[]});
+ const buf={};LANES.forEach(l=>buf[l]={upAsk:[],downAsk:[],askSum:[],pairHeld:[],upSh:[],downSh:[],left:[],decision:[]});
  const MAXB=160;
  function push(a,v){a.push(v);if(a.length>MAXB)a.shift();}
 
@@ -40,25 +40,33 @@
  function build(){
   $('laneTabs').innerHTML=LANES.map(l=>`<button data-lane="${l}" class="${l===lane?'on':''}">${NAME[l]}</button>`).join('');
   $('laneTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;lane=b.dataset.lane;document.querySelectorAll('#laneTabs button').forEach(x=>x.classList.toggle('on',x.dataset.lane===lane));render();});
-  const inputs=[['lead','Oracle lead','bps',C.amber],['impulse','5s impulse','bps',C.amber],['spread','Up spread','¢',C.violet],['imbalance','Book imbalance','',C.cyan],['vol','Volatility','σ·1e4',C.violet],['edge','Edge after fees','¢',C.green],['smart','Skilled flow','sh',C.green]];
+  const inputs=[['upAsk','UP ask','¢',C.green],['downAsk','DOWN ask','¢',C.red],['askSum','UP + DOWN asks','¢',C.amber],['pairHeld','Pair cost held','¢',C.cyan],['upSh','UP shares held','sh',C.green],['downSh','DOWN shares held','sh',C.red],['left','Time left','s',C.violet]];
   $('inputs').innerHTML=inputs.map(([k,n,u])=>`<div class="inp"><span>${n}<b id="in_${k}">—</b></span><canvas id="sp_${k}"></canvas></div>`).join('');
   window.__inputs=inputs;
   $('timelines').innerHTML=LANES.map(l=>`<div class="tl"><span style="color:${COL[l]}">${NAME[l]}</span><canvas id="tl_${l}"></canvas><em id="tld_${l}">—</em></div>`).join('');
  }
 
  // ---------- data ingest ----------
+ // the pair accumulator (what trades now): its open round on this lane, from the wallet
+ const PAIR_LANES=['BTC','ETH'];
+ function openOf(l){const W=window.PAIR_WALLET;return W?(W.open||[]).find(o=>o.lane===l)||null:null;}
+ function pairCost(o){return o&&o.up>0&&o.down>0?o.upCost/o.up+o.downCost/o.down:null;}
  function ingest(s){
-  LANES.forEach(l=>{const a=s.assets?.[l];if(!a)return;const b=buf[l],m=a.model||{},bbo=a.bbo||{},sig=a.strategies?.edgeSignal||{},best=sig.best||{};
-   push(b.lead,ok(m.leadBps)?+m.leadBps:null);push(b.impulse,ok(m.impulse5Bps)?+m.impulse5Bps:null);
-   const up=bbo.up||{};push(b.spread,ok(up.ask)&&ok(up.bid)?(up.ask-up.bid)*100:null);
-   const d=a.depth?.up||{},bs=(d.bids||[]).reduce((n,r)=>n+Number(r.size||0),0),as=(d.asks||[]).reduce((n,r)=>n+Number(r.size||0),0);push(b.imbalance,bs+as>0?(bs-as)/(bs+as):null);
-   push(b.vol,ok(m.sigma)?m.sigma*1e4:null);push(b.edge,ok(best.conservativeEdge)?best.conservativeEdge*100:null);push(b.smart,ok(best.smartFlow)?+best.smartFlow:null);
-   push(b.decision,{t:Date.now(),state:stateOf(a),text:a.decision||''});});
+  LANES.forEach(l=>{const a=s.assets?.[l];if(!a)return;const b=buf[l],bbo=a.bbo||{},o=openOf(l);
+   const ua=ok(bbo.up?.ask)?bbo.up.ask*100:null,da=ok(bbo.down?.ask)?bbo.down.ask*100:null;
+   push(b.upAsk,ua);push(b.downAsk,da);push(b.askSum,ok(ua)&&ok(da)?ua+da:null);const pc=pairCost(o);push(b.pairHeld,pc===null?null:pc*100);
+   push(b.upSh,o?o.up:0);push(b.downSh,o?o.down:0);push(b.left,a.market?.endTs?Math.max(0,a.market.endTs-Date.now()/1000):null);
+   push(b.decision,{t:Date.now(),state:stateOf(a,l),text:pairText(a,l)});});
  }
- function stateOf(a){const p=a.paper||{},d=String(a.decision||'').toLowerCase();
-  if(p.position)return 'trade';if(p.status==='risk_locked'||d.includes('lock'))return 'lock';
-  if(d.startsWith('edge:')||d.startsWith('model:')||d.includes('opportunity'))return 'signal';
-  if(d.includes('stale')||d.includes('unavailable')||d.includes('not live'))return 'feed';return 'wait';}
+ function pairText(a,l){
+  if(!PAIR_LANES.includes(l))return 'not traded by the pair accumulator (5-minute rounds only)';
+  const W=window.PAIR_WALLET,o=openOf(l),pc=pairCost(o);
+  if(W&&W.guard)return W.guard;
+  if(o)return `holding ${o.up} UP / ${o.down} DOWN for ${money(o.costUsd)}`+(pc!==null?`, pair ${(pc*100).toFixed(1)}¢`:', one side so far');
+  return 'flat: waiting for a side at 50¢ or less';
+ }
+ function stateOf(a,l){if(!PAIR_LANES.includes(l))return 'feed';const W=window.PAIR_WALLET;if(W&&W.guard)return 'lock';
+  if(openOf(l))return 'trade';return gates(a,l).BUY?'signal':'wait';}
 
  // ---------- header, ticker, wallet ----------
  function header(s){
@@ -199,21 +207,27 @@
 
  // ---------- neural shell ----------
  const shellPts=[],corePts=[];
- (function sphere(){const N=560,G=Math.PI*(3-Math.sqrt(5));for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),a=i*G;shellPts.push({x:Math.cos(a)*r,y,z:Math.sin(a)*r,j:Math.random()});}
+ (function sphere(){const N=900,G=Math.PI*(3-Math.sqrt(5));for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),a=i*G;shellPts.push({x:Math.cos(a)*r,y,z:Math.sin(a)*r,j:Math.random()});}
   let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;for(let i=0;i<300;i++){const u=rnd()*2-1,t=rnd()*Math.PI*2,r=Math.cbrt(rnd())*.42,q=Math.sqrt(1-u*u);corePts.push({x:q*Math.cos(t)*r,y:u*r,z:q*Math.sin(t)*r,j:rnd()});}})();
- const GATES=[['FEED','feeds live'],['OPEN','trusted open'],['ORACLE','oracle direction'],['BOOK','book fresh'],['SPREAD','spread ≤ 2¢'],['EDGE','edge > fees'],['RISK','risk budget'],['ENTRY','order']];
- function gates(a){const d=String(a?.decision||'').toLowerCase(),p=a?.paper||{},sig=a?.strategies?.edgeSignal||{},best=sig.best||{};
-  const feed=['market','clob','rtds'].every(k=>a?.feed?.[k]==='live'),open=!!a?.openTrusted;
-  const fail=k=>d.includes(k);const st={FEED:feed,OPEN:open,ORACLE:!(fail('oracle')||fail('impulse')||fail('direction')),BOOK:!(fail('book older')||fail('depth')),SPREAD:!fail('spread'),
-   EDGE:ok(best.conservativeEdge)?best.conservativeEdge>0:!fail('advantage'),RISK:!(p.status==='risk_locked'||fail('lock')||fail('cooldown')||fail('loss')),ENTRY:!!p.position||d.includes('opportunity')||d.startsWith('edge:')||d.startsWith('model:')};
-  return st;}
+ const GATES=[['FEED','book live'],['WINDOW','2–95% of the round'],['FIRST','first side ≤ 50¢'],['PAIR','pair ≤ 97¢'],['SIZE','≤ $6 a side'],['BALANCE','≤ $3 lopsided'],['GUARD','wallet guard clear'],['BUY','would buy now']];
+ function gates(a,l){
+  const W=window.PAIR_WALLET,o=openOf(l),bbo=a?.bbo||{},ua=bbo.up?.ask,da=bbo.down?.ask,end=a?.market?.endTs,now=Date.now()/1000;
+  const traded=PAIR_LANES.includes(l),frac=end?1-(end-now)/300:null;
+  const feed=a?.feed?.clob==='live'&&ok(ua)&&ok(da),win=traded&&frac!==null&&frac>=.02&&frac<=.95;
+  const up=o?o.up:0,dn=o?o.down:0,uc=o?o.upCost:0,dc=o?o.downCost:0;
+  const first=up>0||dn>0||(ok(ua)&&ua<=.5)||(ok(da)&&da<=.5);
+  const pairOk=(up>0&&dn===0)?false:(up===0&&dn===0)?first:((ok(ua)&&dn>0&&ua+dc/dn<=.97)||(ok(da)&&up>0&&da+uc/up<=.97));
+  const size=Math.max(uc,dc)<6,bal=Math.abs(uc-dc)<3,guard=!(W&&W.guard);
+  const st={FEED:feed,WINDOW:win,FIRST:first,PAIR:pairOk,SIZE:size,BALANCE:bal,GUARD:guard};
+  st.BUY=traded&&Object.values(st).every(Boolean);return st;}
  let fills={},pulse=0;
  function shellFrame(t){
   const c=$('net');if(!c||!S){requestAnimationFrame(shellFrame);return;}
-  const[g,w,h]=ctx2d(c),a=S.assets?.[lane]||{},st=gates(a),sig=a.strategies?.edgeSignal||{},best=sig.best||{},col=COL[lane];
-  const pUp=ok(sig.pUp)?sig.pUp:null,edge=ok(best.conservativeEdge)?best.conservativeEdge:null,mis=sig.decision==='MISPRICED';
-  const trades=Number(a.paper?.trades||0);if(fills[lane]!==undefined&&trades>fills[lane])pulse=1;fills[lane]=trades;pulse*=.97;
-  const inX=0,gx=w*.34,cx=w*.70,cy=h*.52,R=Math.min(w*.25,h*.42),ins=(window.__inputs||[]).length||7,iy=i=>h*(i+.5)/ins,gy=i=>h*.1+i*(h*.8)/(GATES.length-1);
+  const[g,w,h]=ctx2d(c),a=S.assets?.[lane]||{},st=gates(a,lane),col=COL[lane];
+  const o=openOf(lane),pc=pairCost(o),upSh=o?o.up:0,dnSh=o?o.down:0,nf=o?o.fills:0;
+  if(fills[lane]!==undefined&&nf>fills[lane])pulse=1;fills[lane]=nf;pulse*=.96;
+  const end=a.market?.endTs,frac=end?Math.max(0,Math.min(1,1-(end-Date.now()/1000)/300)):0;
+  const inX=0,gx=w*.34,cx=w*.60,cy=h*.50,R=Math.min(w*.17,h*.37),ins=(window.__inputs||[]).length||7,iy=i=>h*(i+.5)/ins,gy=i=>h*.1+i*(h*.8)/(GATES.length-1);
   const time=t/1000;
   // input -> gate flows
   (window.__inputs||[]).forEach((inp,i)=>{GATES.forEach((gt,j)=>{if((i+j)%3)return;const pass=st[gt[0]];g.strokeStyle=pass?inp[3]:C.red;g.globalAlpha=pass?.22:.12;g.lineWidth=1;
@@ -227,31 +241,42 @@
   g.strokeStyle=C.line;g.beginPath();g.moveTo(gx,gy(0)-12);g.lineTo(gx,gy(GATES.length-1)+12);g.stroke();
   GATES.forEach((gt,j)=>{const pass=st[gt[0]],y=gy(j);g.fillStyle=pass?C.green:C.red;g.globalAlpha=.18;g.beginPath();g.arc(gx,y,9,0,7);g.fill();g.globalAlpha=1;g.beginPath();g.arc(gx,y,4,0,7);g.fill();
    const roomy=(gy(1)-gy(0))>=26;text(g,gt[0],gx+12,roomy?y-1:y+3,pass?C.text:C.red,9,'left','600');if(roomy)text(g,gt[1],gx+12,y+9,C.dim,8);});
-  // sphere: teal shell + gold core; core grows with calibrated conviction and pulses on fills
-  const rot=time*.18,tilt=-.3,conv=pUp===null?0:Math.abs(pUp-.5)*2,coreScale=.75+conv*.5+pulse*.35;
+  // pair core: top half = UP held (green), bottom half = DOWN held (red); ring = pair cost vs the 97c target;
+  // a comet goes once round per 5-minute round; the core pulses on every buy
+  const rot=time*.16,tilt=-.32,maxSh=Math.max(6,upSh,dnSh),litU=Math.min(1,upSh/maxSh),litD=Math.min(1,dnSh/maxSh);
   const proj=(p,s)=>{const x=p.x*s,y=p.y*s,z=p.z*s,c1=Math.cos(rot),s1=Math.sin(rot),x1=x*c1+z*s1,z1=-x*s1+z*c1,c2=Math.cos(tilt),s2=Math.sin(tilt),y1=y*c2-z1*s2,z2=y*s2+z1*c2,k=3/(3-z2);return{x:cx+x1*R*k,y:cy+y1*R*k,z:z2};};
-  const glow=g.createRadialGradient(cx,cy,0,cx,cy,R*1.25);glow.addColorStop(0,'rgba(255,196,90,'+(.10+conv*.12+pulse*.15)+')');glow.addColorStop(1,'rgba(7,12,14,0)');g.fillStyle=glow;g.fillRect(cx-R*1.3,cy-R*1.3,R*2.6,R*2.6);
-  const pts=shellPts.map(p=>({...proj(p,1+.012*Math.sin(time*2+p.j*9)),c:mis?C.green:C.cyan,s:.9})).concat(corePts.map(p=>({...proj(p,coreScale*(1+.04*Math.sin(time*3+p.j*7))),c:C.amber,s:1.25})));
-  pts.sort((a,b)=>a.z-b.z).forEach(p=>{const f=(p.z+1)/2;g.globalAlpha=.25+.75*f;g.fillStyle=p.c;g.beginPath();g.arc(p.x,p.y,p.s*(.6+f),0,7);g.fill();});
+  const ringCol=pc===null?C.dim:pc<=.97?C.green:pc<1?C.amber:C.red;
+  const glow=g.createRadialGradient(cx,cy,0,cx,cy,R*1.3);glow.addColorStop(0,`rgba(101,213,255,${.05+pulse*.18})`);glow.addColorStop(1,'rgba(7,12,14,0)');g.fillStyle=glow;g.fillRect(cx-R*1.4,cy-R*1.4,R*2.8,R*2.8);
+  const pts=shellPts.map(p=>{const top=p.y<0,lit=top?(p.j<litU):(p.j<litD);return {...proj(p,1+.01*Math.sin(time*2+p.j*9)),c:lit?(top?C.green:C.red):'#2b4a52',s:lit?1.15:.75,a:lit?1:.55};});
+  pts.sort((a,b)=>a.z-b.z).forEach(p=>{const f=(p.z+1)/2;g.globalAlpha=(.2+.8*f)*p.a;g.fillStyle=p.c;g.beginPath();g.arc(p.x,p.y,p.s*(.6+f),0,7);g.fill();});
+  // equator ring and the round comet
+  g.globalAlpha=.85;g.strokeStyle=ringCol;g.lineWidth=1.6;g.beginPath();
+  for(let i=0;i<=96;i++){const th=i/96*Math.PI*2,q=proj({x:Math.cos(th)*1.12,y:0,z:Math.sin(th)*1.12},1);i?g.lineTo(q.x,q.y):g.moveTo(q.x,q.y);}g.stroke();
+  const th=frac*Math.PI*2-rot,cm=proj({x:Math.cos(th+rot)*1.12,y:0,z:Math.sin(th+rot)*1.12},1);
+  g.globalAlpha=1;g.fillStyle=C.violet;g.beginPath();g.arc(cm.x,cm.y,3.4,0,7);g.fill();g.globalAlpha=.25;g.beginPath();g.arc(cm.x,cm.y,8,0,7);g.fill();
   g.globalAlpha=1;
-  if(mis){const u=(time*.8)%1;g.strokeStyle=C.green;g.globalAlpha=.7*(1-u);g.lineWidth=1.5;g.beginPath();g.arc(cx,cy,R*(1+u*.35),0,7);g.stroke();g.globalAlpha=1;}
-  text(g,NAME[lane]+' DECISION CORE',cx,cy+R+22,C.dim2,9,'center','600');
-  text(g,mis?'MISPRICING DETECTED':a.paper?.position?'IN POSITION':(a.decision||'').slice(0,48),cx,cy+R+34,mis?C.green:C.dim,8.5,'center');
+  const traded=PAIR_LANES.includes(lane);
+  text(g,NAME[lane]+' pair core',cx,cy+R+26,C.dim2,9,'center','600');
+  text(g,traded?(o?`UP ${upSh} sh / DOWN ${dnSh} sh`+(pc!==null?`, pair ${(pc*100).toFixed(1)}¢`:', one side so far'):(st.BUY?'buy conditions met':'flat: waiting for a side at 50¢ or less')):'not traded (5-minute rounds only)',
+   cx,cy+R+40,traded?(pc!==null&&pc<=.97?C.green:C.text):C.dim,9,'center');
   requestAnimationFrame(shellFrame);
  }
  function shellPanel(s){
   const a=s.assets?.[lane]||{},b=buf[lane],sig=a.strategies?.edgeSignal||{},best=sig.best||{},e=s.edge||{},es=e.strategies?.edge||{},ms=a.strategies?.momentumSizing||{};
   set('shellLane',NAME[lane]);set('confLane',NAME[lane]);
   (window.__inputs||[]).forEach(([k,,u,col])=>{const v=b[k].filter(ok).at(-1);set('in_'+k,ok(v)?(Math.abs(v)<10?v.toFixed(2):v.toFixed(0))+(u?' '+u:''):'—');spark($('sp_'+k),b[k],col);});
-  const p=ok(sig.pUp)?sig.pUp:null;set('confP',p===null?'—':pct(p),p===null?'':p>=.5?'pos':'neg');$('confBar').style.width=(p===null?0:Math.abs(p-.5)*200)+'%';$('confBar').style.background=p>=.5?C.green:C.red;
-  set('confEdge',`Edge after fees: ${ok(best.conservativeEdge)?(best.conservativeEdge*100).toFixed(1)+'¢ '+(best.side||''):'—'}, ${sig.cellRounds??0} calibration rounds`);
-  set('confStrat',e.promotedStrategy?`Strategy: ${e.promotedStrategy}, live on paper`:`Strategy: shadow, ${Math.min(es.bets||0,40)} of 40 bets`);
-  set('confSize',`Momentum sizing: ${ms.earned?'earned 1–2×':'1× (earning)'}, ${ms.trades??0} recorded`);
-  const mk=e.maker||{};set('confMaker',`Maker: ${mk.gatePassed?'promoted, funded quotes':'shadow, '+Math.min(mk.bets||0,40)+' of 40 cycles'}`);
-  const sb=$('shellBadge');sb.textContent=sig.decision||a.decision||'—';sb.className='badge '+(sig.decision==='MISPRICED'?'live':'');
+  const o=openOf(lane),pc=pairCost(o),bb=a.bbo||{},W=window.PAIR_WALLET;
+  set('confP',pc===null?'—':(pc*100).toFixed(1)+'¢',pc===null?'':pc<=.97?'pos':'neg');
+  $('confBar').style.width=(pc===null?0:Math.max(2,Math.min(100,(pc-.9)/.15*100)))+'%';$('confBar').style.background=pc===null?C.dim:pc<=.97?C.green:pc<1?C.amber:C.red;
+  const ua=bb.up?.ask,da=bb.down?.ask;
+  set('confEdge',`Asks now: UP ${ok(ua)?(ua*100).toFixed(0)+'¢':'—'} + DOWN ${ok(da)?(da*100).toFixed(0)+'¢':'—'}`+(ok(ua)&&ok(da)?` = ${((ua+da)*100).toFixed(0)}¢`:''));
+  set('confStrat',o?`Holding ${money(o.costUsd)} in this round, ${o.fills} buys`:'No open round on this lane');
+  set('confSize',`Rule: buy whichever side keeps the pair ≤ 97¢, $1 clips`);
+  set('confMaker',W?`Wallet: ${money(W.equity)} equity, ${signed(W.pnlUsd)} since the fresh start`:'Wallet: waiting');
+  const sb=$('shellBadge'),stt=stateOf(a,lane);sb.textContent={trade:'Holding a round',signal:'Buy conditions met',lock:'Paused by guard',feed:'Not traded',wait:'Waiting'}[stt];sb.className='badge '+(stt==='trade'||stt==='signal'?'live':stt==='lock'?'warn':'');
   LANES.forEach(l=>{const c=$('tl_'+l);if(!c)return;const[g,w,h]=ctx2d(c),d=buf[l].decision,cw=w/MAXB;
    const colr={trade:C.amber,signal:C.green,lock:C.red,feed:C.violet,wait:'#1d3036'};d.forEach((x,i)=>{g.fillStyle=colr[x.state];g.fillRect(w-(d.length-i)*cw,0,Math.ceil(cw),h);});
-   set('tld_'+l,(s.assets?.[l]?.decision||'—'));});
+   set('tld_'+l,pairText(s.assets?.[l]||{},l));});
  }
 
  // ---------- edge matrix ----------

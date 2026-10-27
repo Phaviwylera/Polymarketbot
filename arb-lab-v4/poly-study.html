@@ -40,6 +40,7 @@ main{padding:12px;display:grid;gap:12px;grid-template-columns:repeat(12,minmax(0
 .fill.win{border-color:#2f4a3a}.fill.win .t b{color:#ffd166}
 .ttl{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;color:#c9d6f2;font-size:10px;letter-spacing:.1em;white-space:nowrap;text-shadow:0 0 8px rgba(101,150,255,.6)}
 .tleg{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;color:#8ea2c9;font-size:9.5px;padding:0 10px 10px}.tleg i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+@media(max-width:620px){.top{position:static}}
 @media(max-width:900px){.tbody{grid-template-columns:minmax(0,1fr);min-height:0}#torus{height:340px}#threads{display:none}.col{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.col h5{grid-column:1/-1}.ttl{position:static;transform:none;text-align:center;white-space:normal}}
 .legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--dim2);font-size:9.5px;margin-top:6px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .hm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}@media(max-width:760px){.hm{grid-template-columns:minmax(0,1fr)}}
@@ -231,11 +232,13 @@ function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;
 function initTorus(){
  const c=$('torus');if(!window.THREE){const g=c.getContext('2d');g.fillStyle='#8ea2c9';g.fillText('3D view needs three.js',10,20);return;}
  const ren=new THREE.WebGLRenderer({canvas:c,antialias:true,alpha:true}),scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(38,1,.1,60);
- cam.position.set(0,.05,4.05);const grp=new THREE.Group();scene.add(grp);const tex=glowTex();
+ cam.position.set(0,.05,4.55);const grp=new THREE.Group();scene.add(grp);const tex=glowTex();
  // base lattice
- const n=TR.NU*TR.NV,base=new Float32Array(n*3),col=new Float32Array(n*3),uv=new Float32Array(n*2);let k=0;
- for(let i=0;i<TR.NU;i++)for(let j=0;j<TR.NV;j++){const u=i/TR.NU*Math.PI*2+(j%2)*Math.PI/TR.NU,v=j/TR.NV*Math.PI*2;uv[2*k]=u;uv[2*k+1]=v;
-  const p=torPos(u,v);base.set(p,3*k);const w=(.45+.55*(Math.sin(v)*.5+.5))*(.75+.25*Math.random()),hot=Math.random()<.035;col.set(hot?[1,.86,.5]:[.22+.62*w*w,.42+.50*w,1],3*k);k++;}
+ // points per tube ring in proportion to that ring's circumference, so density is even over the surface
+ const rings=[];let tot=0;for(let j=0;j<TR.NV;j++){const v=j/TR.NV*Math.PI*2,m=Math.max(8,Math.round(TR.NU*(TR.R+TR.r*Math.cos(v))/(TR.R+TR.r)));rings.push([v,m]);tot+=m;}
+ const n=tot,base=new Float32Array(n*3),col=new Float32Array(n*3),uv=new Float32Array(n*2);let k=0;
+ rings.forEach(([v,m],j)=>{for(let i=0;i<m;i++){const u=(i+(j%2)*.5)/m*Math.PI*2;uv[2*k]=u;uv[2*k+1]=v;
+  const p=torPos(u,v);base.set(p,3*k);const w=(.45+.55*(Math.sin(v)*.5+.5))*(.78+.22*Math.random())*(Math.cos(v)<-.55?.62:1),hot=Math.random()<.025;col.set(hot?[1,.86,.5]:[.22+.62*w*w,.42+.50*w,1],3*k);k++;}});
  const bg=new THREE.BufferGeometry();bg.setAttribute('position',new THREE.BufferAttribute(base.slice(),3));bg.setAttribute('color',new THREE.BufferAttribute(col,3));
  const basePts=new THREE.Points(bg,new THREE.PointsMaterial({size:.052,map:tex,vertexColors:true,transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending}));grp.add(basePts);
  // spikes + tips
@@ -252,8 +255,8 @@ function initTorus(){
 }
 function frameT(now){
  if(!T3)return;const {ren,cam,grp,basePts,uv,canvas}=T3,r=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
- if(r.width&&(T3.w!==r.width||T3.h!==r.height)){ren.setPixelRatio(dpr);ren.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.position.z=4.05*Math.max(1,Math.pow(1.9/cam.aspect,.85));cam.updateProjectionMatrix();T3.w=r.width;T3.h=r.height;}
- const t=(now-clock0)/1000;if(autoT)rotTy+=.0018;grp.rotation.set(rotTx,rotTy,0);
+ if(r.width&&(T3.w!==r.width||T3.h!==r.height)){ren.setPixelRatio(dpr);ren.setSize(r.width,r.height,false);cam.aspect=r.width/r.height;cam.position.z=4.55*Math.max(1,Math.pow(1.9/cam.aspect,.6));cam.updateProjectionMatrix();T3.w=r.width;T3.h=r.height;}
+ const t=(now-clock0)/1000;if(autoT)rotTy+=.0018;grp.rotation.set(rotTx,rotTy,0);grp.position.y=.12;
  // breathing surface
  const pos=basePts.geometry.attributes.position.array;
  for(let k=0,n=uv.length/2;k<n;k++){const u=uv[2*k],v=uv[2*k+1],lift=.018*Math.sin(t*1.6+u*5+v*3)+.01*Math.sin(t*.7+u*13);const p=torPos(u,v,lift);pos[3*k]=p[0];pos[3*k+1]=p[1];pos[3*k+2]=p[2];}
@@ -268,20 +271,25 @@ function frameT(now){
  ren.render(T3.scene,cam);drawThreads(t);requestAnimationFrame(frameT);
 }
 // project a torus point to coordinates inside #tbody
-function screenOf(u,v,lift){if(!T3)return null;const p=new THREE.Vector3(...torPos(u,v,lift));p.applyMatrix4(T3.grp.matrixWorld).project(T3.cam);
- if(p.z>1)return null;const cr=T3.canvas.getBoundingClientRect(),br=$('tbody').getBoundingClientRect();return {x:cr.left-br.left+(p.x*.5+.5)*cr.width,y:cr.top-br.top+(-p.y*.5+.5)*cr.height};}
+function facing(u,v,lift){const w=new THREE.Vector3(...torPos(u,v,lift)).applyMatrix4(T3.grp.matrixWorld);
+ const n=new THREE.Vector3(...torNorm(u,v)).transformDirection(T3.grp.matrixWorld);return [w,n.dot(T3.cam.position.clone().sub(w).normalize())];}
+function screenOf(u,v,lift){if(!T3)return null;let [w,d]=facing(u,v,lift);
+ // on the far side of the tube: slide round the tube (same moment of the round) to the nearest point facing us
+ for(let k=1;d<.05&&k<=16;k++){for(const sgn of [1,-1]){const [w2,d2]=facing(u,v+sgn*k*Math.PI/16,lift);if(d2>=.05){w=w2;d=d2;break;}}}
+ if(d<.05)return null;
+ const p=w.clone().project(T3.cam);if(p.z>1)return null;const cr=T3.canvas.getBoundingClientRect(),br=$('tbody').getBoundingClientRect();return {x:cr.left-br.left+(p.x*.5+.5)*cr.width,y:cr.top-br.top+(-p.y*.5+.5)*cr.height};}
 function drawThreads(t){
  const cv=$('threads');if(!cv||getComputedStyle(cv).display==='none')return;const br=$('tbody').getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
  if(cv.width!==Math.round(br.width*dpr)||cv.height!==Math.round(br.height*dpr)){cv.width=br.width*dpr;cv.height=br.height*dpr;}
  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,br.width,br.height);g.lineCap='round';
  const draw=(el,uvl,color,side,i)=>{if(!el||!uvl)return;const er=el.getBoundingClientRect(),q=screenOf(...uvl);if(!q)return;
   const x0=side==='L'?er.right-br.left:er.left-br.left,y0=er.top-br.top+er.height/2,dx=(q.x-x0)*.55;
-  g.strokeStyle=color;g.globalAlpha=.55;g.lineWidth=1.1;g.shadowColor=color;g.shadowBlur=8;
+  g.strokeStyle=color;g.globalAlpha=.38;g.lineWidth=1;g.shadowColor=color;g.shadowBlur=4;
   g.beginPath();g.moveTo(x0,y0);g.bezierCurveTo(x0+dx,y0,q.x-dx*.4,q.y,q.x,q.y);g.stroke();
   // travelling pulse
   const s=(t*.45+i*.17)%1,bx=(1-s)**3*x0+3*(1-s)**2*s*(x0+dx)+3*(1-s)*s*s*(q.x-dx*.4)+s**3*q.x,by=(1-s)**3*y0+3*(1-s)**2*s*y0+3*(1-s)*s*s*q.y+s**3*q.y;
   g.globalAlpha=.95;g.fillStyle=color;g.beginPath();g.arc(bx,by,2.1,0,7);g.fill();g.beginPath();g.arc(x0,y0,2.4,0,7);g.fill();g.beginPath();g.arc(q.x,q.y,1.8,0,7);g.fill();g.shadowBlur=0;};
- anchors.inputs.forEach((a,i)=>draw(a.el,a.uv,a.color,'L',i));anchors.fills.forEach((a,i)=>draw(a.el,a.uv,a.color,'R',i+5));g.globalAlpha=1;
+ anchors.inputs.forEach((a,i)=>draw(a.el,a.uv,a.color,'L',i));anchors.fills.slice(0,4).forEach((a,i)=>draw(a.el,a.uv,a.color,'R',i+5));g.globalAlpha=1;
 }
 function sparkT(c,vals,color,lo,hi){const r=c.getBoundingClientRect(),d=Math.min(2,devicePixelRatio||1);if(!r.width)return;c.width=r.width*d;c.height=r.height*d;const g=c.getContext('2d');g.scale(d,d);
  const v=vals.filter(ok);if(v.length<2)return;const mn=lo??Math.min(...v),mx=hi??Math.max(...v),X=i=>i/(v.length-1)*r.width,Y=x=>r.height-2-(x-mn)/Math.max(1e-9,mx-mn)*(r.height-4);
@@ -290,9 +298,9 @@ function sparkT(c,vals,color,lo,hi){const r=c.getBoundingClientRect(),d=Math.min
 function torus(s){
  const now=(performance.now()-clock0)/1000,live=s.live||[],cloud=s.cloud||[],have=new Map(spikes.map(x=>[x.key,x]));const next=[];
  const add=(key,lf,price,size,color,fade,scale=1,b=0)=>{const [u,v]=uvOf(lf,price),h=Math.sin((+size||1)*12.9898+price*78.233+b*3.1)*43758.5453,j=((h-Math.floor(h))-.5)*.09,old=have.get(key);
-  next.push({key,u:u+j,v:v+j*.7,len:scale*(.06+.30*Math.min(1,Math.log1p(+size||1)/5.2)),c:color,fade,born:old?old.born:now});};
+  next.push({key,u:u+j,v:v+j*.7,len:scale*(.03+.17*Math.min(1,Math.log1p(+size||1)/6)),c:color,fade,born:old?old.born:now});};
  cloud.slice(-260).forEach((p,i,a)=>{if(!ok(p.p))return;add('c'+p.t+p.tok+p.p+p.s,p.l,p.p,p.s,p.w?GREEN:RED,(.18+.32*i/a.length),.55);});
- live.slice(0,80).forEach((r,i)=>{if(!ok(r.price))return;const lf=ok(r.leftFrac)?r.leftFrac:(ok(r.secondsLeft)?r.secondsLeft/(String(r.lane).endsWith('15')?900:300):.5);for(let b=0;b<3;b++)add('l'+b+r.t+r.token+r.price+r.size,lf,r.price,r.size,GOLD,(1-.55*i/80)*(b?.7:1),1.25,b);});
+ live.slice(0,50).forEach((r,i)=>{if(!ok(r.price))return;const lf=ok(r.leftFrac)?r.leftFrac:(ok(r.secondsLeft)?r.secondsLeft/(String(r.lane).endsWith('15')?900:300):.5);add('l'+r.t+r.token+r.price+r.size,lf,r.price,r.size,GOLD,1-.6*i/50,1.15,0);});
  spikes=next;
  // left: live input cards for the latest print
  const L0=live[0];latestLane=L0?L0.lane:null;const same=live.filter(r=>r.lane===latestLane).slice(0,40).reverse(),up=r=>r.token==='UP'?r.price:1-r.price;
@@ -305,7 +313,7 @@ function torus(s){
   ['Up price',ok(upP)?upP.toFixed(3):'—','last trade, as UP probability','#ff5d73',same.map(up),0,1]];
  const ic=$('inputs');if(ic.children.length!==inputs.length+1){ic.innerHTML='<h5>Live inputs at the latest trade</h5>'+inputs.map((x,i)=>`<div class="inp" style="--c:${x[3]}" id="inp${i}"><div class="t"><span>${x[0]}</span><b></b></div><small></small><canvas></canvas></div>`).join('');}
  anchors.inputs=inputs.map((x,i)=>{const el=$('inp'+i);el.querySelector('b').textContent=x[1];el.querySelector('small').textContent=x[2];sparkT(el.querySelector('canvas'),x[4],x[3],x[5],x[6]);
-  const lf=L0?(ok(L0.leftFrac)?L0.leftFrac:.5):.5;return {el,uv:L0?[...uvOf(lf,L0.price).map((a,j)=>a+(i-2)*.03*(j?1:.4)),.02]:null,color:x[3]};});
+  const lf=L0?(ok(L0.leftFrac)?L0.leftFrac:.5):.5;return {el,uv:L0?[...uvOf(lf,L0.price).map((a,j)=>a+(i-2)*(j?.16:.07)),.03]:null,color:x[3]};});
  // right: biggest recent winning buys
  const wins=[];(s.rounds||[]).forEach(r=>(r.topWinningBuys||[]).slice(0,2).forEach(b=>wins.push({...b,lane:r.lane,winner:r.winner,profit:(+b.size||0)*(1-(+b.price||0))})));
  wins.sort((a,b)=>b.profit-a.profit);const top=wins.slice(0,7),fc=$('fills');

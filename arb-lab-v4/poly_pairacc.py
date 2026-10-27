@@ -72,7 +72,8 @@ class PairAcc:
             b=r['v'].get('wallet')
             if b and b.fills:
                 c=b.inv['up'][1]+b.inv['down'][1];open_cost+=c
-                opens.append({'slug':r['slug'],'lane':r['lane'],'up':round(b.inv['up'][0],2),'down':round(b.inv['down'][0],2),'costUsd':round(c,2)})
+                opens.append({'slug':r['slug'],'lane':r['lane'],'end':r['end'],'up':round(b.inv['up'][0],2),'down':round(b.inv['down'][0],2),'costUsd':round(c,2),
+                              'upCost':round(b.inv['up'][1],4),'downCost':round(b.inv['down'][1],4),'fills':b.fills})
         wins=sum(1 for r in rows if r['v']['wallet']['pnlUsd']>0)
         eq=0.;peak=0.;dd=0.
         for r in sorted(rows,key=lambda x:x['end']):eq+=r['v']['wallet']['pnlUsd'];peak=max(peak,eq);dd=max(dd,peak-eq)
