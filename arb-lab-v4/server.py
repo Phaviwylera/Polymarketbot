@@ -975,6 +975,13 @@ async def start_trade_tape():
             if not hasattr(_ln,'print_listeners'):_ln.print_listeners=[]
             _ln.book_listeners.append(fmk.on_book);_ln.print_listeners.append(fmk.on_print)
         edge.settle_listeners.append(fmk.settle);asyncio.create_task(fmk.loop());print('POLY_FASTMAKER_ON',flush=True)
+    import poly_pairacc                               # R1: paper replica of the observed rival pair-accumulation pattern
+    pac=poly_pairacc.PairAcc()
+    if pac.enabled:
+        for _ln in poly_server_engine.engines.values():
+            if not hasattr(_ln,'book_listeners'):_ln.book_listeners=[]
+            _ln.book_listeners.append(pac.on_book)
+        edge.settle_listeners.append(pac.settle);asyncio.create_task(pac.loop());print('POLY_PAIRACC_ON',flush=True)
     import poly_rivals                                # read-only study of public rival bot accounts
     rv=poly_rivals.Rivals()
     if rv.enabled:asyncio.create_task(rv.loop());print('POLY_RIVALS_ON',flush=True)
@@ -988,9 +995,9 @@ async def start_trade_tape():
 @app.get("/api/poly/lanes")
 async def poly_new_lanes():
     """Maker (M1), cross-market (X1) and event-market (E1) lanes, record-only."""
-    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals
+    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals,poly_pairacc
     out={}
-    for name,mod in (('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi),('rivals',poly_rivals)):
+    for name,mod in (('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi),('rivals',poly_rivals),('pairacc',poly_pairacc)):
         try:out[name]=mod.CURRENT.report() if mod.CURRENT else {'enabled':False}
         except Exception as exc:out[name]={'error':type(exc).__name__}
     return out

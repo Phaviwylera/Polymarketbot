@@ -378,7 +378,7 @@ async function lanes(){
   const pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—',b4=v=>ok(v)?v.toFixed(4):'—',n=v=>ok(v)?v:'—';
   const vcls=v=>v==='CONFIRMED'?'pos':v==='not confirmed'?'neg':'';const vt=v=>v?v.charAt(0).toUpperCase()+v.slice(1).toLowerCase():'—';
   const fig=(k,v)=>`<div class="fig"><span>${k}</span><b>${v}</b></div>`;
-  const F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
+  const P=L.pairacc||{},r1=P.R1||{},rf=r1.forward||{},F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
   const off=o=>o.enabled===false?'<div class="dim">Off on the server.</div>':'';
   $('lanes').innerHTML=`
   <div class="lane"><h4>Maker quotes (M1)</h4><p class="why">Resting bids at the best bid on both tokens, behind the existing queue. Earns the spread and pays no taker fee, but gets picked off.</p>${off(M)}
@@ -401,7 +401,12 @@ async function lanes(){
   <div class="lane"><h4>Polymarket vs Kalshi (K1)</h4><p class="why">Same 15-minute rounds on two exchanges. UP on one plus DOWN on the other under $1 after fees is a gap, if both settle the same way.</p>${off(K)}
    <div class="verdict ${vcls(k1.verdict)}">${vt(k1.verdict)}</div>
    ${fig('Rounds matched, settled',`${n(K.matched)} scans, ${n(K.roundsSettled)} rounds`)}${fig('Gaps seen',n(K.gapsSeen))}${fig('Gap trades',`${n(k1.trades)} (needs 100)`)}
-   ${fig('P&L per pair',`${pc(k1.avgPnlPerPair)}, bad case ${pc(k1.lower95)}`)}${fig('Exchanges disagree',ok(K.venuesDisagreePct)?K.venuesDisagreePct+'% of rounds':'—')}</div>`;
+   ${fig('P&L per pair',`${pc(k1.avgPnlPerPair)}, bad case ${pc(k1.lower95)}`)}${fig('Exchanges disagree',ok(K.venuesDisagreePct)?K.venuesDisagreePct+'% of rounds':'—')}</div>
+  <div class="lane"><h4>Rival replica (R1)</h4><p class="why">The pattern seen in @GoodFallen's trades: keep taking small clips of whichever side keeps the pair under 97¢, through the whole 5-minute round.</p>${off(P)}
+   <div class="verdict ${vcls(r1.verdict)}">${vt(r1.verdict)}</div>
+   ${fig('Rounds with fills',`${n(rf.rounds)} (needs 300)`)}${fig('Both sides / avg pair cost',`${ok(rf.bothSidesPct)?rf.bothSidesPct+'%':'—'}, ${ok(rf.avgPairCost)?rf.avgPairCost.toFixed(3):'—'}`)}
+   ${fig('P&L per $, no rebate',`${pc(rf.perDollar)}, bad case ${pc(rf.lower95)}`)}${fig('Paper P&L, fees paid',`${ok(rf.pnlUsd)?'$'+rf.pnlUsd.toFixed(2):'—'}, $${ok(rf.feesUsd)?rf.feesUsd.toFixed(2):'—'}`)}
+   ${fig('If Gold-tier rebate (18%)',ok(rf.pnlGoldUsd)?'$'+rf.pnlGoldUsd.toFixed(2):'—')}</div>`;
   rivals(L.rivals);$('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
  }catch(e){}
 }
