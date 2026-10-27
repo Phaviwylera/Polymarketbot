@@ -189,12 +189,21 @@ class Events:
             fav=('YES',v['yesAsk'],v['yesWon']) if FAV_LO<=v['yesAsk']<=FAV_HI else (('NO',v['noAsk'],not v['yesWon']) if FAV_LO<=v['noAsk']<=FAV_HI else None)
             if fav:fw.append((1. if fav[2] else 0.)/min(.999,fav[1]+0.01)-1)     # real ask + 1c
         f=stats(fw)
+        # long-tail check: is the favourite rule, or the calibration, different in small markets?
+        tiers=((10000,50000,'$10k-50k'),(50000,250000,'$50k-250k'),(250000,1e15,'$250k+'))
+        by_vol={}
+        for lo,hi,name in tiers:
+            rs=[r for r in H if lo<=float(r.get('volume') or 0)<hi]
+            fav=[x for x in (rule(r['p'].get(RULE_H),r['yesWon']) for r in rs) if x]
+            mis=[(1. if r['yesWon'] else 0.)-r['p'][RULE_H] for r in rs if RULE_H in r['p']]
+            longshot=[(1. if r['yesWon'] else 0.)-r['p'][RULE_H] for r in rs if RULE_H in r['p'] and r['p'][RULE_H]<0.2]
+            by_vol[name]={'markets':len(rs),'favouriteRule':stats([x[1] for x in fav]),'avgWonMinusPrice':stats(mis,3.0),'longshotsUnder20c':stats(longshot,3.0)}
         return {'enabled':self.enabled,**self.state,'historyMarkets':len(H),'forwardOpen':len(self.fwd),'forwardSettled':len(self.fwd_closed),
                 'calibration':calib,
                 'E1':{'rule':f'at {RULE_H} before the scheduled end, buy the side priced {int(FAV_LO*100)}-{int(FAV_HI*100)}c; history cost +2c, forward at the real ask +1c',
                       'pass':f'forward: >= {MIN_FWD} markets and mean - 1.645 SE > 0','registeredAt':REGISTERED_AT,
                       'history':stats([x for _,x in hr]),'historyNoStress':stats(at0),
-                      'historyByWeek':[{'week':w,**stats(v)} for w,v in sorted(weeks.items())],'forward':f,
+                      'historyByWeek':[{'week':w,**stats(v)} for w,v in sorted(weeks.items())],'forward':f,'byVolume':by_vol,
                       'verdict':'collecting' if f['n']<MIN_FWD else ('CONFIRMED' if (f.get('lower95') or -1)>0 else 'not confirmed')}}
     def compact(self):
         r=self.report()

@@ -107,6 +107,27 @@ def fingerprint(fills,taker_keys):
                           'takerPct':round(100*v[2]/v[0],1) if v[0] else None,'fills':v[3]} for n,v in phase.items()},
             'byPrice':{n:{'sharePct':round(100*v[0]/totsh,1),'takerPct':round(100*v[1]/v[0],1) if v[0] else None,'fills':v[2]} for n,v in pb.items()}}
 
+def general(fills,taker_keys,now):
+    """Profile across ALL markets (for market makers and macro accounts, not only up/down): maker share, how many
+    markets, trade size and price, buy/sell mix, fills per day, and the markets with the most volume."""
+    if not fills:return {'fills':0}
+    vol={};buys=sells=0.;mk=tk=0.;prices=[];ts=[]
+    for f in fills:
+        try:p=float(f['price']);sz=float(f['size']);t=float(f['timestamp'])
+        except (KeyError,TypeError,ValueError):continue
+        t=t/1000 if t>1e12 else t;ts.append(t);prices.append(p);usd=p*sz
+        vol[f.get('slug') or '?']=vol.get(f.get('slug') or '?',0.)+usd
+        if str(f.get('side')).upper()=='BUY':buys+=usd
+        else:sells+=usd
+        if _key(f) in taker_keys:tk+=usd
+        else:mk+=usd
+    span=max(1.,(max(ts)-min(ts))/86400) if ts else 1.
+    top=sorted(vol.items(),key=lambda kv:-kv[1])[:5]
+    return {'fills':len(fills),'usdTraded':round(buys+sells,2),'makerSharePct':round(100*mk/(mk+tk),1) if (mk+tk) else None,
+            'markets':len(vol),'updownSharePct':round(100*sum(v for k,v in vol.items() if UPDOWN.match(str(k)))/max(1e-9,sum(vol.values())),1),
+            'sellSharePct':round(100*sells/max(1e-9,buys+sells),1),'medianPrice':round(sorted(prices)[len(prices)//2],3) if prices else None,
+            'fillsPerDay':round(len(fills)/span,1),'spanDays':round(span,2),'topMarkets':[[k,round(v,2)] for k,v in top]}
+
 def _key(f):return (str(f.get('transactionHash') or ''),str(f.get('asset') or ''),str(f.get('size')),str(f.get('price')),str(f.get('side')))
 
 def summarize(rows,settled):
@@ -137,8 +158,8 @@ def summarize(rows,settled):
 class Rivals:
     def __init__(self,http=None,now=time.time):
         self.http=http;self.now=now;self.enabled=os.getenv('POLY_RIVALS','1')!='0'
-        spec=os.getenv('POLY_RIVALS_NAMES','norm1e69,GoodFallen,98euf98a')
-        self.names=[x.strip() for x in spec.split(',') if x.strip()];self.wallets={};self.results={};self.winners={}
+        spec=os.getenv('POLY_RIVALS_NAMES','norm1e69,GoodFallen,98euf98a,Flaznorp,UpTheBlues,RN1,Theo4,Fredi9999,joseph00677')
+        self.names=[x.strip() for x in spec.split(',') if x.strip()];self.wallets={};self.results={};self.winners={};self.board={}
         self.state={'runs':0,'errors':0,'lastError':None,'lastRunAt':None}
     async def _c(self):
         if self.http is None:
@@ -148,19 +169,26 @@ class Rivals:
         r=await (await self._c()).get(url,params=params);r.raise_for_status();return r.json()
     def _err(self,where,exc):self.state['errors']+=1;self.state['lastError']=f'{where}: {type(exc).__name__}: {str(exc)[:100]}'
     async def resolve(self,name):
+        """Leaderboards first (exact username, with its P&L and volume), then profile search, then the profile page.
+        A display-name search alone can match a different account with the same name."""
         if ':' in name:n,a=name.split(':',1);return n,a.lower()
+        try:
+            for period in ('MONTH','ALL'):
+                for cat in ('OVERALL','CRYPTO','SPORTS','POLITICS'):
+                    d=await self.get(DATA+'/v1/leaderboard',{'category':cat,'timePeriod':period,'orderBy':'PNL','limit':200})
+                    for row in d or []:
+                        if str(row.get('userName') or '').lower()==name.lower() and ADDR.fullmatch(str(row.get('proxyWallet') or '')):
+                            self.board[name]={'period':period,'category':cat,'rank':row.get('rank'),'pnl':row.get('pnl'),'vol':row.get('vol'),
+                                              'roiPct':round(100*float(row['pnl'])/float(row['vol']),3) if row.get('vol') else None}
+                            return name,str(row['proxyWallet']).lower()
+                    await asyncio.sleep(.2)
+        except Exception as exc:self._err('leaderboard',exc)
         try:
             d=await self.get(GAMMA+'/public-search',{'q':name,'search_profiles':'true','limit_per_type':10})
             for p in (d or {}).get('profiles') or []:
-                if str(p.get('name') or p.get('pseudonym') or '').lower()==name.lower() and ADDR.fullmatch(str(p.get('proxyWallet') or '')):
+                if str(p.get('name') or '').lower()==name.lower() and ADDR.fullmatch(str(p.get('proxyWallet') or '')):
                     return name,p['proxyWallet'].lower()
         except Exception as exc:self._err('search',exc)
-        try:
-            for cat in ('CRYPTO','OVERALL'):
-                d=await self.get(DATA+'/v1/leaderboard',{'category':cat,'timePeriod':'MONTH','orderBy':'PNL','limit':200})
-                for row in d or []:
-                    if str(row.get('userName') or '').lower()==name.lower():return name,str(row['proxyWallet']).lower()
-        except Exception as exc:self._err('leaderboard',exc)
         try:
             r=await (await self._c()).get(f'https://polymarket.com/@{name}');txt=r.text
             m=re.search(r'"proxyWallet"\s*:\s*"(0x[a-fA-F0-9]{40})"',txt)
@@ -216,6 +244,7 @@ class Rivals:
                 other=sum(1 for f in allf if not UPDOWN.match(str(f.get('slug') or '')))
                 self.results[n]={'wallet':addr,'fills':len(allf),'takerFills':len(tk),'nonUpDownFills':other,'merges':await self.merges(addr),
                                  'lookbackDays':LOOKBACK_DAYS,**summarize(rows,settled),'fingerprint':fingerprint(allf,tkeys),
+                                 'general':general(allf,tkeys,self.now()),'leaderboard':self.board.get(n),
                                  'sample':sorted(settled,key=lambda r:r['slug'])[-5:]}
             except Exception as exc:self._err(name,exc);self.results[name]={'error':type(exc).__name__}
     def report(self):return {'enabled':self.enabled,**self.state,'names':self.names,'wallets':self.wallets,'results':self.results,

@@ -48,3 +48,7 @@ class EventTests(unittest.TestCase):
         st=js.load(gzip.open(e.path(),'rt'));st['cfg']=[60,50000.];js.dump(st,gzip.open(e.path(),'wt'))
         e2=pe.Events(root=e.root);e2.load();self.assertIsNone(e2.state['dayCursor'])
         e3=pe.Events(root=e.root);e3.state['dayCursor']=5;e3.save();e4=pe.Events(root=e.root);e4.load();self.assertEqual(e4.state['dayCursor'],5)
+    def test_volume_tiers(self):
+        e=pe.Events(root=tempfile.mkdtemp())
+        e.hist={'a':{'slug':'a','endAt':END,'yesWon':True,'volume':20000,'p':{'3d':.85}},'b':{'slug':'b','endAt':END,'yesWon':False,'volume':900000,'p':{'3d':.1}}}
+        bv=e.report()['E1']['byVolume'];self.assertEqual(bv['$10k-50k']['favouriteRule']['n'],1);self.assertEqual(bv['$250k+']['longshotsUnder20c']['n'],1)

@@ -31,3 +31,12 @@ class RivalTests(unittest.TestCase):
         fills=[f('Up','BUY',.45,15,h='a'),f('Down','BUY',.50,10,h='b')]
         rows,settled=pr.analyse(fills,set(),{S:'UP'});s=pr.summarize(rows,settled)
         self.assertEqual(s['excessOnWinnerPct'],100.);self.assertAlmostEqual(s['pairPnlBeforeFees'],10*(1-(.45+.50)),2)
+    def test_general_profile_and_leaderboard_first(self):
+        fills=[f('Up','BUY',.45,10,h='a'),{'slug':'some-election','outcome':'Yes','side':'SELL','price':.6,'size':100,'timestamp':1792800500,'transactionHash':'z','asset':'q'}]
+        g=pr.general(fills,{pr._key(fills[1])},1792900000);self.assertEqual(g['markets'],2);self.assertLess(g['makerSharePct'],50);self.assertGreater(g['updownSharePct'],0)
+        r=pr.Rivals();calls=[]
+        async def get(url,params=None):
+            calls.append(url)
+            if 'leaderboard' in url:return [{'userName':'RN1','proxyWallet':'0x'+'b'*40,'pnl':100,'vol':10000,'rank':3}]
+            return {'profiles':[{'name':'RN1','proxyWallet':'0x'+'c'*40}]}
+        r.get=get;n,a=asyncio.run(r.resolve('RN1'));self.assertEqual(a,'0x'+'b'*40);self.assertEqual(r.board['RN1']['roiPct'],1.0)

@@ -363,11 +363,15 @@ function hyp(s){
 function rivals(R){
  const res=(R||{}).results||{},names=Object.keys(res);if(!names.length)return;
  const pc=v=>ok(v)?(100*v).toFixed(1)+'%':'—',usd=v=>ok(v)?(v<0?'−$':'$')+Math.abs(v).toFixed(2):'—',c=v=>ok(v)?v.toFixed(3):'—';
- const rows=[['Rounds traded (3 days)',x=>x.rounds],['Both sides bought',x=>ok(x.bothSidesPct)?x.bothSidesPct+'%':'—'],['Average pair cost',x=>c(x.avgPairCost)],
+ const G=x=>x.general||{},B=x=>x.leaderboard||{};
+ const rows=[['Leaderboard P&L / volume',x=>ok(B(x).pnl)?`${usd(B(x).pnl)} / ${usd(B(x).vol)}`:'—'],['Return on volume',x=>ok(B(x).roiPct)?B(x).roiPct+'%':'—'],
+  ['Fills studied, per day',x=>G(x).fills?`${G(x).fills}, ${G(x).fillsPerDay}/day`:'—'],['Markets traded',x=>G(x).markets??'—'],['Up/down share of volume',x=>ok(G(x).updownSharePct)?G(x).updownSharePct+'%':'—'],
+  ['Maker share, all markets',x=>ok(G(x).makerSharePct)?G(x).makerSharePct+'%':'—'],['Median price',x=>ok(G(x).medianPrice)?G(x).medianPrice:'—'],
+  ['Rounds traded (3 days)',x=>x.rounds],['Both sides bought',x=>ok(x.bothSidesPct)?x.bothSidesPct+'%':'—'],['Average pair cost',x=>c(x.avgPairCost)],
   ['Pairs costing under $1',x=>ok(x.pairCostUnder1Pct)?x.pairCostUnder1Pct+'%':'—'],['Maker share of shares',x=>ok(x.makerSharePct)?x.makerSharePct+'%':'—'],
   ['First buy, share of window',x=>ok(x.medianFirstBuyFrac)?pc(x.medianFirstBuyFrac):'—'],['Merges (last 500)',x=>x.merges??'—'],['Rounds settled in sample',x=>x.settledRounds],
   ['P&L before fees',x=>usd(x.pnlBeforeFees)],['Taker fees paid',x=>usd(x.takerFees)],['P&L after fees',x=>usd(x.pnlAfterFees)],
-  ['Plus maker rebate (est.)',x=>usd(x.pnlWithMakerRebate)],['Taker rebate needed to break even',x=>ok(x.takerRebateNeededToBreakEvenPct)?x.takerRebateNeededToBreakEvenPct+'%':'—']];
+  ['Plus maker rebate (est.)',x=>usd(x.pnlWithMakerRebate)],['Leftover on the winner',x=>ok(x.excessOnWinnerPct)?x.excessOnWinnerPct+'% of '+x.roundsWithExcess:'—'],['P&L from pairs alone',x=>usd(x.pairPnlBeforeFees)],['Taker rebate needed to break even',x=>ok(x.takerRebateNeededToBreakEvenPct)?x.takerRebateNeededToBreakEvenPct+'%':'—']];
  $('riv').innerHTML='<tr><th></th>'+names.map(n=>`<th class="r">@${n}</th>`).join('')+'</tr>'+rows.map(([k,f])=>`<tr><td>${k}</td>${names.map(n=>`<td class="r">${res[n].error?(k==='Rounds traded (3 days)'?'<span class="neg">'+res[n].error+'</span>':''):f(res[n])}</td>`).join('')}</tr>`).join('');
  if(R.lastRunAt)$('rivAt').textContent='Studied '+new Date(R.lastRunAt*1000).toISOString().slice(5,16).replace('T',' ')+' UTC';
 }
