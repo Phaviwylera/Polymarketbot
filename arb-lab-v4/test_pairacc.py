@@ -38,7 +38,13 @@ class WalletTests(unittest.TestCase):
     def test_wallet_loss_limit_blocks_entries(self):
         p=pa.PairAcc(root=tempfile.mkdtemp())
         p.done.append({'slug':'x','lane':'BTC','end':pa.WALLET_START+10,'filled':True,'v':{'wallet':{'pnlUsd':-8.5,'feesUsd':.1,'up':1,'down':0,'pairCost':None,'fills':1,'costUsd':8.5}}})
-        self.assertFalse(p.wallet_open(pa.WALLET_START+20));self.assertIn('loss limit',p.wallet()['guard'])
+        self.assertFalse(p.wallet_open(pa.GUARDS_OFF_UNTIL+20));self.assertIn('loss limit',p.wallet()['guard'])   # after the owner window
     def test_main_account_fresh_start_constant(self):
         import poly_portfolio as pp
         self.assertGreater(pp.OWNER_FRESH_START_AT,1793000000)
+class GuardWindowTests(unittest.TestCase):
+    def test_owner_window_keeps_trading_then_guards_resume(self):
+        p=pa.PairAcc(root=tempfile.mkdtemp())
+        p.done.append({'slug':'x','lane':'BTC','end':pa.WALLET_START+10,'filled':True,'v':{'wallet':{'pnlUsd':-9.,'feesUsd':.1,'up':1,'down':0,'pairCost':None,'fills':1,'costUsd':9.}}})
+        self.assertTrue(p.wallet_open(pa.GUARDS_OFF_UNTIL-60))          # inside the owner's no-pause window
+        self.assertFalse(p.wallet_open(pa.GUARDS_OFF_UNTIL+60))         # loss stop is back afterwards

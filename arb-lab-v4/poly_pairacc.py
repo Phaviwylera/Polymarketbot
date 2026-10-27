@@ -29,6 +29,9 @@ VARIANTS={'replica':{'target':0.97,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb
           'strict':{'target':0.95,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb':MAX_IMBALANCE},
           'wallet':{'target':0.97,'unit':'usd','clip':1.0,'max':6.0,'imb':3.0}}
 WALLET_BALANCE=200.0;WALLET_LOSS_LIMIT=8.0;GIVEBACK_ARM=4.0;GIVEBACK_FRACTION=0.5;GIVEBACK_PAUSE=3600.
+# Owner decision 2026-10-27 08:41 UTC: "don't pause trades, let it run at least 4 hrs". Paper money. The loss stop and
+# give-back pause are suspended until GUARDS_OFF_UNTIL; size caps stay; both guards resume automatically after it.
+GUARDS_OFF_UNTIL=float(os.getenv('POLY_PAIRACC_GUARDS_OFF_UNTIL') or 1793104890)   # 2026-10-27 12:41 UTC
 WALLET_START=float(os.getenv('POLY_PAIRACC_WALLET_START') or 1793087927)   # owner fresh start, 2026-10-27 07:58 UTC
 FEE_RATE=0.07;GOLD_REBATE=0.18;MIN_ROUNDS=300
 LANES=('BTC','ETH')                       # the 5-minute lanes, as observed
@@ -55,6 +58,8 @@ class PairAcc:
         t=time.time() if t is None else t
         if t<WALLET_START:return False
         pnl=self.wallet_pnl();self.wpeak=max(getattr(self,'wpeak',0.),pnl)
+        if t<GUARDS_OFF_UNTIL:
+            self.wpause=0.;self.wpeak=max(pnl,0.);self.wguard=None;return True   # owner window: keep trading
         if pnl<=-WALLET_LOSS_LIMIT:self.wguard=f'loss limit: {pnl:+.2f} since the wallet started; no new entries';return False
         if t<getattr(self,'wpause',0.):return False
         if self.wpeak>=GIVEBACK_ARM and pnl<=self.wpeak*GIVEBACK_FRACTION:
@@ -84,7 +89,8 @@ class PairAcc:
                 'winRate':round(100*wins/len(rows),1) if rows else None,'openCostUsd':round(open_cost,2),'open':opens,'openRounds':len(opens),
                 'avgPnlUsd':round(pnl/len(rows),3) if rows else None,'maxDrawdownUsd':round(dd,2),'profitFactor':round(gw/gl,2) if gl>0 else None,
                 'guard':getattr(self,'wguard',None) or ('paused until '+time.strftime('%H:%M UTC',time.gmtime(self.wpause)) if time.time()<getattr(self,'wpause',0.) else None),
-                'limits':{'lossLimit':WALLET_LOSS_LIMIT,'perSideMaxUsd':VARIANTS['wallet']['max'],'clipUsd':VARIANTS['wallet']['clip']},
+                'limits':{'lossLimit':WALLET_LOSS_LIMIT,'perSideMaxUsd':VARIANTS['wallet']['max'],'clipUsd':VARIANTS['wallet']['clip'],
+                          'guardsOffUntil':GUARDS_OFF_UNTIL if time.time()<GUARDS_OFF_UNTIL else None},
                 'recent':[{'slug':r['slug'],'lane':r['lane'],'end':r['end'],'winner':r.get('winner'),**{k:r['v']['wallet'][k] for k in ('up','down','pairCost','fills','costUsd','feesUsd','pnlUsd')}} for r in rows[-20:][::-1]]}
     def _err(self,exc):self.state['errors']+=1;self.state['lastError']=f'{type(exc).__name__}: {str(exc)[:100]}'
     def _round(self,lane,market):
