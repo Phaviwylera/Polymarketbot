@@ -959,10 +959,28 @@ async def start_trade_tape():
     if not hasattr(edge,'settle_listeners'):edge.settle_listeners=[]
     edge.settle_listeners.append(_tape.settle)
     asyncio.create_task(_tape.loop());print('POLY_TAPE_ON',flush=True)
+    # new record-only lanes: maker quotes (M1), cross-market consistency (X1), slower event markets (E1)
+    import poly_maker,poly_xmarket,poly_events
+    mk=poly_maker.Maker()
+    if mk.enabled:_tape.listeners.append(mk.on_print);edge.settle_listeners.append(mk.settle);asyncio.create_task(mk.loop());print('POLY_MAKER_ON',flush=True)
+    xm=poly_xmarket.XMarket()
+    if xm.enabled:asyncio.create_task(xm.loop());print('POLY_XMARKET_ON',flush=True)
+    ev=poly_events.Events()
+    if ev.enabled:asyncio.create_task(ev.loop());print('POLY_EVENTS_ON',flush=True)
     import poly_jev;jev=poly_jev.Jev()            # record-only; on only when OPENROUTER_API_KEY is set on the server
     if jev.enabled:
         _tape.jev=jev;edge.settle_listeners.append(jev.settle);asyncio.create_task(jev.loop());print('POLY_JEV_ON',flush=True)
     else:poly_jev.CURRENT=jev
+
+@app.get("/api/poly/lanes")
+async def poly_new_lanes():
+    """Maker (M1), cross-market (X1) and event-market (E1) lanes, record-only."""
+    import poly_maker,poly_xmarket,poly_events
+    out={}
+    for name,mod in (('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events)):
+        try:out[name]=mod.CURRENT.report() if mod.CURRENT else {'enabled':False}
+        except Exception as exc:out[name]={'error':type(exc).__name__}
+    return out
 
 @app.get("/api/poly/jev")
 async def poly_jev_report():

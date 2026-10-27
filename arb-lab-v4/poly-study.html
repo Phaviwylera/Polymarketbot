@@ -60,6 +60,15 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
 .row-new{animation:flash 1.2s ease}@keyframes flash{from{background:rgba(101,213,255,.18)}}
 .note{color:var(--dim2);font-size:10px;margin-top:6px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.lanes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0}
+.lane{padding:0 18px;border-left:1px solid var(--line);min-width:0}.lane:first-child{border-left:0;padding-left:0}
+.lane h4{margin:0 0 2px;font-size:14px;font-weight:600;color:var(--text)}.lane .why{color:var(--dim2);font-size:12.5px;margin:0 0 10px;max-width:46ch}
+.lane .fig{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid rgba(28,42,47,.55);font-size:12.5px}.lane .fig:last-of-type{border-bottom:0}
+.lane .fig span{color:var(--dim2)}.lane .fig b{font-weight:600;text-align:right}
+.lane .verdict{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:var(--dim2)}.lane .verdict::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.lane .verdict.pos{color:var(--green)}.lane .verdict.neg{color:var(--red)}
+@media(max-width:900px){.lanes{grid-template-columns:minmax(0,1fr)}.lane{border-left:0;padding:14px 0 0;border-top:1px solid var(--line);margin-top:14px}.lane:first-child{border-top:0;margin-top:0;padding-top:0}}
 </style><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&display=swap" rel="stylesheet"><link rel="stylesheet" href="/poly-skin.css?v=20"></head><body>
 <header class="top">
  <div class="logo">PE</div><div class="brand"><b>Poly/Edge study</b><small>Every Polymarket trade, how the wins happen, and what the model learns</small></div>
@@ -75,6 +84,8 @@ td{padding:4px 5px;border-bottom:1px dashed #16252a;white-space:nowrap}td.r,th.r
   <div class="scroll" style="max-height:200px"><table id="hypW"></table></div>
   <details style="margin-top:10px"><summary>Evidence ledger: ideas tested and rejected</summary><div class="scroll" style="max-height:260px"><table id="ledger"></table></div></details></div></section>
 <section class="p c12"><div class="ph"><span><b>Jev forecaster</b> Records only. Does it beat the market price?</span><span id="jevBadge">—</span></div><div class="pb"><div class="kpis" id="jevK"></div><div class="scroll" style="max-height:200px"><table id="jevT"></table></div><div class="note" id="jevN"></div></div></section>
+<section class="p c12"><div class="ph"><span><b>New approaches</b> Edges that don't need a better prediction. Record only, judged on rounds after they were locked</span><span id="lanesAt">—</span></div>
+ <div class="pb"><div class="lanes" id="lanes"><div class="dim">Loading…</div></div></div></section>
 <section class="p c12" id="histPanel" style="display:none"><div class="ph"><span><b>History backfill</b> Past rounds from Polymarket</span><span id="histBadge">—</span></div><div class="pb"><div class="kpis" id="histK"></div></div></section>
  <section class="p c12 tor"><div class="ph"><span><b>Market torus</b> Every trade, placed on the ring of its round</span><span>Around the ring: time. Through the tube: price. Drag to rotate.</span></div>
   <div class="tbody" id="tbody"><canvas id="threads"></canvas>
@@ -346,6 +357,32 @@ function hyp(s){
   (H.byWeek||[]).map(w=>`<tr><td>${w.week}</td><td class="r">${w.trades}</td><td class="r">${w.winPct??'—'}</td><td class="r ${cls(w.avgAtPrint)}">${pc(w.avgAtPrint)}</td><td class="r ${cls(w.avgStressed)}">${pc(w.avgStressed)}</td><td class="r ${cls(w.lower95)}">${pc(w.lower95)}</td></tr>`).join('');
  $('ledger').innerHTML='<tr><th>id</th><th>idea</th><th>verdict</th><th>evidence</th></tr>'+(s.ledger||[]).map(l=>`<tr><td>${l.id}</td><td style="white-space:normal">${l.idea}</td><td class="${l.verdict.startsWith('rejected')?'neg':'dim'}" style="white-space:normal">${l.verdict}</td><td style="white-space:normal">${l.evidence}</td></tr>`).join('');
 }
+let lanesAt=0;
+async function lanes(){
+ if(Date.now()-lanesAt<20000)return;lanesAt=Date.now();
+ try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();
+  const pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—',b4=v=>ok(v)?v.toFixed(4):'—',n=v=>ok(v)?v:'—';
+  const vcls=v=>v==='CONFIRMED'?'pos':v==='not confirmed'?'neg':'';const vt=v=>v?v.charAt(0).toUpperCase()+v.slice(1).toLowerCase():'—';
+  const fig=(k,v)=>`<div class="fig"><span>${k}</span><b>${v}</b></div>`;
+  const M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
+  const off=o=>o.enabled===false?'<div class="dim">Off on the server.</div>':'';
+  $('lanes').innerHTML=`
+  <div class="lane"><h4>Maker quotes (M1)</h4><p class="why">Resting bids at the best bid on both tokens, behind the existing queue. Earns the spread and pays no taker fee, but gets picked off.</p>${off(M)}
+   <div class="verdict ${vcls(m1.verdict)}">${vt(m1.verdict)}</div>
+   ${fig('Rounds with a fill',`${n(f.roundsFilled)} of ${n(f.rounds)} (needs 300)`)}${fig('Fill rate',ok(f.fillRate)?(100*f.fillRate).toFixed(0)+'%':'—')}
+   ${fig('P&L per $ filled',pc(f.perDollarMean))}${fig('Bad case',pc(f.lower95))}${fig('Both sides filled',n(f.bothFilled))}${fig('Paper P&L',ok(f.pnlUsd)?'$'+f.pnlUsd.toFixed(2):'—')}</div>
+  <div class="lane"><h4>Cross-market (X1)</h4><p class="why">Strike ladders that can't all be right, and Polymarket prices against Deribit's options for the same event.</p>${off(X)}
+   <div class="verdict ${vcls(x1.verdict)}">${vt(x1.verdict)}</div>
+   ${fig('Ladder gaps seen',n(lad.gapsSeen))}${fig('Ladder pairs settled',`${n(lad.pairsSettled)}, ${ok(lad.pnlUsd)?'$'+lad.pnlUsd.toFixed(2):'—'}`)}
+   ${fig('Deribit trades',`${n(x1.trades)} in ${n(x1.events)} events (needs 30)`)}${fig('Return per $',`${pc(x1.avgReturn)}, bad case ${pc(x1.lower95)}`)}
+   ${fig('6h Brier: Deribit vs Polymarket',`${b4(cal.brierDeribit)} vs ${b4(cal.brierPolymarket)}`)}</div>
+  <div class="lane"><h4>Event markets (E1)</h4><p class="why">Slower markets: politics, sports, news. Buy the 80–95¢ favourite three days out, the classic favourite–longshot test.</p>${off(E)}
+   <div class="verdict ${vcls(e1.verdict)}">${vt(e1.verdict)}</div>
+   ${fig('Past markets studied',`${n(E.historyMarkets)} (${E.phase||'—'})`)}${fig('History, +2¢ cost',`${n(eh.n)} trades, ${pc(eh.mean)} per $`)}
+   ${fig('History bad case',pc(eh.lower95))}${fig('Forward trades',`${n(ef.n)} (needs 100), ${pc(ef.mean)}`)}${fig('3-day calibration',`${n(e3.markets)} markets`)}</div>`;
+  $('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
+ }catch(e){}
+}
 let jevAt=0;
 async function jev(){
  if(Date.now()-jevAt<15000)return;jevAt=Date.now();
@@ -366,7 +403,7 @@ async function poll(){
   const nr=(s.totals||{}).rounds;if(last&&nr!==(last.totals||{}).rounds){curve(s);}
   if(!last)curve(s);
   torus(s);
-  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);jev();last=s;$('age').textContent='Updated '+new Date().toISOString().slice(11,19)+' UTC';
+  kpis(s);heat(s);patterns(s);rounds(s);live(s);wallets(s);tod(s);mistakes(s);hist(s);hyp(s);jev();lanes();last=s;$('age').textContent='Updated '+new Date().toISOString().slice(11,19)+' UTC';
  }catch(e){$('age').textContent='Reconnecting…';}
 }
 setSrcLabel();initTorus();poll();setInterval(poll,3000);

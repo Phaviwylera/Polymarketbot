@@ -78,7 +78,7 @@ class Agg:
 class Tape:
     def __init__(self,root=None,s3=None,now=time.time,learner=None):
         import poly_learner
-        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'};self.study_rebuilt=None;self.jev=None
+        self.learner=learner if learner is not None else poly_learner.Learner();self.warm={'state':'not started'};self.study_rebuilt=None;self.jev=None;self.listeners=[]
         self.root=root or os.path.join(os.getenv('POLY_DATA_DIR','/tmp'),'tape');self.s3=s3;self.now=now
         self.pending=defaultdict(list)          # slug -> rows awaiting the round's outcome
         self.agg=Agg();self.with_model=0;self.recent=deque(maxlen=400);self.live=deque(maxlen=80);self.study=None;self.lanes=defaultdict(Agg);self.lane_model=defaultdict(int)
@@ -111,6 +111,7 @@ class Tape:
         if bbo:   # the book at this print: what we could actually have paid
             mine=bbo.get(pr['side']) or {};other=bbo.get('down' if pr['side']=='up' else 'up') or {}
             row['bid']=mine.get('bid');row['ask']=mine.get('ask');row['otherAsk']=other.get('ask')
+            row['bidSize']=mine.get('bidSize');row['otherBid']=other.get('bid');row['otherBidSize']=other.get('bidSize')   # queue size for the maker lane
         # learner: market-anchored probability using only information available at this print
         try:
             pl=self.learner.predict({**row,'pToken':row['pToken'] if fresh else None})
@@ -121,6 +122,9 @@ class Tape:
         if self.jev is not None:
             try:self.jev.on_print(row)
             except Exception as exc:self.last_error=f'jev: {type(exc).__name__}'
+        for lst in self.listeners:
+            try:lst(row)
+            except Exception as exc:self.last_error=f'listener: {type(exc).__name__}'
         return row
     def settle(self,slug,winner):
         rows=self.pending.pop(slug,[])

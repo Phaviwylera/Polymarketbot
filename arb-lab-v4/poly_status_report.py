@@ -57,7 +57,7 @@ def snapshot(engine,audit_compact,tee,started_at,now=None):
             'host':os.getenv('POLY_HOST_LABEL','unknown'),'revision':_revision(),'hostStats':host_stats(),
             'portfolio':{k:pf.get(k) for k in ('accountEquity','accountPnl','equity','realizedPnl','trades','lifetimeRealizedPnl','lifetimeTrades',
                                                'epochPnl','maxDrawdownUsd','riskLocked','guard','pausedLanes','revision')},
-            'lanes':lanes,'storage':storage,'bullpen':_bullpen_state(),'threshold':_threshold_state(),'tape':_tape_state(),'jev':_jev_state(),'study':_study_state(),'skillVsLuck':_skill_state(engine),'audit':audit_compact,'cpuProfile':(tee.cpu if tee else None),
+            'lanes':lanes,'storage':storage,'bullpen':_bullpen_state(),'threshold':_threshold_state(),'tape':_tape_state(),'jev':_jev_state(),'newLanes':_lanes_state(),'study':_study_state(),'skillVsLuck':_skill_state(engine),'audit':audit_compact,'cpuProfile':(tee.cpu if tee else None),
             'recentLog':list(tee.lines)[-60:] if tee else []}
 
 def _bullpen_state():
@@ -74,6 +74,14 @@ def _study_state():
         import poly_tape,poly_history;t=poly_tape.CURRENT;h=poly_history.CURRENT
         return {'live':t.study.compact() if t and t.study else None,'history':h.study.compact() if h else None,'backfill':h.snapshot() if h else None,'liveRebuilt':getattr(t,'study_rebuilt',None) if t else None}
     except Exception as exc:return {'error':type(exc).__name__}
+
+def _lanes_state():
+    out={}
+    for name in ('poly_maker','poly_xmarket','poly_events'):
+        try:
+            import importlib;m=importlib.import_module(name);out[name[5:]]=m.CURRENT.compact() if m.CURRENT else None
+        except Exception as exc:out[name[5:]]={'error':type(exc).__name__}
+    return out
 
 def _jev_state():
     try:
