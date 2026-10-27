@@ -27,3 +27,7 @@ class RivalTests(unittest.TestCase):
         fp=pr.fingerprint(fills,{pr._key(fills[2])})
         self.assertEqual(fp['legLagMedianSec'],1.0);self.assertEqual(fp['legsWithin2sPct'],100.);self.assertEqual(fp['firstLegCheapPct'],100.)
         self.assertEqual(fp['byPhase']['80-100%']['takerPct'],100.);self.assertEqual(fp['byPrice']['20-40c']['fills'],1);self.assertGreater(fp['sellShareOfVolumePct'],0)
+    def test_excess_on_winner(self):
+        fills=[f('Up','BUY',.45,15,h='a'),f('Down','BUY',.50,10,h='b')]
+        rows,settled=pr.analyse(fills,set(),{S:'UP'});s=pr.summarize(rows,settled)
+        self.assertEqual(s['excessOnWinnerPct'],100.);self.assertAlmostEqual(s['pairPnlBeforeFees'],10*(1-(.45+.50)),2)

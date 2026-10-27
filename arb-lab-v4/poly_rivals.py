@@ -121,6 +121,12 @@ def summarize(rows,settled):
     mk=sum((r['makerShare'] or 0)*(r['upShares']+r['downShares']) for r in rows);al=sum(r['upShares']+r['downShares'] for r in rows if r['makerShare'] is not None)
     s['makerSharePct']=round(100*mk/al,1) if al else None
     if settled:
+        ex=[r for r in settled if abs(r['upShares']-r['downShares'])>1e-6]
+        on_win=[r for r in ex if (r['upShares']>r['downShares'])==(r['winner']=='UP')]
+        # split P&L: matched pairs (pay 1 each) vs the unmatched excess (pays 1 only when it is on the winner)
+        pair_pnl=sum(r['matched']*(1-(r['pairCost'] or 1)) for r in settled if r['pairCost'] is not None)
+        s.update({'excessOnWinnerPct':round(100*len(on_win)/len(ex),1) if ex else None,'roundsWithExcess':len(ex),
+                  'pairPnlBeforeFees':round(pair_pnl,2)})
         s.update({'pnlBeforeFees':tot('pnlBeforeFees',settled),'takerFees':tot('takerFees',settled),'pnlAfterFees':tot('pnlAfterFees',settled),
                   'makerRebateEst':tot('makerRebateEst',settled),'pnlWithMakerRebate':tot('pnlWithMakerRebate',settled),
                   'winningRoundsPct':round(100*sum(1 for r in settled if r['pnlBeforeFees']>0)/len(settled),1)})
