@@ -64,6 +64,49 @@ def analyse(fills,taker_keys,winners):
         out.append(row)
     return out,settled
 
+PHASES=((0,.2,'0-20%'),(.2,.5,'20-50%'),(.5,.8,'50-80%'),(.8,1.01,'80-100%'))
+PBUCKETS=((0,.2,'0-20c'),(.2,.4,'20-40c'),(.4,.6,'40-60c'),(.6,.8,'60-80c'),(.8,1.01,'80-100c'))
+def fingerprint(fills,taker_keys):
+    """Behaviour fingerprint from fills: leg timing, which leg first, volume/price/taker share by window phase and by
+    price bucket, clip sizes, fills per round, sells. Answers: how and when they buy, maker or taker, and at what prices."""
+    by=defaultdict(list)
+    for f in fills:
+        m=UPDOWN.match(str(f.get('slug') or ''))
+        if not m:continue
+        try:p=float(f['price']);sz=float(f['size']);ts=float(f['timestamp'])
+        except (KeyError,TypeError,ValueError):continue
+        ts=ts/1000 if ts>1e12 else ts;win=300. if m.group(2)=='5m' else 900.
+        by[f['slug']].append({'ts':ts,'frac':(ts-float(m.group(3)))/win,'p':p,'sz':sz,'out':str(f.get('outcome') or '').upper(),
+                              'side':str(f.get('side') or '').upper(),'taker':_key(f) in taker_keys,'win':win})
+    lags=[];first_cheap=[];clips=[];nfills=[];phase=defaultdict(lambda:[0.,0.,0.,0]);pb=defaultdict(lambda:[0.,0.,0])
+    sells=0.;buys=0.;same_ts=0;rounds5=0;rounds15=0
+    for slug,fs in by.items():
+        fs.sort(key=lambda x:x['ts']);b=[x for x in fs if x['side']=='BUY'];nfills.append(len(fs))
+        if fs and fs[0]['win']==300.:rounds5+=1
+        else:rounds15+=1
+        fu=next((x for x in b if x['out']=='UP'),None);fd=next((x for x in b if x['out']=='DOWN'),None)
+        if fu and fd:
+            lags.append(abs(fu['ts']-fd['ts']));same_ts+=int(abs(fu['ts']-fd['ts'])<=2)
+            first=fu if fu['ts']<=fd['ts'] else fd;first_cheap.append(first['p']<0.5)
+        for x in fs:
+            if x['side']=='SELL':sells+=x['sz']*x['p'];continue
+            buys+=x['sz']*x['p'];clips.append(x['sz'])
+            for lo,hi,name in PHASES:
+                if lo<=x['frac']<hi:ph=phase[name];ph[0]+=x['sz'];ph[1]+=x['sz']*x['p'];ph[2]+=x['sz'] if x['taker'] else 0.;ph[3]+=1
+            for lo,hi,name in PBUCKETS:
+                if lo<=x['p']<hi:q=pb[name];q[0]+=x['sz'];q[1]+=x['sz'] if x['taker'] else 0.;q[2]+=1
+    med=lambda v:sorted(v)[len(v)//2] if v else None
+    pct=lambda v,q:sorted(v)[min(len(v)-1,int(q*len(v)))] if v else None
+    totsh=sum(v[0] for v in phase.values()) or 1.
+    return {'rounds5m':rounds5,'rounds15m':rounds15,'legLagMedianSec':None if not lags else round(med(lags),1),
+            'legsWithin2sPct':round(100*same_ts/len(lags),1) if lags else None,
+            'firstLegCheapPct':round(100*sum(first_cheap)/len(first_cheap),1) if first_cheap else None,
+            'clipMedian':None if not clips else round(med(clips),2),'clipP90':None if not clips else round(pct(clips,.9),2),
+            'fillsPerRoundMedian':med(nfills),'sellShareOfVolumePct':round(100*sells/(sells+buys),1) if (sells+buys) else None,
+            'byPhase':{n:{'sharePct':round(100*v[0]/totsh,1),'avgPrice':round(v[1]/v[0],3) if v[0] else None,
+                          'takerPct':round(100*v[2]/v[0],1) if v[0] else None,'fills':v[3]} for n,v in phase.items()},
+            'byPrice':{n:{'sharePct':round(100*v[0]/totsh,1),'takerPct':round(100*v[1]/v[0],1) if v[0] else None,'fills':v[2]} for n,v in pb.items()}}
+
 def _key(f):return (str(f.get('transactionHash') or ''),str(f.get('asset') or ''),str(f.get('size')),str(f.get('price')),str(f.get('side')))
 
 def summarize(rows,settled):
@@ -166,7 +209,7 @@ class Rivals:
                 rows,settled=analyse(allf,tkeys,wins)
                 other=sum(1 for f in allf if not UPDOWN.match(str(f.get('slug') or '')))
                 self.results[n]={'wallet':addr,'fills':len(allf),'takerFills':len(tk),'nonUpDownFills':other,'merges':await self.merges(addr),
-                                 'lookbackDays':LOOKBACK_DAYS,**summarize(rows,settled),
+                                 'lookbackDays':LOOKBACK_DAYS,**summarize(rows,settled),'fingerprint':fingerprint(allf,tkeys),
                                  'sample':sorted(settled,key=lambda r:r['slug'])[-5:]}
             except Exception as exc:self._err(name,exc);self.results[name]={'error':type(exc).__name__}
     def report(self):return {'enabled':self.enabled,**self.state,'names':self.names,'wallets':self.wallets,'results':self.results,

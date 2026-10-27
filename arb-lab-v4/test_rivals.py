@@ -22,3 +22,8 @@ class RivalTests(unittest.TestCase):
             return [{'userName':'norm1e69','proxyWallet':'0x'+'A'*40}]
         r.get=get;self.assertEqual(asyncio.run(r.resolve('norm1e69')),('norm1e69','0x'+'a'*40))
         self.assertEqual(asyncio.run(r.resolve('x:0xABC')),('x','0xabc'))
+    def test_fingerprint(self):
+        fills=[f('Up','BUY',.30,10,ts=1792800010,h='a'),f('Down','BUY',.68,10,ts=1792800011,h='b'),f('Up','BUY',.92,4,ts=1792800280,h='c'),f('Up','SELL',.95,2,ts=1792800290,h='d')]
+        fp=pr.fingerprint(fills,{pr._key(fills[2])})
+        self.assertEqual(fp['legLagMedianSec'],1.0);self.assertEqual(fp['legsWithin2sPct'],100.);self.assertEqual(fp['firstLegCheapPct'],100.)
+        self.assertEqual(fp['byPhase']['80-100%']['takerPct'],100.);self.assertEqual(fp['byPrice']['20-40c']['fills'],1);self.assertGreater(fp['sellShareOfVolumePct'],0)
