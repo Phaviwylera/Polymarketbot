@@ -987,6 +987,9 @@ async def start_trade_tape():
     if ea.enabled:asyncio.create_task(ea.loop());print('POLY_EVENTARB_ON',flush=True)
     emk=poly_eventmaker.EventMaker()
     if emk.enabled:asyncio.create_task(emk.loop());print('POLY_EVENTMAKER_ON',flush=True)
+    import poly_spotlead                              # S2: spot-lead taker on 5m BTC/ETH (paper wallet, pre-registered)
+    sl=poly_spotlead.SpotLead()
+    if sl.enabled:_tape.listeners.append(sl.on_print);edge.settle_listeners.append(sl.settle);asyncio.create_task(sl.loop());print('POLY_SPOTLEAD_ON',flush=True)
     import poly_rivals                                # read-only study of public rival bot accounts
     rv=poly_rivals.Rivals()
     if rv.enabled:asyncio.create_task(rv.loop());print('POLY_RIVALS_ON',flush=True)
@@ -1000,9 +1003,9 @@ async def start_trade_tape():
 @app.get("/api/poly/lanes")
 async def poly_new_lanes():
     """Maker (M1), cross-market (X1) and event-market (E1) lanes, record-only."""
-    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals,poly_pairacc,poly_eventarb,poly_eventmaker
+    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals,poly_pairacc,poly_eventarb,poly_eventmaker,poly_spotlead
     out={}
-    for name,mod in (('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi),('rivals',poly_rivals),('pairacc',poly_pairacc),('eventarb',poly_eventarb),('eventmaker',poly_eventmaker)):
+    for name,mod in (('spotlead',poly_spotlead),('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi),('rivals',poly_rivals),('pairacc',poly_pairacc),('eventarb',poly_eventarb),('eventmaker',poly_eventmaker)):
         try:out[name]=mod.CURRENT.report() if mod.CURRENT else {'enabled':False}
         except Exception as exc:out[name]={'error':type(exc).__name__}
     return out
