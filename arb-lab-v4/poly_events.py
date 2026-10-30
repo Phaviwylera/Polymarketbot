@@ -25,6 +25,11 @@ FAV_LO,FAV_HI=0.80,0.95;STRESS=0.02;RULE_H='3d';MIN_FWD=100;SCAN_SEC=1800;TOL=6*
 REGISTERED_AT=1793071725   # 2026-10-27 03:28 UTC: forward results count only after this
 CURRENT=None
 
+def pick_slug(d,slug):
+    """Gamma can answer a slug query with other markets; accept only the market whose slug matches exactly."""
+    for m in (d if isinstance(d,list) else []):
+        if isinstance(m,dict) and m.get('slug')==slug:return m
+    return None
 def _jl(v):
     if isinstance(v,str):
         try:return json.loads(v)
@@ -158,7 +163,7 @@ class Events:
         now=self.now();slugs=sorted({v['slug'] for v in self.fwd.values() if now>v['endAt']+3600})[:80]
         for slug in slugs:
             try:
-                d=await self.get(GAMMA+'/markets',{'slug':slug,'closed':'true'});m=d[0] if isinstance(d,list) and d else None
+                d=await self.get(GAMMA+'/markets',{'slug':slug,'closed':'true'});m=pick_slug(d,slug)
                 w=winner_yes(m) if m and m.get('closed') else None
             except Exception as exc:self._err('resolve',exc);continue
             if w is None:

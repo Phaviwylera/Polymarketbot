@@ -25,6 +25,11 @@ POLL_SEC=30;PICK_SEC=7200;N_MARKETS=20;MIN_VOL24=20000.;QUOTE=10.;SKEW=20.;QMAX=
 RATE={'sports':0.05,'politics':0.04};REBATE_SHARE={'sports':0.15,'politics':0.25}
 REGISTERED_AT=1793092815   # 2026-10-27 09:20 UTC: forward results count only after this
 CURRENT=None
+def pick_slug(d,slug):
+    """Gamma can answer a slug query with other markets; accept only the market whose slug matches exactly."""
+    for m in (d if isinstance(d,list) else []):
+        if isinstance(m,dict) and m.get('slug')==slug:return m
+    return None
 def _jl(v):
     if isinstance(v,str):
         try:return json.loads(v)
@@ -103,7 +108,12 @@ class EventMaker:
     def _final(self,m,why):return {'slug':m.slug,'cat':m.cat,'fills':m.fills,'volumeUsd':round(m.vol,2),'pnlUsd':round(m.mtm(),4),'rebateUsd':round(m.rebate,4),'why':why,'t':self.now()}
     async def poll(self,m):
         now=self.now()
-        book=await self.get(CLOB+'/book',{'token_id':m.yes});b,a=best(book,'bids'),best(book,'asks')
+        try:book=await self.get(CLOB+'/book',{'token_id':m.yes})
+        except Exception as exc:
+            if '404' in str(exc):                         # book gone: the market has closed; stop quoting, settle it
+                m.end=min(m.end,now);m.bid=m.ask=None;self.state['booksGone']=self.state.get('booksGone',0)+1;return
+            raise
+        b,a=best(book,'bids'),best(book,'asks')
         if b and a:m.mid=(b[0]+a[0])/2
         trs=await self.get(DATA+'/trades',{'market':m.cid,'limit':100,'takerOnly':'true'})
         rows=trs if isinstance(trs,list) else (trs or {}).get('data') or []
@@ -141,7 +151,7 @@ class EventMaker:
         for s,m in list(self.mk.items()):
             if m.end>now:continue
             try:
-                d=await self.get(GAMMA+'/markets',{'slug':s,'closed':'true'});mm=d[0] if isinstance(d,list) and d else None
+                d=await self.get(GAMMA+'/markets',{'slug':s,'closed':'true'});mm=pick_slug(d,s)
                 pr=[float(x) for x in (_jl((mm or {}).get('outcomePrices')) or [])]
             except Exception as exc:self._err('settle',exc);continue
             if not mm or not mm.get('closed') or len(pr)!=2:continue

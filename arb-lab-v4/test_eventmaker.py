@@ -25,7 +25,7 @@ class EventMakerTests(unittest.TestCase):
         self.assertIsNone(self.m.bid);self.assertIsNotNone(self.m.ask)
     def test_settle_and_report(self):
         self.m.yes_sh=10.;self.m.cash=-4.;self.m.end=NOW-10
-        async def get(url,params=None):return [{'closed':True,'outcomePrices':'["1","0"]'}]
+        async def get(url,params=None):return [{'slug':(params or {}).get('slug'),'closed':True,'outcomePrices':'["1","0"]'}]
         self.x.get=get;asyncio.run(self.x.settle_closed())
         self.assertNotIn('game',self.x.mk);self.assertAlmostEqual(self.x.closed[-1]['pnlUsd'],6.,4)
         self.assertIn('M3',self.x.report())

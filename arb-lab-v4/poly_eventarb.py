@@ -43,6 +43,11 @@ def fee_rate(ev):
         if k==cat or k in tags:return RATES[k]
     return 0.05                                                          # conservative default
 def fee(rate,p):return rate*p*(1-p)
+def pick_slug(d,slug):
+    """Gamma can answer a slug query with other markets; accept only the market whose slug matches exactly."""
+    for m in (d if isinstance(d,list) else []):
+        if isinstance(m,dict) and m.get('slug')==slug:return m
+    return None
 def top(book,side):
     lv=[(float(a['price']),float(a['size'])) for a in (book or {}).get(side) or [] if float(a.get('size') or 0)>0]
     if not lv:return None
@@ -163,7 +168,8 @@ class EventArb:
     # ---- settle -------------------------------------------------------------------------------------
     async def market_result(self,slug):
         d=await self.get(GAMMA+'/markets',{'slug':slug,'closed':'true'})
-        m=d[0] if isinstance(d,list) and d else None
+        m=pick_slug(d,slug)
+        if m is None and isinstance(d,list) and d:self.state['slugMismatch']=self.state.get('slugMismatch',0)+1
         if not m or not m.get('closed'):return None
         pr=[float(x) for x in (_jl(m.get('outcomePrices')) or [])]
         return pr if len(pr)==2 else None
@@ -174,7 +180,7 @@ class EventArb:
             if pr is None:continue
             pay=pr[t['side']];self.s1_open.pop(slug)
             r=pay/t['cost']-1
-            self.closed.append({**t,'lane':'S1','pay':pay,'ret':round(r,5),'pnl':round(t['shares']*(pay-t['cost']),4),'invalid':abs(pay-0.5)<1e-6})
+            self.closed.append({**t,'lane':'S1','pay':pay,'ret':round(r,5),'pnl':round(t['shares']*(pay-t['cost']),4),'invalid':abs(pay-0.5)<1e-6,'checked':True})
             await asyncio.sleep(.15)
         for ev,t in list(self.n1_open.items())[:20]:
             pays=[]
@@ -189,7 +195,8 @@ class EventArb:
             self.closed.append({**t,'lane':'N1','pay':round(pay,4),'ret':round(pay/t['cost']-1,5),'pnl':round(t['baskets']*(pay-t['cost']),4)})
     # ---- report -------------------------------------------------------------------------------------
     def report(self):
-        n1=[c for c in self.closed if c['lane']=='N1' and c['t']>=REGISTERED_AT];s1=[c for c in self.closed if c['lane']=='S1' and c['t']>=REGISTERED_AT]
+        n1=[c for c in self.closed if c['lane']=='N1' and c['t']>=REGISTERED_AT];s1=[c for c in self.closed if c['lane']=='S1' and c['t']>=REGISTERED_AT and c.get('checked')]
+        s1_legacy=sum(1 for c in self.closed if c['lane']=='S1' and not c.get('checked'))
         a,b=stats([c['ret'] for c in n1]),stats([c['ret'] for c in s1])
         v=lambda s,mn:'collecting' if s['n']<mn else ('CONFIRMED' if (s.get('lower95') or -1)>0 else 'not confirmed')
         return {'enabled':self.enabled,**self.state,'openBaskets':len(self.n1_open),'openS1':len(self.s1_open),
@@ -197,7 +204,8 @@ class EventArb:
                       'pass':f'>= {MIN_N1} trades and mean - 1.645 SE > 0','registeredAt':REGISTERED_AT,**a,'pnlUsd':round(sum(c['pnl'] for c in n1),3),'verdict':v(a,MIN_N1)},
                 'S1':{'rule':'buy the side priced 90-99.5c while a resolution proposal is live or after the scheduled end; settle at 1/0/0.5',
                       'pass':f'>= {MIN_S1} trades and mean - 1.645 SE > 0','registeredAt':REGISTERED_AT,**b,'pnlUsd':round(sum(c['pnl'] for c in s1),3),
-                      'invalidResolutions':sum(1 for c in s1 if c.get('invalid')),'losses':sum(1 for c in s1 if c['pay']<0.5),'verdict':v(b,MIN_S1)},
+                      'invalidResolutions':sum(1 for c in s1 if c.get('invalid')),'quarantined':s1_legacy,
+                      'quarantineWhy':'settled before 2026-10-30 by a lookup that did not check the returned market was the one traded; excluded','losses':sum(1 for c in s1 if c['pay']<0.5),'verdict':v(b,MIN_S1)},
                 'recentGaps':list(self.gaps)[-8:][::-1],'recentClosed':list(self.closed)[-8:][::-1]}
     def compact(self):
         r=self.report();r.pop('recentGaps',None);r.pop('recentClosed',None);return r
