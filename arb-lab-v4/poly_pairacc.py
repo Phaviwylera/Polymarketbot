@@ -13,9 +13,17 @@ Rule (inferred from that evidence; parameters fixed here before the forward test
 Costs: taker fee 0.07 p (1 - p) per share. Results are reported at our real tier (no taker rebate) and, for
 comparison only, at a Gold-tier 18% taker rebate (which needs $200k+ monthly weighted volume).
 Variants: 'replica' TARGET 0.97 (their observed average), 'strict' TARGET 0.95, and 'wallet': the same rule sized
-for a $200 PAPER WALLET ($1 clips, at most $6 bought per side per round, at most $3 lopsided), with the main
-account's guards: no new entries after an $8 loss since the wallet's start, and a 1 h pause after giving back half of
-a gain of $4 or more. The wallet keeps a running balance and a trade list for the terminal.
+for a $200 PAPER WALLET ($1 clips, at most $6 bought per side per round, at most $3 lopsided). The wallet keeps a
+running balance and a trade list for the terminal.
+Trend gate (owner decision 2026-10-30, replaces the $8 loss stop and the give-back pause for this paper wallet):
+'shadow' is the wallet's rule run on EVERY round with no gate, so a prediction is made and scored for all trades.
+The wallet itself trades only while the shadow's recent record is winning: the last TREND_LONG settled shadow rounds
+AND the last TREND_SHORT are both net positive after fees. Otherwise it stops and keeps watching. Below a hard floor of
+WALLET_FLOOR equity it stops until the owner decides. Rounds already open are held to settlement either way.
+Pre-registered T1 (from GATE_START): does the gate add value? Compare the gated wallet's P&L with the ungated shadow's
+over the same rounds; an EDGE needs >= 50 gated rounds with mean P&L - 1.645 SE > 0. Backtest before building (308
+status snapshots, 1,772 replica rounds): 15-minute results show no streaks (autocorrelation lag 1-4 within +-0.08,
+noise band +-0.11), so the gate is expected to cut losses by staying off, not to create profit.
 Pre-registered R1 (REGISTERED_AT, variant replica, no rebate): pass = >= 300 rounds with fills and mean round
 P&L per $ - 1.645 SE > 0.  Off with POLY_PAIRACC=0.
 """
@@ -25,13 +33,13 @@ from collections import deque
 
 CLIP=5.0;MAX_SHARES=60.;MAX_IMBALANCE=20.;FIRST_MAX=0.50;START_AT=0.02;STOP_AT=0.95;LATENCY=0.25
 # per variant: pair-cost target and sizing, in shares ('sh') or dollars of cost ('usd')
+WALLET_CFG={'target':0.97,'unit':'usd','clip':1.0,'max':6.0,'imb':3.0}
 VARIANTS={'replica':{'target':0.97,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb':MAX_IMBALANCE},
           'strict':{'target':0.95,'unit':'sh','clip':CLIP,'max':MAX_SHARES,'imb':MAX_IMBALANCE},
-          'wallet':{'target':0.97,'unit':'usd','clip':1.0,'max':6.0,'imb':3.0}}
-WALLET_BALANCE=200.0;WALLET_LOSS_LIMIT=8.0;GIVEBACK_ARM=4.0;GIVEBACK_FRACTION=0.5;GIVEBACK_PAUSE=3600.
-# Owner decision 2026-10-27 08:41 UTC: "don't pause trades, let it run at least 4 hrs". Paper money. The loss stop and
-# give-back pause are suspended until GUARDS_OFF_UNTIL; size caps stay; both guards resume automatically after it.
-GUARDS_OFF_UNTIL=float(os.getenv('POLY_PAIRACC_GUARDS_OFF_UNTIL') or 1793104890)   # 2026-10-27 12:41 UTC
+          'wallet':dict(WALLET_CFG),'shadow':dict(WALLET_CFG)}
+WALLET_BALANCE=200.0
+TREND_LONG=12;TREND_SHORT=4;WALLET_FLOOR=120.0;T1_MIN_LIVE=50;T1_MIN_SHADOW=100
+GATE_START=float(os.getenv('POLY_PAIRACC_GATE_START') or 1793377800)   # 2026-10-30 16:30 UTC
 WALLET_START=float(os.getenv('POLY_PAIRACC_WALLET_START') or 1793087927)   # owner fresh start, 2026-10-27 07:58 UTC
 FEE_RATE=0.07;GOLD_REBATE=0.18;MIN_ROUNDS=300
 LANES=('BTC','ETH')                       # the 5-minute lanes, as observed
@@ -48,23 +56,46 @@ class PairAcc:
         self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_PAIRACC','1')!='0'
         self.cur={};self.wait={};self.done=deque(maxlen=20000)
         self.state={'bookEvents':0,'fills':0,'rounds':0,'errors':0,'lastError':None}
+        self.gate={'on':False};self.gate_log=deque(maxlen=200);self.refresh_gate()
     def path(self):return os.path.join(self.root,'pairacc_state.json.gz')
     # ---- the $200 paper wallet -----------------------------------------------------------------------
     def wallet_rows(self):
         return [r for r in self.done if r.get('filled') and (r.get('v') or {}).get('wallet') and float(r.get('end') or 0)>=WALLET_START]
     def wallet_pnl(self):return sum(r['v']['wallet']['pnlUsd'] for r in self.wallet_rows())
-    def wallet_open(self,t=None):
-        """Guards (same limits as the main paper account): loss limit since the wallet's start, and give-back pause."""
+    def shadow_pnls(self,since=None):
+        return [r['v']['shadow']['pnlUsd'] for r in self.done if r.get('filled') and (r.get('v') or {}).get('shadow')
+                and (since is None or float(r.get('end') or 0)>=since)]
+    @staticmethod
+    def trend(xs,equity):
+        """Gate decision from settled shadow P&Ls (oldest first) and wallet equity. Pure, for testing."""
+        L=sum(xs[-TREND_LONG:]);S=sum(xs[-TREND_SHORT:])
+        if equity<=WALLET_FLOOR:return False,f'hard floor: equity ${equity:.2f} <= ${WALLET_FLOOR:.0f}; stopped until the owner decides',L,S
+        if len(xs)<TREND_LONG:return False,f'warming up: {len(xs)}/{TREND_LONG} shadow rounds scored',L,S
+        msg=f'last {TREND_LONG} predictions {L:+.2f}, last {TREND_SHORT} {S:+.2f}'
+        if L>0 and S>0:return True,'winning trend: '+msg,L,S
+        return False,'losing trend, watching: '+msg,L,S
+    def refresh_gate(self,t=None):
+        """Recomputed when a round settles (not on every book change)."""
         t=time.time() if t is None else t
-        if t<WALLET_START:return False
-        pnl=self.wallet_pnl();self.wpeak=max(getattr(self,'wpeak',0.),pnl)
-        if t<GUARDS_OFF_UNTIL:
-            self.wpause=0.;self.wpeak=max(pnl,0.);self.wguard=None;return True   # owner window: keep trading
-        if pnl<=-WALLET_LOSS_LIMIT:self.wguard=f'loss limit: {pnl:+.2f} since the wallet started; no new entries';return False
-        if t<getattr(self,'wpause',0.):return False
-        if self.wpeak>=GIVEBACK_ARM and pnl<=self.wpeak*GIVEBACK_FRACTION:
-            self.wpause=t+GIVEBACK_PAUSE;self.wpeak=pnl;self.wguard=f'gave back half of the gain: paused 1 h at {pnl:+.2f}';return False
-        self.wguard=None;return True
+        xs=self.shadow_pnls();on,why,L,S=self.trend(xs,WALLET_BALANCE+self.wallet_pnl())
+        if on!=self.gate.get('on') or not self.gate_log:self.gate_log.append({'t':round(t),'on':on,'why':why})
+        self.gate={'on':on,'why':why,'last12':round(L,2),'last4':round(S,2),'shadowRounds':len(xs),'at':round(t)}
+        return on
+    def wallet_open(self,t=None):
+        t=time.time() if t is None else t
+        return t>=WALLET_START and bool(self.gate.get('on'))
+    def t1(self):
+        """Pre-registered T1: gated wallet vs the ungated shadow over the same rounds since GATE_START."""
+        rows=[r for r in self.done if r.get('filled') and float(r.get('end') or 0)>=GATE_START and (r.get('v') or {}).get('shadow')]
+        sh=[r['v']['shadow']['pnlUsd'] for r in rows];lv=[r['v']['wallet']['pnlUsd'] for r in rows if r['v'].get('wallet')]
+        n=len(lv);m=sum(lv)/n if n else None
+        sd=math.sqrt(sum((x-m)**2 for x in lv)/(n-1)) if n>1 else None
+        lo=round(m-1.645*sd/math.sqrt(n),4) if sd else None
+        verdict='collecting' if len(sh)<T1_MIN_SHADOW or n<T1_MIN_LIVE else ('EDGE CONFIRMED' if (lo or -1)>0 else 'no edge')
+        return {'rule':f'wallet trades only while the last {TREND_LONG} and last {TREND_SHORT} shadow rounds are both net positive',
+                'pass':f'>= {T1_MIN_SHADOW} shadow rounds and >= {T1_MIN_LIVE} gated rounds; edge = gated mean P&L - 1.645 SE > 0',
+                'since':GATE_START,'shadowRounds':len(sh),'shadowPnlUsd':round(sum(sh),2),'gatedRounds':n,'gatedPnlUsd':round(sum(lv),2),
+                'gateSavedUsd':round(sum(lv)-sum(sh),2),'gatedMeanUsd':None if m is None else round(m,4),'gatedLower95':lo,'verdict':verdict}
     def wallet(self):
         rows=self.wallet_rows();pnl=self.wallet_pnl();fees=sum(r['v']['wallet']['feesUsd'] for r in rows)
         open_cost=0.;opens=[]
@@ -89,9 +120,8 @@ class PairAcc:
                 'equity':round(WALLET_BALANCE+pnl,2),'pnlUsd':round(pnl,2),'feesUsd':round(fees,2),'trades':len(rows),'wins':wins,
                 'winRate':round(100*wins/len(rows),1) if rows else None,'openCostUsd':round(open_cost,2),'open':opens,'openRounds':len(opens),
                 'avgPnlUsd':round(pnl/len(rows),3) if rows else None,'maxDrawdownUsd':round(dd,2),'profitFactor':round(gw/gl,2) if gl>0 else None,
-                'guard':getattr(self,'wguard',None) or ('paused until '+time.strftime('%H:%M UTC',time.gmtime(self.wpause)) if time.time()<getattr(self,'wpause',0.) else None),
-                'limits':{'lossLimit':WALLET_LOSS_LIMIT,'perSideMaxUsd':VARIANTS['wallet']['max'],'clipUsd':VARIANTS['wallet']['clip'],
-                          'guardsOffUntil':GUARDS_OFF_UNTIL if time.time()<GUARDS_OFF_UNTIL else None},
+                'guard':None if self.gate.get('on') else self.gate.get('why'),'gate':self.gate,'gateLog':list(self.gate_log)[-10:][::-1],'T1':self.t1(),
+                'limits':{'trendLong':TREND_LONG,'trendShort':TREND_SHORT,'floorUsd':WALLET_FLOOR,'perSideMaxUsd':WALLET_CFG['max'],'clipUsd':WALLET_CFG['clip']},
                 'recent':[{'slug':r['slug'],'lane':r['lane'],'end':r['end'],'winner':r.get('winner'),**{k:r['v']['wallet'][k] for k in ('up','down','pairCost','fills','costUsd','feesUsd','pnlUsd')}} for r in rows[-20:][::-1]]}
     def _err(self,exc):self.state['errors']+=1;self.state['lastError']=f'{type(exc).__name__}: {str(exc)[:100]}'
     def _round(self,lane,market):
@@ -158,7 +188,10 @@ class PairAcc:
             out['v'][v]={'up':round(b.inv['up'][0],2),'down':round(b.inv['down'][0],2),'pairCost':round(vu+vd,4) if (vu and vd) else None,
                          'fills':b.fills,'costUsd':round(cost,4),'feesUsd':round(b.fees,4),'pnlUsd':round(gross-b.fees,4),
                          'pnlGoldUsd':round(gross-b.fees*(1-GOLD_REBATE),4),'perDollar':round((gross-b.fees)/cost,4)}
-        self.done.append(out);self.state['rounds']+=1;return 1
+        self.done.append(out);self.state['rounds']+=1
+        try:self.refresh_gate()
+        except Exception as exc:self._err(exc)
+        return 1
     def _sum(self,rows,v,key='pnlUsd'):
         xs=[r['v'][v] for r in rows if r.get('filled') and r['v'].get(v)]
         n=len(xs);per=[x['perDollar'] for x in xs];m=sum(per)/n if n else None
@@ -180,12 +213,13 @@ class PairAcc:
         r=self.report();r.pop('recent',None);r['wallet']={k:v for k,v in r['wallet'].items() if k not in ('recent','open','flows')};return r
     def save(self):
         tmp=self.path()+'.tmp'
-        with gzip.open(tmp,'wt') as f:json.dump({'done':list(self.done),'state':self.state},f,separators=(',',':'))
+        with gzip.open(tmp,'wt') as f:json.dump({'done':list(self.done),'state':self.state,'gateLog':list(self.gate_log)},f,separators=(',',':'))
         os.replace(tmp,self.path())
     def load(self):
         if not os.path.exists(self.path()):return False
         with gzip.open(self.path(),'rt') as f:d=json.load(f)
-        self.done.extend(d.get('done') or []);self.state['rounds']=int((d.get('state') or {}).get('rounds',0));return True
+        self.done.extend(d.get('done') or []);self.state['rounds']=int((d.get('state') or {}).get('rounds',0))
+        self.gate_log.extend(d.get('gateLog') or []);self.refresh_gate();return True
     async def loop(self):
         import asyncio
         global CURRENT;CURRENT=self

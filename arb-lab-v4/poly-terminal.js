@@ -209,7 +209,7 @@
  const shellPts=[],corePts=[];
  (function sphere(){const N=900,G=Math.PI*(3-Math.sqrt(5));for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),a=i*G;shellPts.push({x:Math.cos(a)*r,y,z:Math.sin(a)*r,j:Math.random()});}
   let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;for(let i=0;i<300;i++){const u=rnd()*2-1,t=rnd()*Math.PI*2,r=Math.cbrt(rnd())*.42,q=Math.sqrt(1-u*u);corePts.push({x:q*Math.cos(t)*r,y:u*r,z:q*Math.sin(t)*r,j:rnd()});}})();
- const GATES=[['FEED','book live'],['WINDOW','2–95% of the round'],['FIRST','first side ≤ 50¢'],['PAIR','pair ≤ 97¢'],['SIZE','≤ $6 a side'],['BALANCE','≤ $3 lopsided'],['GUARD','wallet guard clear'],['BUY','would buy now']];
+ const GATES=[['FEED','book live'],['WINDOW','2–95% of the round'],['FIRST','first side ≤ 50¢'],['PAIR','pair ≤ 97¢'],['SIZE','≤ $6 a side'],['BALANCE','≤ $3 lopsided'],['TREND','predictions on a winning trend'],['BUY','would buy now']];
  function gates(a,l){
   const W=window.PAIR_WALLET,o=openOf(l),bbo=a?.bbo||{},ua=bbo.up?.ask,da=bbo.down?.ask,end=a?.market?.endTs,now=Date.now()/1000;
   const traded=PAIR_LANES.includes(l),frac=end?1-(end-now)/300:null;
@@ -218,7 +218,7 @@
   const first=up>0||dn>0||(ok(ua)&&ua<=.5)||(ok(da)&&da<=.5);
   const pairOk=(up>0&&dn===0)?false:(up===0&&dn===0)?first:((ok(ua)&&dn>0&&ua+dc/dn<=.97)||(ok(da)&&up>0&&da+uc/up<=.97));
   const size=Math.max(uc,dc)<6,bal=Math.abs(uc-dc)<3,guard=!(W&&W.guard);
-  const st={FEED:feed,WINDOW:win,FIRST:first,PAIR:pairOk,SIZE:size,BALANCE:bal,GUARD:guard};
+  const st={FEED:feed,WINDOW:win,FIRST:first,PAIR:pairOk,SIZE:size,BALANCE:bal,TREND:guard};
   st.BUY=traded&&Object.values(st).every(Boolean);return st;}
  let fills={},pulse=0;
  function shellFrame(t){
@@ -273,7 +273,7 @@
   set('confStrat',o?`Holding ${money(o.costUsd)} in this round, ${o.fills} buys`:'No open round on this lane');
   set('confSize',`Rule: buy whichever side keeps the pair ≤ 97¢, $1 clips`);
   set('confMaker',W?`Wallet: ${money(W.equity)} equity, ${signed(W.pnlUsd)} since the fresh start`:'Wallet: waiting');
-  const sb=$('shellBadge'),stt=stateOf(a,lane);sb.textContent={trade:'Holding a round',signal:'Buy conditions met',lock:'Paused by guard',feed:'Not traded',wait:'Waiting'}[stt];sb.className='badge '+(stt==='trade'||stt==='signal'?'live':stt==='lock'?'warn':'');
+  const sb=$('shellBadge'),stt=stateOf(a,lane);sb.textContent={trade:'Holding a round',signal:'Buy conditions met',lock:'Watching: losing trend',feed:'Not traded',wait:'Waiting'}[stt];sb.className='badge '+(stt==='trade'||stt==='signal'?'live':stt==='lock'?'warn':'');
   LANES.forEach(l=>{const c=$('tl_'+l);if(!c)return;const[g,w,h]=ctx2d(c),d=buf[l].decision,cw=w/MAXB;
    const colr={trade:C.amber,signal:C.green,lock:C.red,feed:C.violet,wait:'#1d3036'};d.forEach((x,i)=>{g.fillStyle=colr[x.state];g.fillRect(w-(d.length-i)*cw,0,Math.ceil(cw),h);});
    set('tld_'+l,pairText(s.assets?.[l]||{},l));});

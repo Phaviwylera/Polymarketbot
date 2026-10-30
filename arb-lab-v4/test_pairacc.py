@@ -31,20 +31,43 @@ class PairAccTests(unittest.TestCase):
 class WalletTests(unittest.TestCase):
     def test_wallet_clips_dollars_and_reports_balance(self):
         p=pa.PairAcc(root=tempfile.mkdtemp());t0=max(END-290,pa.WALLET_START+1);mk={'slug':'btc-updown-5m-w','endTs':t0+290}
+        p.gate['on']=True                                                     # trend gate open
         p.on_book('BTC','up',bbo(.40,.62),mk,t0);w=p.cur['BTC']['v']['wallet'];self.assertAlmostEqual(w.inv['up'][0],2.5,2)   # $1 / .40
         p.on_book('BTC','down',bbo(.45,.55),mk,t0+1);self.assertAlmostEqual(w.inv['down'][0],round(1/.55,2),2)       # .55 + .40 <= .97
         p.settle('btc-updown-5m-w','up');wl=p.wallet()
         self.assertEqual(wl['trades'],1);self.assertAlmostEqual(wl['equity'],200+wl['pnlUsd'],2);self.assertEqual(wl['recent'][0]['winner'],'UP')
-    def test_wallet_loss_limit_blocks_entries(self):
-        p=pa.PairAcc(root=tempfile.mkdtemp())
-        p.done.append({'slug':'x','lane':'BTC','end':pa.WALLET_START+10,'filled':True,'v':{'wallet':{'pnlUsd':-8.5,'feesUsd':.1,'up':1,'down':0,'pairCost':None,'fills':1,'costUsd':8.5}}})
-        self.assertFalse(p.wallet_open(pa.GUARDS_OFF_UNTIL+20));self.assertIn('loss limit',p.wallet()['guard'])   # after the owner window
     def test_main_account_fresh_start_constant(self):
         import poly_portfolio as pp
         self.assertGreater(pp.OWNER_FRESH_START_AT,1793000000)
-class GuardWindowTests(unittest.TestCase):
-    def test_owner_window_keeps_trading_then_guards_resume(self):
+def row(slug,end,shadow,wallet=None):
+    v={'shadow':{'pnlUsd':shadow,'feesUsd':.01,'up':1,'down':1,'pairCost':.96,'fills':2,'costUsd':2.}}
+    if wallet is not None:v['wallet']={**v['shadow'],'pnlUsd':wallet}
+    return {'slug':slug,'lane':'BTC','end':end,'filled':True,'v':v}
+class TrendGateTests(unittest.TestCase):
+    def test_trend_rule(self):
+        self.assertFalse(pa.PairAcc.trend([.1]*5,180)[0])                            # warming up
+        self.assertTrue(pa.PairAcc.trend([-.1]*8+[.3]*4,180)[0])                      # last 12 net +.4, last 4 +1.2
+        self.assertFalse(pa.PairAcc.trend([.5]*8+[.1,.1,-.3,-.2],180)[0])             # last 4 losing
+        self.assertFalse(pa.PairAcc.trend([-.5]*8+[.1]*4,180)[0])                     # last 12 losing
+        on,why,_,_=pa.PairAcc.trend([.3]*12,pa.WALLET_FLOOR-1);self.assertFalse(on);self.assertIn('hard floor',why)
+    def test_shadow_trades_every_round_wallet_only_when_winning(self):
+        p=pa.PairAcc(root=tempfile.mkdtemp());t0=max(END-290,pa.WALLET_START+1);mk={'slug':'btc-updown-5m-g','endTs':t0+290}
+        p.on_book('BTC','up',bbo(.40,.62),mk,t0)
+        self.assertGreater(p.cur['BTC']['v']['shadow'].fills,0);self.assertEqual(p.cur['BTC']['v']['wallet'].fills,0)   # gate off: watch only
+        self.assertIn('warming up',p.wallet()['guard'])
+        for i in range(12):p.done.append(row(f's{i}',pa.GATE_START+i,.2))
+        p.refresh_gate();self.assertTrue(p.gate['on']);self.assertIsNone(p.wallet()['guard'])
+        mk2={'slug':'btc-updown-5m-h','endTs':t0+590};p.on_book('BTC','up',bbo(.40,.62),mk2,t0+300)
+        self.assertGreater(p.cur['BTC']['v']['wallet'].fills,0)                        # winning trend: trades
+        for i in range(4):p.done.append(row(f'l{i}',pa.GATE_START+20+i,-.5))
+        p.refresh_gate();self.assertFalse(p.gate['on']);self.assertIn('losing trend',p.wallet()['guard'])
+        self.assertEqual([g['on'] for g in p.gate_log][-2:],[True,False])
+    def test_t1_compares_gated_with_shadow(self):
         p=pa.PairAcc(root=tempfile.mkdtemp())
-        p.done.append({'slug':'x','lane':'BTC','end':pa.WALLET_START+10,'filled':True,'v':{'wallet':{'pnlUsd':-9.,'feesUsd':.1,'up':1,'down':0,'pairCost':None,'fills':1,'costUsd':9.}}})
-        self.assertTrue(p.wallet_open(pa.GUARDS_OFF_UNTIL-60))          # inside the owner's no-pause window
-        self.assertFalse(p.wallet_open(pa.GUARDS_OFF_UNTIL+60))         # loss stop is back afterwards
+        p.done.append(row('a',pa.GATE_START+1,-1.0));p.done.append(row('b',pa.GATE_START+2,.4,wallet=.4))
+        t=p.t1();self.assertEqual((t['shadowRounds'],t['gatedRounds']),(2,1));self.assertAlmostEqual(t['gateSavedUsd'],1.0,2);self.assertEqual(t['verdict'],'collecting')
+    def test_gate_log_survives_restart(self):
+        d=tempfile.mkdtemp();p=pa.PairAcc(root=d)
+        for i in range(12):p.done.append(row(f's{i}',pa.GATE_START+i,.2))
+        p.refresh_gate();p.save();q=pa.PairAcc(root=d);q.load()
+        self.assertTrue(q.gate['on']);self.assertTrue(any(g['on'] for g in q.gate_log))
