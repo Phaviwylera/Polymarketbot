@@ -1,18 +1,18 @@
 {
- "at": 1793419388.9157314,
- "atUtc": "2026-10-31 04:03:08",
- "uptimeSec": 120,
+ "at": 1793419690.386136,
+ "atUtc": "2026-10-31 04:08:10",
+ "uptimeSec": 121,
  "host": "aws-ec2-t4g.small",
- "revision": "9ba108f",
+ "revision": "a2976c0",
  "hostStats": {
   "loadAvg": [
-   0.09,
-   0.23,
-   0.23
+   0.31,
+   0.31,
+   0.27
   ],
   "memTotalMb": 1835,
-  "memAvailableMb": 964,
-  "processRssMb": 555,
+  "memAvailableMb": 968,
+  "processRssMb": 546,
   "cpuCount": 2
  },
  "portfolio": {
@@ -44,7 +44,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle lead below 0.20 bps",
+   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse below 1.0 bps",
    "position": null
   },
   "ETH": {
@@ -54,7 +54,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse below 1.0 bps",
+   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse does not confirm direction",
    "position": null
   },
   "BTC15": {
@@ -64,7 +64,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle lead below 0.20 bps",
+   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse below 1.0 bps",
    "position": null
   },
   "ETH15": {
@@ -74,7 +74,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse below 1.0 bps",
+   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse does not confirm direction",
    "position": null
   }
  },
@@ -84,11 +84,11 @@
   "state": "healthy",
   "writer": true,
   "active": true,
-  "checkpointAt": 1793419384.0225,
-  "checkpointAgeSec": 4.908833265304565,
-  "queuedEvents": 5,
-  "lastFlushSec": 0.054,
-  "eventsSavedThisBoot": 73,
+  "checkpointAt": 1793419683.94718,
+  "checkpointAgeSec": 6.488659143447876,
+  "queuedEvents": 2,
+  "lastFlushSec": 4.563,
+  "eventsSavedThisBoot": 79,
   "errors": 0,
   "lastError": null,
   "droppedEvents": 0,
@@ -141,7 +141,7 @@
    -0.1237
   ],
   "skip": 1282639,
-  "pending": 1832,
+  "pending": 2874,
   "error": null,
   "learner": {
    "rounds": 4113,
@@ -162,9 +162,9 @@
  "jev": {
   "enabled": true,
   "model": "typesafe/jev-1.14",
-  "calls": 9160,
-  "callsToday": 5,
-  "errors": 482,
+  "calls": 9169,
+  "callsToday": 6,
+  "errors": 491,
   "lastError": "HTTPStatusError: Client error '402 Payment Required' for url 'https://openrouter.ai/api/alpha/decisions'\nFor more information check: http",
   "costUsd": 0.19892573399999686,
   "servedBy": null,
@@ -209,7 +209,7 @@
  "newLanes": {
   "spotlead": {
    "enabled": true,
-   "prints": 148813,
+   "prints": 149681,
    "signals": 82,
    "errors": 0,
    "lastError": null,
@@ -276,9 +276,9 @@
   },
   "maker": {
    "enabled": true,
-   "prints": 357,
+   "prints": 332,
    "rounds": 2828,
-   "quotes": 17964,
+   "quotes": 17988,
    "errors": 0,
    "lastError": null,
    "openRounds": 4,
@@ -826,11 +826,11 @@
   },
   "fastmaker": {
    "enabled": true,
-   "bookEvents": 91468,
-   "prints": 357,
-   "requotes": 68985151,
-   "fills": 3959,
-   "flattens": 1783,
+   "bookEvents": 124136,
+   "prints": 332,
+   "requotes": 69003978,
+   "fills": 3966,
+   "flattens": 1785,
    "rounds": 2713,
    "errors": 0,
    "lastError": null,
@@ -901,7 +901,7 @@
   },
   "pairacc": {
    "enabled": true,
-   "bookEvents": 44490,
+   "bookEvents": 73900,
    "fills": 6,
    "rounds": 2040,
    "errors": 0,
@@ -993,7 +993,7 @@
      "last12": -5.92,
      "last4": -2.54,
      "shadowRounds": 264,
-     "at": 1793419269
+     "at": 1793419570
     },
     "gateLog": [
      {
@@ -1087,7 +1087,7 @@
    "errors": 0,
    "lastError": null,
    "openBaskets": 0,
-   "openS1": 28,
+   "openS1": 83,
    "N1": {
     "rule": "buy one YES of every outcome of a negRisk event when the basket costs < $1 after fees + 0.5c per leg; settle at resolution",
     "pass": ">= 30 trades and mean - 1.645 SE > 0",
@@ -1583,71 +1583,82 @@
  "audit": {
   "verdict": "FAIL",
   "why": [
-   "only 0 out-of-sample trades (need 60)",
-   "out-of-sample mean None is not above 0",
-   "bootstrap 95% lower bound None is not above 0"
+   "block bootstrap 95% lower bound -0.077 is not above 0",
+   "3/8 folds non-negative (need 60%)"
   ],
   "oos": [
-   0,
-   null,
-   0.0,
-   null,
-   null
+   70,
+   0.1221,
+   8.548,
+   -0.071,
+   0.3347
   ],
   "oosBlock": [
-   null,
-   null,
-   null
+   -0.077,
+   0.3337,
+   64
   ],
-  "stress1tick": null,
+  "stress1tick": 0.0736,
   "ledger": [
-   0,
+   63,
    0,
    {
     "sinceFreshStart": 0,
-    "sinceRulesLive": 0,
-    "betweenTheTwoTimes": 0,
+    "sinceRulesLive": 87,
+    "betweenTheTwoTimes": 87,
     "explained": true
    }
   ],
   "takeAll": [
-   0,
-   null
+   121,
+   0.024
   ],
-  "folds": "0/0",
+  "folds": "3/8",
   "live": [
-   0,
-   null,
-   null
+   55,
+   -0.15,
+   -0.2891
   ],
   "exec": {
-   "trades": 0,
-   "clean": false,
+   "trades": 110,
+   "clean": true,
    "errors": {},
-   "risk": {}
+   "risk": {
+    "stopOvershoot": 26,
+    "heldToSettlement": 1,
+    "exitDelayed": 1
+   }
   },
   "errorIds": {},
   "errorTrades": [],
   "ledgerProblems": [],
   "stops": {
-   "stops": 0,
-   "overshootsAbove5c": 0,
-   "overshootShareFromGapBeforeTriggerPct": null,
-   "overshootShareAfterTriggerPct": null,
-   "withEntryChase": 0,
-   "causeCounts": {}
+   "stops": 68,
+   "overshootsAbove5c": 50,
+   "overshootShareFromGapBeforeTriggerPct": 39.4,
+   "overshootShareAfterTriggerPct": 14.3,
+   "withEntryChase": 6,
+   "causeCounts": {
+    "price gapped past the stop between book updates": 20,
+    "unexplained with the recorded evidence": 20,
+    "low-priced token": 8,
+    "bids fell during the 350 ms exit latency / 2-tick walk": 7,
+    "entered after the token had already moved 5c+": 6,
+    "1 exit retry": 3,
+    "2 exit retries": 1
+   }
   },
   "expA": {
-   "trades": null,
-   "meanDifferencePerTrade": null,
-   "exitedEarlier": null,
-   "missedRecoveries": null,
-   "savedOnStops": null
+   "trades": 25,
+   "meanDifferencePerTrade": 0.048,
+   "exitedEarlier": 16,
+   "missedRecoveries": 2,
+   "savedOnStops": 3.1092
   },
   "expB": {
-   "trades": null,
-   "rejectRatePct": null,
-   "rejectedStops": null
+   "trades": 25,
+   "rejectRatePct": 36.0,
+   "rejectedStops": 6
   },
   "config": {
    "strategyVersion": "momentum-17.9",
@@ -1655,13 +1666,14 @@
    "experimentsHash": "0a52d65a7a7e"
   },
   "alerts": [
-   "database: no verified backup recorded yet"
+   "database: no verified backup recorded yet",
+   "1 scalp(s) held to settlement"
   ],
   "model": [
-   0,
-   null,
-   null,
-   null
+   1211,
+   0.2316,
+   0.2233,
+   -0.0372
   ]
  },
  "cpuProfile": null,
