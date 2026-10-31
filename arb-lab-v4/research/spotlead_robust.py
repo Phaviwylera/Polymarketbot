@@ -1,3 +1,5 @@
+# SUPERSEDED 2026-10-31: the trade simulation here keys trades by round and lets the second side overwrite the first
+# (hidden look-ahead). Its +2.6c result is an artifact. Use research/spotlead_replay.py.
 exec(open('spotlead.py').read().split("# trade sims on test")[0].replace("print(","(lambda *a,**k:None)("))
 import time as _t
 def first_taker(pfun,thr,sel=lambda r:True):

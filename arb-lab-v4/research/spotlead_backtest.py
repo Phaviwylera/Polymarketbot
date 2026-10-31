@@ -1,3 +1,5 @@
+# SUPERSEDED 2026-10-31: the trade simulation here keys trades by round and lets the second side overwrite the first
+# (hidden look-ahead). Its +2.6c result is an artifact. Use research/spotlead_replay.py.
 """Does live spot know something the Polymarket price doesn't? Offline test on the recorded tape.
 Split by time: fit on the first 60% of rounds (by round end), judge on the last 40% only.
 Model (per lane family 5m/15m): logit P(token wins) = a*logit(mid) + b*z + c,  z = signed spot move / sqrt(seconds left).

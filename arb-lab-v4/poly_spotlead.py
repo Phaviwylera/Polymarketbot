@@ -1,5 +1,14 @@
 """S2 spot-lead taker (paper only; places no real orders).
 
+CORRECTION 2026-10-31: the backtest result below was wrong. In 57 held-out rounds both sides signalled, and the
+backtest stored trades keyed by round, so the SECOND side's trade replaced the first: a hidden look-ahead (the side that
+signals later has seen more of the round). Replayed correctly as S2 actually trades (first signal per round AND side),
+the held-out days give +0.09c per $ before the 0.5c delay cost (bad case -1.84c, 916 trades); all of 25-30 Oct gives
+-0.83c with the delay cost over 1,777 trades. So there is NO edge in the backtest. The rule and the pre-registered forward
+test are left unchanged and running, as the honest check; expect it to fail. research/spotlead_replay.py reproduces this.
+
+ORIGINAL TEXT (superseded):
+
 Finding (offline, recorded tape 25-30 Oct 2026, 3,469 rounds, fit on the first 60% of rounds by time, judged on the last
 40% only): on the 5-minute BTC/ETH markets the live spot move since the round opened carries information the token
 price does not. Logistic fit on train:  logit P(token wins) = A*logit(mid) + B*z + C,  z = spot move in bps on this
