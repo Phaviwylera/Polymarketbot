@@ -1,18 +1,18 @@
 {
- "at": 1793489598.2104626,
- "atUtc": "2026-10-31 23:33:18",
- "uptimeSec": 120,
+ "at": 1793490504.2439792,
+ "atUtc": "2026-10-31 23:48:24",
+ "uptimeSec": 1026,
  "host": "aws-ec2-t4g.small",
  "revision": "2690a98",
  "hostStats": {
   "loadAvg": [
-   0.26,
-   0.29,
-   0.28
+   0.2,
+   0.17,
+   0.2
   ],
   "memTotalMb": 1835,
-  "memAvailableMb": 938,
-  "processRssMb": 579,
+  "memAvailableMb": 579,
+  "processRssMb": 934,
   "cpuCount": 2
  },
  "portfolio": {
@@ -74,7 +74,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse does not confirm direction",
+   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse below 1.0 bps",
    "position": null
   }
  },
@@ -84,12 +84,12 @@
   "state": "healthy",
   "writer": true,
   "active": true,
-  "checkpointAt": 1793489591.8298025,
-  "checkpointAgeSec": 6.393547058105469,
-  "queuedEvents": 4,
-  "lastFlushSec": 0.091,
-  "eventsSavedThisBoot": 79,
-  "errors": 0,
+  "checkpointAt": 1793490502.0185592,
+  "checkpointAgeSec": 2.2389402389526367,
+  "queuedEvents": 0,
+  "lastFlushSec": 0.1,
+  "eventsSavedThisBoot": 650,
+  "errors": 1,
   "lastError": null,
   "droppedEvents": 0,
   "databaseExpiresAt": null,
@@ -98,73 +98,75 @@
   "rawFeedDurable": false,
   "backupConfigured": true,
   "backupTarget": "s3",
-  "lastBackupAt": null,
-  "lastBackupOk": null,
+  "lastBackupAt": 1793447876.0,
+  "lastBackupOk": true,
   "baselineStored": true
  },
  "bullpen": {
   "enabled": true,
-  "installed": false,
+  "installed": true,
   "version": "0.1.118",
-  "lastRunAt": null,
-  "calls": 0,
-  "ok": 0,
+  "lastRunAt": 1793489778.7829342,
+  "calls": 6,
+  "ok": 6,
   "errors": 0,
   "lastError": null,
-  "walletsCovered": 0,
-  "eventsRecorded": 0,
+  "walletsCovered": 210,
+  "eventsRecorded": 6,
   "mode": "read-only, record-only, no login"
  },
  "threshold": {
   "status": "COLLECTING",
-  "resolved": 0,
+  "resolved": 10,
   "open": 0,
-  "pnlUsd": 0,
-  "avgPnlUsd": null,
-  "stressEntry1cWorseAvg": null,
+  "pnlUsd": -16.1659,
+  "avgPnlUsd": -1.6166,
+  "stressEntry1cWorseAvg": -1.7267,
   "blockLower": null,
-  "skips": {},
+  "skips": {
+   "all trading paused by owner (study mode)": 1
+  },
   "error": null,
   "openPositions": []
  },
  "tape": {
-  "prints": 3012850,
-  "rounds": 4782,
-  "brierModel": 0.18564,
-  "brierPrice": 0.15793,
+  "prints": 3021252,
+  "rounds": 4792,
+  "brierModel": 0.18562,
+  "brierPrice": 0.15799,
   "buy": [
-   660971,
-   -0.0664
+   662992,
+   -0.0657
   ],
   "sell": [
-   976459,
-   -0.1348
+   979564,
+   -0.1339
   ],
-  "skip": 1375420,
-  "pending": 5958,
+  "skip": 1378696,
+  "pending": 1932,
   "error": null,
   "learner": {
-   "rounds": 4693,
-   "brierPrice": 0.13081,
-   "brierLearned": 0.12989,
-   "brierModel": 0.15418,
+   "rounds": 4697,
+   "brierPrice": 0.13077,
+   "brierLearned": 0.12986,
+   "brierModel": 0.15413,
    "learnedBeatsPrice": true
   },
   "learnedBuy": [
-   275874,
-   -0.0102
+   277868,
+   -0.0116
   ],
   "learnedSell": [
-   139029,
-   -0.0362
+   139464,
+   -0.0364
   ]
  },
  "jev": {
   "enabled": true,
   "model": "typesafe/jev-1.14",
-  "calls": 10912,
-  "callsToday": 4,
-  "errors": 2234,
+  "calls": 10936,
+  "callsToday": 28,
+  "errors": 2258,
   "lastError": "HTTPStatusError: Client error '402 Payment Required' for url 'https://openrouter.ai/api/alpha/decisions'\nFor more information check: http",
   "costUsd": 0.19892573399999686,
   "servedBy": null,
@@ -209,7 +211,7 @@
  "newLanes": {
   "spotlead": {
    "enabled": true,
-   "prints": 489379,
+   "prints": 493755,
    "signals": 163,
    "errors": 0,
    "lastError": null,
@@ -276,87 +278,87 @@
   },
   "maker": {
    "enabled": true,
-   "prints": 490,
-   "rounds": 3410,
-   "quotes": 21588,
+   "prints": 4866,
+   "rounds": 3415,
+   "quotes": 21634,
    "errors": 0,
    "lastError": null,
-   "openRounds": 4,
+   "openRounds": 7,
    "feeRate": 0.0,
    "M1": {
     "rule": "resting bids at the best bid on both tokens, back of the queue, fills only on trade-through or after the queue ahead is eaten; hold to resolution",
     "pass": ">= 300 forward rounds with a fill and mean P&L per $ - 1.645 SE > 0",
     "registeredAt": 1793071725,
     "forward": {
-     "rounds": 3410,
-     "roundsFilled": 3404,
+     "rounds": 3415,
+     "roundsFilled": 3409,
      "fillRate": 0.998,
-     "bothFilled": 2613,
-     "pnlUsd": -3474.646,
-     "costUsd": 30080.01,
-     "perDollarPooled": -0.1155,
-     "rebateUsd": 209.8635,
-     "perDollarWithRebate": -0.1085,
-     "perDollarMean": -0.2148,
-     "lower95": -0.2312
+     "bothFilled": 2618,
+     "pnlUsd": -3471.883,
+     "costUsd": 30130.01,
+     "perDollarPooled": -0.1152,
+     "rebateUsd": 210.2191,
+     "perDollarWithRebate": -0.1083,
+     "perDollarMean": -0.2144,
+     "lower95": -0.2308
     },
     "verdict": "not confirmed"
    },
    "variants": {
     "join": {
-     "rounds": 3410,
-     "roundsFilled": 3404,
+     "rounds": 3415,
+     "roundsFilled": 3409,
      "fillRate": 0.998,
-     "bothFilled": 2613,
-     "pnlUsd": -3474.646,
-     "costUsd": 30080.01,
-     "perDollarPooled": -0.1155,
-     "rebateUsd": 209.8635,
-     "perDollarWithRebate": -0.1085,
-     "perDollarMean": -0.2148,
-     "lower95": -0.2312
+     "bothFilled": 2618,
+     "pnlUsd": -3471.883,
+     "costUsd": 30130.01,
+     "perDollarPooled": -0.1152,
+     "rebateUsd": 210.2191,
+     "perDollarWithRebate": -0.1083,
+     "perDollarMean": -0.2144,
+     "lower95": -0.2308
     },
     "improve": {
-     "rounds": 3410,
-     "roundsFilled": 3403,
+     "rounds": 3415,
+     "roundsFilled": 3408,
      "fillRate": 0.998,
-     "bothFilled": 2656,
-     "pnlUsd": -3571.522,
-     "costUsd": 30195.01,
-     "perDollarPooled": -0.1183,
-     "rebateUsd": 209.5357,
-     "perDollarWithRebate": -0.1113,
-     "perDollarMean": -0.213,
-     "lower95": -0.2294
+     "bothFilled": 2661,
+     "pnlUsd": -3566.953,
+     "costUsd": 30245.01,
+     "perDollarPooled": -0.1179,
+     "rebateUsd": 209.8878,
+     "perDollarWithRebate": -0.111,
+     "perDollarMean": -0.2125,
+     "lower95": -0.2289
     },
     "peg": {
-     "rounds": 3410,
-     "roundsFilled": 3404,
+     "rounds": 3415,
+     "roundsFilled": 3409,
      "fillRate": 0.998,
-     "bothFilled": 3374,
-     "pnlUsd": -3647.446,
-     "costUsd": 33890.0,
-     "perDollarPooled": -0.1076,
-     "rebateUsd": 207.3985,
-     "perDollarWithRebate": -0.1015,
-     "perDollarMean": -0.1116,
-     "lower95": -0.1225
+     "bothFilled": 3379,
+     "pnlUsd": -3646.696,
+     "costUsd": 33940.0,
+     "perDollarPooled": -0.1074,
+     "rebateUsd": 207.7114,
+     "perDollarWithRebate": -0.1013,
+     "perDollarMean": -0.1114,
+     "lower95": -0.1223
     },
     "pair": {
-     "rounds": 3401,
-     "roundsFilled": 718,
+     "rounds": 3406,
+     "roundsFilled": 719,
      "fillRate": 0.211,
-     "bothFilled": 500,
-     "pnlUsd": -351.3,
-     "costUsd": 2871.3,
-     "perDollarPooled": -0.1223,
-     "rebateUsd": 18.4432,
-     "perDollarWithRebate": -0.1159,
-     "perDollarMean": -0.2722,
-     "lower95": -0.3015
+     "bothFilled": 501,
+     "pnlUsd": -351.1,
+     "costUsd": 2876.1,
+     "perDollarPooled": -0.1221,
+     "rebateUsd": 18.4714,
+     "perDollarWithRebate": -0.1157,
+     "perDollarMean": -0.2718,
+     "lower95": -0.301
     },
     "pairGuard": {
-     "rounds": 3401,
+     "rounds": 3406,
      "roundsFilled": 542,
      "fillRate": 0.159,
      "bothFilled": 154,
@@ -371,17 +373,17 @@
    },
    "byLane": {
     "BTC": {
-     "rounds": 1280,
-     "roundsFilled": 1279,
+     "rounds": 1283,
+     "roundsFilled": 1282,
      "fillRate": 0.999,
-     "bothFilled": 1049,
-     "pnlUsd": -1082.191,
-     "costUsd": 11635.0,
-     "perDollarPooled": -0.093,
-     "rebateUsd": 80.5581,
-     "perDollarWithRebate": -0.0861,
-     "perDollarMean": -0.1743,
-     "lower95": -0.1999
+     "bothFilled": 1052,
+     "pnlUsd": -1076.775,
+     "costUsd": 11665.0,
+     "perDollarPooled": -0.0923,
+     "rebateUsd": 80.7702,
+     "perDollarWithRebate": -0.0854,
+     "perDollarMean": -0.1735,
+     "lower95": -0.199
     },
     "BTC15": {
      "rounds": 425,
@@ -397,17 +399,17 @@
      "lower95": -0.2044
     },
     "ETH": {
-     "rounds": 1281,
-     "roundsFilled": 1280,
+     "rounds": 1283,
+     "roundsFilled": 1282,
      "fillRate": 0.999,
-     "bothFilled": 918,
-     "pnlUsd": -1696.064,
-     "costUsd": 10990.0,
+     "bothFilled": 920,
+     "pnlUsd": -1698.717,
+     "costUsd": 11010.0,
      "perDollarPooled": -0.1543,
-     "rebateUsd": 77.3507,
+     "rebateUsd": 77.4942,
      "perDollarWithRebate": -0.1473,
-     "perDollarMean": -0.2719,
-     "lower95": -0.2993
+     "perDollarMean": -0.2717,
+     "lower95": -0.2991
     },
     "ETH15": {
      "rounds": 424,
@@ -426,13 +428,16 @@
   },
   "xmarket": {
    "enabled": true,
-   "scans": 0,
-   "markets": 0,
-   "chains": {},
+   "scans": 3,
+   "markets": 49,
+   "chains": {
+    "BTC": 13,
+    "ETH": 13
+   },
    "gapsSeen": 0,
    "errors": 0,
    "lastError": null,
-   "lastScanAt": null,
+   "lastScanAt": 1793490241.5940723,
    "openSnapshots": 22,
    "openTrades": 4,
    "openLadderPairs": 0,
@@ -472,17 +477,17 @@
   },
   "events": {
    "enabled": true,
-   "phase": "starting",
+   "phase": "history done; recording forward",
    "listed": 0,
    "studied": 1658,
    "skipped": 0,
    "errors": 0,
    "lastError": null,
-   "scans": 0,
+   "scans": 1,
    "dayCursor": 1793404800,
    "historyMarkets": 1658,
-   "forwardOpen": 81,
-   "forwardSettled": 3,
+   "forwardOpen": 76,
+   "forwardSettled": 8,
    "calibration": {
     "7d": [
      [
@@ -826,43 +831,43 @@
   },
   "fastmaker": {
    "enabled": true,
-   "bookEvents": 151967,
-   "prints": 490,
-   "requotes": 79321275,
-   "fills": 4787,
-   "flattens": 2167,
-   "rounds": 3295,
+   "bookEvents": 1172710,
+   "prints": 3895,
+   "requotes": 79411444,
+   "fills": 4797,
+   "flattens": 2172,
+   "rounds": 3300,
    "errors": 0,
    "lastError": null,
    "openRounds": 4,
-   "awaitingResult": 0,
+   "awaitingResult": 3,
    "M2": {
     "rule": "quote both tokens for equal shares at the best bid (pair <= 99c), complete the pair after a fill, stop-loss 10c, flatten at 15% left; 250 ms latency, back of the queue",
     "pass": ">= 300 rounds with a fill and mean P&L per $ - 1.645 SE > 0",
     "registeredAt": 1793085345,
-    "rounds": 3295,
+    "rounds": 3300,
     "avgPerDollar": -0.171,
     "lower95": -0.1765,
-    "pnlUsd": -1140.619,
-    "rebateUsd": 70.8253,
+    "pnlUsd": -1142.433,
+    "rebateUsd": 70.9335,
     "verdict": "not confirmed"
    },
-   "roundsSeen": 3350,
-   "roundsFilled": 3295,
+   "roundsSeen": 3355,
+   "roundsFilled": 3300,
    "fillRate": 0.984,
-   "pairsCompleted": 1245,
-   "stoppedOut": 2048
+   "pairsCompleted": 1247,
+   "stoppedOut": 2051
   },
   "kalshi": {
    "enabled": true,
    "base": "https://external-api.kalshi.com/trade-api/v2",
-   "scans": 6,
-   "matched": 12,
-   "gapsSeen": 2983,
+   "scans": 162,
+   "matched": 302,
+   "gapsSeen": 2989,
    "errors": 0,
    "lastError": null,
-   "books": 11,
-   "liveRounds": 2,
+   "books": 302,
+   "liveRounds": 4,
    "awaitingResult": 0,
    "roundsSettled": 816,
    "venuesDisagreePct": 1.84,
@@ -880,10 +885,10 @@
   },
   "rivals": {
    "enabled": true,
-   "runs": 0,
+   "runs": 1,
    "errors": 0,
    "lastError": null,
-   "lastRunAt": null,
+   "lastRunAt": 1793489778.2638474,
    "names": [
     "norm1e69",
     "GoodFallen",
@@ -895,30 +900,705 @@
     "Fredi9999",
     "joseph00677"
    ],
-   "wallets": {},
-   "results": {},
+   "wallets": {
+    "norm1e69": "0x41e2e1ccf1e4940029af02259a31c6b89b9fa354",
+    "GoodFallen": "0x0ca4e9d27ff826a109ecbf74754fb66b93f277a6",
+    "98euf98a": "0xdf4c6a942bd95bf903d6066b4ba7051e6f914f22",
+    "Flaznorp": "0x821dab0565ebf5b327f51db06223fdcfe01acf16",
+    "UpTheBlues": "0x2a69660046d7acc4ab204d7cc5ba78b0776cd2f7",
+    "RN1": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+    "Theo4": "0x56687bf447db6ffa42ffe2204a05edaa20f55839",
+    "Fredi9999": "0x1f2dd6d473f3e824cd2f8a89d9c69fb96f6ad0cf",
+    "joseph00677": "0xcdcccd0f2d86e450d973da415ad2430e5cc7935a"
+   },
+   "results": {
+    "norm1e69": {
+     "wallet": "0x41e2e1ccf1e4940029af02259a31c6b89b9fa354",
+     "fills": 17,
+     "takerFills": 17,
+     "nonUpDownFills": 17,
+     "merges": 500,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 17,
+      "usdTraded": 601.35,
+      "makerSharePct": 0.0,
+      "markets": 5,
+      "updownSharePct": 0.0,
+      "sellSharePct": 33.3,
+      "medianPrice": 0.77,
+      "fillsPerDay": 17.0,
+      "spanDays": 1.0,
+      "topMarkets": [
+       [
+        "lol-tes-blg-2026-10-28-game1",
+        245.0
+       ],
+       [
+        "lol-kc-cfo-2026-10-29-game2",
+        197.0
+       ],
+       [
+        "lol-tes-blg-2026-10-28-game2",
+        85.5
+       ],
+       [
+        "lol-tes-blg-2026-10-28",
+        48.85
+       ],
+       [
+        "lol-kc-cfo-2026-10-29-game1",
+        25.0
+       ]
+      ]
+     },
+     "leaderboard": {
+      "period": "MONTH",
+      "category": "CRYPTO",
+      "rank": "12",
+      "pnl": 131832.84890975495,
+      "vol": 15784164.198382,
+      "roiPct": 0.835
+     }
+    },
+    "GoodFallen": {
+     "wallet": "0x0ca4e9d27ff826a109ecbf74754fb66b93f277a6",
+     "fills": 6000,
+     "takerFills": 6000,
+     "nonUpDownFills": 0,
+     "merges": 0,
+     "lookbackDays": 3,
+     "rounds": 239,
+     "bothSidesPct": 94.1,
+     "avgPairCost": 0.9827,
+     "pairCostUnder1Pct": 56.0,
+     "avgUnmatchedShares": 110.6843,
+     "avgMatchedShares": 177.3057,
+     "medianFirstBuyFrac": 0.063,
+     "makerSharePct": 42.0,
+     "settledRounds": 150,
+     "excessOnWinnerPct": 44.0,
+     "roundsWithExcess": 150,
+     "pairPnlBeforeFees": 1316.52,
+     "pnlBeforeFees": 541.79,
+     "takerFees": 559.51,
+     "pnlAfterFees": -17.72,
+     "makerRebateEst": 82.08,
+     "pnlWithMakerRebate": 64.36,
+     "winningRoundsPct": 48.7,
+     "takerRebateNeededToBreakEvenPct": 0.0,
+     "fingerprint": {
+      "rounds5m": 239,
+      "rounds15m": 0,
+      "legLagMedianSec": 30.0,
+      "legsWithin2sPct": 8.9,
+      "firstLegCheapPct": 40.4,
+      "clipMedian": 15.0,
+      "clipP90": 30.0,
+      "fillsPerRoundMedian": 19,
+      "sellShareOfVolumePct": 0.0,
+      "byPhase": {
+       "0-20%": {
+        "sharePct": 17.1,
+        "avgPrice": 0.523,
+        "takerPct": 58.0,
+        "fills": 1084
+       },
+       "20-50%": {
+        "sharePct": 30.9,
+        "avgPrice": 0.478,
+        "takerPct": 53.6,
+        "fills": 1843
+       },
+       "50-80%": {
+        "sharePct": 30.9,
+        "avgPrice": 0.469,
+        "takerPct": 57.1,
+        "fills": 2013
+       },
+       "80-100%": {
+        "sharePct": 21.1,
+        "avgPrice": 0.466,
+        "takerPct": 65.7,
+        "fills": 1060
+       }
+      },
+      "byPrice": {
+       "60-80c": {
+        "sharePct": 23.1,
+        "takerPct": 55.4,
+        "fills": 1438
+       },
+       "40-60c": {
+        "sharePct": 29.2,
+        "takerPct": 62.8,
+        "fills": 1722
+       },
+       "20-40c": {
+        "sharePct": 25.9,
+        "takerPct": 57.5,
+        "fills": 1592
+       },
+       "80-100c": {
+        "sharePct": 9.6,
+        "takerPct": 49.6,
+        "fills": 504
+       },
+       "0-20c": {
+        "sharePct": 12.2,
+        "takerPct": 59.0,
+        "fills": 744
+       }
+      }
+     },
+     "general": {
+      "fills": 6000,
+      "usdTraded": 53416.77,
+      "makerSharePct": 42.8,
+      "markets": 239,
+      "updownSharePct": 100.0,
+      "sellSharePct": 0.0,
+      "medianPrice": 0.47,
+      "fillsPerDay": 6000.0,
+      "spanDays": 1.0,
+      "topMarkets": [
+       [
+        "btc-updown-5m-1793426100",
+        1323.06
+       ],
+       [
+        "btc-updown-5m-1793427600",
+        921.21
+       ],
+       [
+        "btc-updown-5m-1793447700",
+        909.39
+       ],
+       [
+        "btc-updown-5m-1793471100",
+        879.35
+       ],
+       [
+        "btc-updown-5m-1793451600",
+        807.51
+       ]
+      ]
+     },
+     "leaderboard": {
+      "period": "MONTH",
+      "category": "CRYPTO",
+      "rank": "16",
+      "pnl": 100493.58872299998,
+      "vol": 6548313.0265760105,
+      "roiPct": 1.535
+     }
+    },
+    "98euf98a": {
+     "wallet": "0xdf4c6a942bd95bf903d6066b4ba7051e6f914f22",
+     "fills": 6000,
+     "takerFills": 684,
+     "nonUpDownFills": 0,
+     "merges": 0,
+     "lookbackDays": 3,
+     "rounds": 781,
+     "bothSidesPct": 51.7,
+     "avgPairCost": 0.9845,
+     "pairCostUnder1Pct": 50.2,
+     "avgUnmatchedShares": 52.6906,
+     "avgMatchedShares": 30.8168,
+     "medianFirstBuyFrac": 0.113,
+     "makerSharePct": 81.8,
+     "settledRounds": 150,
+     "excessOnWinnerPct": 41.4,
+     "roundsWithExcess": 140,
+     "pairPnlBeforeFees": -60.23,
+     "pnlBeforeFees": -609.19,
+     "takerFees": 28.31,
+     "pnlAfterFees": -637.5,
+     "makerRebateEst": 20.95,
+     "pnlWithMakerRebate": -616.55,
+     "winningRoundsPct": 46.7,
+     "takerRebateNeededToBreakEvenPct": 2177.9,
+     "fingerprint": {
+      "rounds5m": 781,
+      "rounds15m": 0,
+      "legLagMedianSec": 52.0,
+      "legsWithin2sPct": 3.0,
+      "firstLegCheapPct": 41.6,
+      "clipMedian": 9.0,
+      "clipP90": 38.55,
+      "fillsPerRoundMedian": 4,
+      "sellShareOfVolumePct": 0.0,
+      "byPhase": {
+       "80-100%": {
+        "sharePct": 5.6,
+        "avgPrice": 0.413,
+        "takerPct": 22.4,
+        "fills": 324
+       },
+       "0-20%": {
+        "sharePct": 37.9,
+        "avgPrice": 0.55,
+        "takerPct": 22.2,
+        "fills": 2181
+       },
+       "20-50%": {
+        "sharePct": 35.2,
+        "avgPrice": 0.519,
+        "takerPct": 12.4,
+        "fills": 2198
+       },
+       "50-80%": {
+        "sharePct": 21.3,
+        "avgPrice": 0.487,
+        "takerPct": 19.5,
+        "fills": 1297
+       }
+      },
+      "byPrice": {
+       "80-100c": {
+        "sharePct": 8.5,
+        "takerPct": 40.0,
+        "fills": 388
+       },
+       "60-80c": {
+        "sharePct": 32.1,
+        "takerPct": 20.9,
+        "fills": 1729
+       },
+       "20-40c": {
+        "sharePct": 16.6,
+        "takerPct": 13.4,
+        "fills": 1182
+       },
+       "40-60c": {
+        "sharePct": 31.6,
+        "takerPct": 10.9,
+        "fills": 1957
+       },
+       "0-20c": {
+        "sharePct": 11.3,
+        "takerPct": 21.4,
+        "fills": 744
+       }
+      }
+     },
+     "general": {
+      "fills": 6000,
+      "usdTraded": 46249.17,
+      "makerSharePct": 80.1,
+      "markets": 781,
+      "updownSharePct": 100.0,
+      "sellSharePct": 0.0,
+      "medianPrice": 0.55,
+      "fillsPerDay": 2247.0,
+      "spanDays": 2.67,
+      "topMarkets": [
+       [
+        "btc-updown-5m-1793306700",
+        678.62
+       ],
+       [
+        "btc-updown-5m-1793310900",
+        615.97
+       ],
+       [
+        "btc-updown-5m-1793307000",
+        561.69
+       ],
+       [
+        "btc-updown-5m-1793378100",
+        558.35
+       ],
+       [
+        "btc-updown-5m-1793258400",
+        505.4
+       ]
+      ]
+     },
+     "leaderboard": null
+    },
+    "Flaznorp": {
+     "wallet": "0x821dab0565ebf5b327f51db06223fdcfe01acf16",
+     "fills": 6000,
+     "takerFills": 6000,
+     "nonUpDownFills": 6000,
+     "merges": 500,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 6000,
+      "usdTraded": 532827.42,
+      "makerSharePct": 17.5,
+      "markets": 783,
+      "updownSharePct": 0.0,
+      "sellSharePct": 0.0,
+      "medianPrice": 0.55,
+      "fillsPerDay": 6000.0,
+      "spanDays": 1.0,
+      "topMarkets": [
+       [
+        "epl-ast-ful-2026-10-31-total-1pt5",
+        57035.22
+       ],
+       [
+        "epl-ast-ful-2026-10-31-ful",
+        27967.8
+       ],
+       [
+        "nba-phi-cha-2026-10-31",
+        27372.63
+       ],
+       [
+        "epl-ast-ful-2026-10-31-ast",
+        20636.74
+       ],
+       [
+        "mls-sje-rsl-2026-10-31-rsl",
+        11554.01
+       ]
+      ]
+     },
+     "leaderboard": {
+      "period": "MONTH",
+      "category": "OVERALL",
+      "rank": "13",
+      "pnl": 1099350.2971577775,
+      "vol": 214438060.05211475,
+      "roiPct": 0.513
+     }
+    },
+    "UpTheBlues": {
+     "wallet": "0x2a69660046d7acc4ab204d7cc5ba78b0776cd2f7",
+     "fills": 6000,
+     "takerFills": 6000,
+     "nonUpDownFills": 6000,
+     "merges": 47,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 6000,
+      "usdTraded": 799686.8,
+      "makerSharePct": 0.3,
+      "markets": 1134,
+      "updownSharePct": 0.0,
+      "sellSharePct": 0.0,
+      "medianPrice": 0.55,
+      "fillsPerDay": 6000.0,
+      "spanDays": 1.0,
+      "topMarkets": [
+       [
+        "atp-draxl-dominko-2026-10-31",
+        45230.91
+       ],
+       [
+        "arg-vel-slo-2026-10-31-slo",
+        30777.57
+       ],
+       [
+        "sea-mil-int-2026-10-31-int",
+        25686.19
+       ],
+       [
+        "epl-ast-ful-2026-10-31-ast",
+        24165.11
+       ],
+       [
+        "atp-silv-aguil-2026-10-31",
+        21555.61
+       ]
+      ]
+     },
+     "leaderboard": {
+      "period": "MONTH",
+      "category": "OVERALL",
+      "rank": "7",
+      "pnl": 1740630.2239743886,
+      "vol": 154988512.59337685,
+      "roiPct": 1.123
+     }
+    },
+    "RN1": {
+     "wallet": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+     "fills": 6000,
+     "takerFills": 1787,
+     "nonUpDownFills": 6000,
+     "merges": 500,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 6000,
+      "usdTraded": 1649226.43,
+      "makerSharePct": 90.7,
+      "markets": 1252,
+      "updownSharePct": 0.0,
+      "sellSharePct": 0.0,
+      "medianPrice": 0.47,
+      "fillsPerDay": 6000.0,
+      "spanDays": 1.0,
+      "topMarkets": [
+       [
+        "bun-bay-dor-2026-10-31-total-3pt5",
+        46520.61
+       ],
+       [
+        "epl-ast-ful-2026-10-31-ast",
+        45510.1
+       ],
+       [
+        "cfb-minnst-ind-2026-10-31",
+        34135.48
+       ],
+       [
+        "epl-mac-bri-2026-10-31-mac",
+        32344.59
+       ],
+       [
+        "epl-tot-cry-2026-10-31-cry",
+        32287.77
+       ]
+      ]
+     },
+     "leaderboard": {
+      "period": "MONTH",
+      "category": "OVERALL",
+      "rank": "24",
+      "pnl": 835623.6496086897,
+      "vol": 137438861.72224507,
+      "roiPct": 0.608
+     }
+    },
+    "Theo4": {
+     "wallet": "0x56687bf447db6ffa42ffe2204a05edaa20f55839",
+     "fills": 0,
+     "takerFills": 0,
+     "nonUpDownFills": 0,
+     "merges": 33,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 0
+     },
+     "leaderboard": {
+      "period": "ALL",
+      "category": "OVERALL",
+      "rank": "1",
+      "pnl": 22053933.752321,
+      "vol": 43013258.515682,
+      "roiPct": 51.272
+     }
+    },
+    "Fredi9999": {
+     "wallet": "0x1f2dd6d473f3e824cd2f8a89d9c69fb96f6ad0cf",
+     "fills": 0,
+     "takerFills": 0,
+     "nonUpDownFills": 0,
+     "merges": 169,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 0
+     },
+     "leaderboard": {
+      "period": "ALL",
+      "category": "OVERALL",
+      "rank": "3",
+      "pnl": 16619506.631731,
+      "vol": 76611316.90515405,
+      "roiPct": 21.693
+     }
+    },
+    "joseph00677": {
+     "wallet": "0xcdcccd0f2d86e450d973da415ad2430e5cc7935a",
+     "fills": 0,
+     "takerFills": 0,
+     "nonUpDownFills": 0,
+     "merges": 0,
+     "lookbackDays": 3,
+     "rounds": 0,
+     "bothSidesPct": null,
+     "avgPairCost": null,
+     "pairCostUnder1Pct": null,
+     "avgUnmatchedShares": null,
+     "avgMatchedShares": null,
+     "medianFirstBuyFrac": null,
+     "makerSharePct": null,
+     "settledRounds": 0,
+     "fingerprint": {
+      "rounds5m": 0,
+      "rounds15m": 0,
+      "legLagMedianSec": null,
+      "legsWithin2sPct": null,
+      "firstLegCheapPct": null,
+      "clipMedian": null,
+      "clipP90": null,
+      "fillsPerRoundMedian": null,
+      "sellShareOfVolumePct": null,
+      "byPhase": {},
+      "byPrice": {}
+     },
+     "general": {
+      "fills": 0
+     },
+     "leaderboard": {
+      "period": "MONTH",
+      "category": "OVERALL",
+      "rank": "2",
+      "pnl": 5614973.943886471,
+      "vol": 47146017.140157,
+      "roiPct": 11.91
+     }
+    }
+   },
    "notes": "read-only study of public accounts; P&L excludes their volume-tier taker rebates (up to 44-50% of taker fees at $4M-$10M monthly weighted volume)"
   },
   "pairacc": {
    "enabled": true,
-   "bookEvents": 108755,
-   "fills": 67,
-   "rounds": 2478,
+   "bookEvents": 772262,
+   "fills": 328,
+   "rounds": 2483,
    "errors": 0,
    "lastError": null,
    "openRounds": 2,
-   "awaitingResult": 0,
+   "awaitingResult": 1,
    "R1": {
     "rule": "replica of the observed rival pattern: take 5-share clips at the ask of whichever side keeps the pair cost <= 0.97; first leg <= 50c; through 2-95% of each 5m window; hold to settlement",
     "pass": ">= 300 rounds with fills and mean P&L per $ (no taker rebate) - 1.645 SE > 0",
     "registeredAt": 1793087467,
     "forward": {
-     "rounds": 2471,
-     "perDollar": -0.2624,
-     "lower95": -0.2757,
-     "pnlUsd": -5870.618,
-     "pnlGoldUsd": -5261.612,
-     "feesUsd": 3383.357,
+     "rounds": 2476,
+     "perDollar": -0.2621,
+     "lower95": -0.2754,
+     "pnlUsd": -5882.916,
+     "pnlGoldUsd": -5272.506,
+     "feesUsd": 3391.157,
      "bothSidesPct": 84.8,
      "avgPairCost": 0.9369,
      "winRoundsPct": 46.6
@@ -927,24 +1607,24 @@
    },
    "variants": {
     "replica": {
-     "rounds": 2471,
-     "perDollar": -0.2624,
-     "lower95": -0.2757,
-     "pnlUsd": -5870.618,
-     "pnlGoldUsd": -5261.612,
-     "feesUsd": 3383.357,
+     "rounds": 2476,
+     "perDollar": -0.2621,
+     "lower95": -0.2754,
+     "pnlUsd": -5882.916,
+     "pnlGoldUsd": -5272.506,
+     "feesUsd": 3391.157,
      "bothSidesPct": 84.8,
      "avgPairCost": 0.9369,
      "winRoundsPct": 46.6
     },
     "strict": {
-     "rounds": 2471,
-     "perDollar": -0.3059,
-     "lower95": -0.3202,
-     "pnlUsd": -5412.588,
-     "pnlGoldUsd": -4859.264,
-     "feesUsd": 3074.012,
-     "bothSidesPct": 81.3,
+     "rounds": 2476,
+     "perDollar": -0.3056,
+     "lower95": -0.3199,
+     "pnlUsd": -5420.347,
+     "pnlGoldUsd": -4865.636,
+     "feesUsd": 3081.721,
+     "bothSidesPct": 81.4,
      "avgPairCost": 0.9132,
      "winRoundsPct": 40.3
     },
@@ -960,15 +1640,15 @@
      "winRoundsPct": 25.4
     },
     "shadow": {
-     "rounds": 702,
-     "perDollar": -0.2802,
-     "lower95": -0.3102,
-     "pnlUsd": -474.311,
-     "pnlGoldUsd": -435.342,
-     "feesUsd": 216.488,
-     "bothSidesPct": 80.9,
-     "avgPairCost": 0.932,
-     "winRoundsPct": 26.5
+     "rounds": 707,
+     "perDollar": -0.2792,
+     "lower95": -0.3091,
+     "pnlUsd": -481.533,
+     "pnlGoldUsd": -442.243,
+     "feesUsd": 218.274,
+     "bothSidesPct": 81.0,
+     "avgPairCost": 0.9319,
+     "winRoundsPct": 26.4
     }
    },
    "wallet": {
@@ -986,14 +1666,14 @@
     "avgPnlUsd": -0.398,
     "maxDrawdownUsd": 119.39,
     "profitFactor": 0.69,
-    "guard": "losing trend, watching: last 12 predictions -12.87, last 4 -6.10",
+    "guard": "losing trend, watching: last 12 predictions -13.32, last 4 -5.03",
     "gate": {
      "on": false,
-     "why": "losing trend, watching: last 12 predictions -12.87, last 4 -6.10",
-     "last12": -12.87,
-     "last4": -6.1,
-     "shadowRounds": 702,
-     "at": 1793489478
+     "why": "losing trend, watching: last 12 predictions -13.32, last 4 -5.03",
+     "last12": -13.32,
+     "last4": -5.03,
+     "shadowRounds": 707,
+     "at": 1793490482
     },
     "gateLog": [
      {
@@ -1051,11 +1731,11 @@
      "rule": "wallet trades only while the last 12 and last 4 shadow rounds are both net positive",
      "pass": ">= 100 shadow rounds and >= 50 gated rounds; edge = gated mean P&L - 1.645 SE > 0",
      "since": 1793377800.0,
-     "shadowRounds": 702,
-     "shadowPnlUsd": -474.31,
+     "shadowRounds": 707,
+     "shadowPnlUsd": -481.53,
      "gatedRounds": 89,
      "gatedPnlUsd": -38.68,
-     "gateSavedUsd": 435.63,
+     "gateSavedUsd": 442.85,
      "gatedMeanUsd": -0.4346,
      "gatedLower95": -0.8684,
      "verdict": "no edge"
@@ -1071,23 +1751,23 @@
   },
   "eventarb": {
    "enabled": true,
-   "scans": 0,
-   "events": 0,
-   "eventsEligible": 0,
-   "skippedAugmented": 0,
-   "skippedInactive": 0,
+   "scans": 2,
+   "events": 100,
+   "eventsEligible": 6,
+   "skippedAugmented": 57,
+   "skippedInactive": 3,
    "basketGaps": 0,
    "conversionGaps": 0,
-   "s1Candidates": 0,
+   "s1Candidates": 380,
    "fieldSeen": {
-    "negRisk": 0,
-    "negRiskAugmented": 0,
-    "umaResolutionStatus": 0
+    "negRisk": 172,
+    "negRiskAugmented": 200,
+    "umaResolutionStatus": 1570
    },
    "errors": 0,
    "lastError": null,
    "openBaskets": 0,
-   "openS1": 153,
+   "openS1": 172,
    "N1": {
     "rule": "buy one YES of every outcome of a negRisk event when the basket costs < $1 after fees + 0.5c per leg; settle at resolution",
     "pass": ">= 30 trades and mean - 1.645 SE > 0",
@@ -1100,22 +1780,30 @@
     "rule": "buy the side priced 90-99.5c while a resolution proposal is live or after the scheduled end; settle at 1/0/0.5",
     "pass": ">= 100 trades and mean - 1.645 SE > 0",
     "registeredAt": 1793092815,
-    "n": 500,
-    "mean": -0.57131,
-    "lower95": -0.6089,
+    "n": 510,
+    "mean": -0.57179,
+    "lower95": -0.60899,
     "winPct": 41.4,
-    "pnlUsd": -1418.313,
+    "pnlUsd": -1448.102,
     "invalidResolutions": 0,
     "quarantined": 1334,
     "quarantineWhy": "settled before 2026-10-30 by a lookup that did not check the returned market was the one traded; excluded",
-    "losses": 293,
+    "losses": 299,
     "verdict": "not confirmed"
    }
   },
   "eventmaker": {
    "enabled": true,
-   "polls": 0,
+   "polls": 16,
    "markets": [
+    {
+     "slug": "us-announces-end-of-iranian-blockade-by-december-31-2026-20260727171803489-375-949-645-919-269-157-255-857",
+     "cat": "politics",
+     "fills": 21,
+     "net": -10.4,
+     "mid": 0.423,
+     "pnlUsd": 2.205
+    },
     {
      "slug": "will-the-republicans-win-the-maine-senate-race-in-2026",
      "cat": "politics",
@@ -1123,14 +1811,6 @@
      "net": -5.5,
      "mid": 0.31,
      "pnlUsd": 1.678
-    },
-    {
-     "slug": "us-announces-end-of-iranian-blockade-by-december-31-2026-20260727171803489-375-949-645-919-269-157-255-857",
-     "cat": "politics",
-     "fills": 20,
-     "net": -0.4,
-     "mid": 0.4225,
-     "pnlUsd": 2.171
     },
     {
      "slug": "will-the-democrats-win-the-maine-senate-race-in-2026",
@@ -1145,8 +1825,8 @@
      "cat": "politics",
      "fills": 15,
      "net": -10.0,
-     "mid": 0.785,
-     "pnlUsd": 0.866
+     "mid": 0.78,
+     "pnlUsd": 0.916
     },
     {
      "slug": "2026-balance-of-power-d-senate-d-house-949",
@@ -1157,32 +1837,32 @@
      "pnlUsd": -0.14
     }
    ],
-   "fills": 0,
+   "fills": 1,
    "errors": 0,
    "lastError": null,
    "M3": {
     "rule": "join best bid and ask on ~20 liquid sports/politics markets, back of the queue, inventory skew; fills from real trades; maker rebate; mark to mid",
     "pass": ">= 50 market-days with fills and mean P&L per market-day - 1.645 SE > 0",
     "registeredAt": 1793092815,
-    "marketDays": 51,
-    "avgPerMarketDay": 0.1689,
-    "lower95": 0.1027,
+    "marketDays": 50,
+    "avgPerMarketDay": 0.1712,
+    "lower95": 0.1039,
     "verdict": "CONFIRMED"
    },
-   "pnlMtmUsd": 16.896,
-   "rebateUsd": 2.4267,
-   "volumeUsd": 690.16
+   "pnlMtmUsd": 16.873,
+   "rebateUsd": 2.4203,
+   "volumeUsd": 685.92
   }
  },
  "study": {
   "live": {
    "name": "live",
    "totals": {
-    "rounds": 4793,
-    "prints": 3018136,
-    "buys": 2577784,
-    "winnerUp": 2340,
-    "winnerDown": 2453
+    "rounds": 4803,
+    "prints": 3026538,
+    "buys": 2585309,
+    "winnerUp": 2345,
+    "winnerDown": 2458
    },
    "rule": {
     "trades": 166,
@@ -1230,95 +1910,95 @@
    "mistakes": [
     [
      "0-10c",
-     4670,
-     -0.0031,
-     -0.0142,
+     4680,
+     -0.003,
+     -0.0141,
      0.008
     ],
     [
      "10-20c",
-     4636,
-     0.0038,
-     -0.0128,
-     0.0204
+     4645,
+     0.0039,
+     -0.0127,
+     0.0205
     ],
     [
      "20-30c",
-     4675,
-     0.0006,
-     -0.0188,
-     0.0199
+     4685,
+     0.0013,
+     -0.0181,
+     0.0206
     ],
     [
      "30-40c",
-     4577,
-     0.003,
-     -0.0183,
-     0.0243
+     4587,
+     0.0035,
+     -0.0177,
+     0.0248
     ],
     [
      "40-50c",
-     4307,
-     -0.0005,
-     -0.0232,
-     0.0222
+     4316,
+     -0.0002,
+     -0.0229,
+     0.0224
     ],
     [
      "50-60c",
-     4215,
-     -0.0004,
-     -0.0233,
-     0.0226
+     4224,
+     -0.0006,
+     -0.0235,
+     0.0224
     ],
     [
      "60-70c",
-     4580,
-     -0.0024,
-     -0.0238,
-     0.0191
+     4590,
+     -0.0028,
+     -0.0243,
+     0.0186
     ],
     [
      "70-80c",
-     4691,
-     -0.0008,
-     -0.0205,
-     0.0189
+     4701,
+     -0.0015,
+     -0.0212,
+     0.0182
     ],
     [
      "80-90c",
-     4729,
+     4739,
      -0.0017,
      -0.0186,
      0.0153
     ],
     [
      "90-100c",
-     4766,
+     4776,
      0.0025,
      -0.0099,
-     0.0149
+     0.0148
     ]
    ],
    "reversals": {
     "BTC": {
-     "rounds": 1644,
+     "rounds": 1649,
      "leaderLost": 46,
      "leaderLostPct": 2.8
     },
     "ETH": {
-     "rounds": 1355,
+     "rounds": 1358,
      "leaderLost": 44,
      "leaderLostPct": 3.2
     },
     "ETH15": {
-     "rounds": 496,
+     "rounds": 497,
      "leaderLost": 34,
-     "leaderLostPct": 6.9
+     "leaderLostPct": 6.8
     },
     "BTC15": {
-     "rounds": 503,
-     "leaderLost": 36,
-     "leaderLostPct": 7.2
+     "rounds": 504,
+     "leaderLost": 37,
+     "leaderLostPct": 7.3
     }
    },
    "hypotheses": [
@@ -1326,20 +2006,20 @@
      "id": "H1",
      "verdict": "not confirmed",
      "forward": {
-      "trades": 1989,
-      "winPct": 41.3,
-      "avgAtPrint": -0.0689,
-      "avgStressed": -0.0981,
-      "lower95": -0.1378,
-      "lower3se": -0.1706
+      "trades": 1990,
+      "winPct": 41.4,
+      "avgAtPrint": -0.0682,
+      "avgStressed": -0.0973,
+      "lower95": -0.1371,
+      "lower3se": -0.1699
      },
      "all": {
-      "trades": 2416,
+      "trades": 2417,
       "winPct": 41.6,
-      "avgAtPrint": -0.0627,
-      "avgStressed": -0.0914,
-      "lower95": -0.1276,
-      "lower3se": -0.1574
+      "avgAtPrint": -0.0621,
+      "avgStressed": -0.0908,
+      "lower95": -0.127,
+      "lower3se": -0.1568
      },
      "byWeek": [
       {
@@ -1353,12 +2033,12 @@
       },
       {
        "week": "2026-W44",
-       "trades": 2319,
+       "trades": 2320,
        "winPct": 41.4,
-       "avgAtPrint": -0.0681,
-       "avgStressed": -0.0971,
-       "lower95": -0.1339,
-       "lower3se": -0.1643
+       "avgAtPrint": -0.0675,
+       "avgStressed": -0.0964,
+       "lower95": -0.1333,
+       "lower3se": -0.1637
       }
      ]
     }
@@ -1504,59 +2184,376 @@
     ],
     [
      23,
-     204,
-     0.0234,
-     -0.0717
+     212,
+     0.02156,
+     -0.0711
     ]
    ]
   },
   "history": {
    "name": "history",
    "totals": {
-    "rounds": 0,
-    "prints": 0,
-    "buys": 0,
-    "winnerUp": 0,
-    "winnerDown": 0
+    "rounds": 20520,
+    "prints": 16091589,
+    "buys": 13903151,
+    "winnerUp": 10128,
+    "winnerDown": 10392
    },
    "rule": {
-    "trades": 0,
-    "winPct": null,
-    "avgReturnPerDollar": null,
-    "lowerBound": null
+    "trades": 1115,
+    "winPct": 65.0,
+    "avgReturnPerDollar": 0.0468,
+    "lowerBound": -0.005
    },
-   "qualifyingPatterns": [],
-   "topPatterns": [],
+   "qualifyingPatterns": [
+    "first 20% left \u00b7 40-50c \u00b7 spot against"
+   ],
+   "topPatterns": [
+    [
+     "first 20% left \u00b7 40-50c \u00b7 spot against",
+     5535,
+     0.0545,
+     0.0126
+    ],
+    [
+     "10-20% left \u00b7 90-100c \u00b7 spot with",
+     7252,
+     -0.0018,
+     -0.009
+    ],
+    [
+     "first 20% left \u00b7 90-100c \u00b7 spot with",
+     550,
+     0.0221,
+     -0.01
+    ],
+    [
+     "20-40% left \u00b7 90-100c \u00b7 spot with",
+     11140,
+     -0.0043,
+     -0.0113
+    ],
+    [
+     "last 10% left \u00b7 90-100c \u00b7 spot flat",
+     2095,
+     0.0036,
+     -0.0114
+    ]
+   ],
    "bestWindows": [],
-   "mistakes": [],
-   "reversals": {},
+   "mistakes": [
+    [
+     "0-10c",
+     20268,
+     -0.0036,
+     -0.0089,
+     0.0018
+    ],
+    [
+     "10-20c",
+     20161,
+     -0.0005,
+     -0.0084,
+     0.0074
+    ],
+    [
+     "20-30c",
+     20238,
+     0.0005,
+     -0.0088,
+     0.0098
+    ],
+    [
+     "30-40c",
+     20055,
+     -0.005,
+     -0.0151,
+     0.0051
+    ],
+    [
+     "40-50c",
+     20112,
+     -0.0041,
+     -0.0147,
+     0.0064
+    ],
+    [
+     "50-60c",
+     20468,
+     0.0004,
+     -0.0101,
+     0.0109
+    ],
+    [
+     "60-70c",
+     20242,
+     0.0023,
+     -0.0079,
+     0.0124
+    ],
+    [
+     "70-80c",
+     20350,
+     -0.004,
+     -0.0134,
+     0.0055
+    ],
+    [
+     "80-90c",
+     20441,
+     -0.0037,
+     -0.0119,
+     0.0044
+    ],
+    [
+     "90-100c",
+     20505,
+     -0.0007,
+     -0.0066,
+     0.0053
+    ]
+   ],
+   "reversals": {
+    "ETH15": {
+     "rounds": 2149,
+     "leaderLost": 104,
+     "leaderLostPct": 4.8
+    },
+    "BTC": {
+     "rounds": 7250,
+     "leaderLost": 198,
+     "leaderLostPct": 2.7
+    },
+    "ETH": {
+     "rounds": 6012,
+     "leaderLost": 193,
+     "leaderLostPct": 3.2
+    },
+    "BTC15": {
+     "rounds": 2193,
+     "leaderLost": 144,
+     "leaderLostPct": 6.6
+    }
+   },
    "hypotheses": [
     {
      "id": "H1",
      "verdict": "collecting",
      "forward": {
-      "trades": 0
+      "trades": 296,
+      "winPct": 54.4,
+      "avgAtPrint": 0.1265,
+      "avgStressed": 0.1035,
+      "lower95": 0.0062,
+      "lower3se": -0.0739
      },
      "all": {
-      "trades": 0
+      "trades": 5535,
+      "winPct": 51.0,
+      "avgAtPrint": 0.0545,
+      "avgStressed": 0.033,
+      "lower95": 0.0105,
+      "lower3se": -0.008
      },
-     "byWeek": []
+     "byWeek": [
+      {
+       "week": "2026-W41",
+       "trades": 1477,
+       "winPct": 51.3,
+       "avgAtPrint": 0.0631,
+       "avgStressed": 0.0414,
+       "lower95": -0.0023,
+       "lower3se": -0.0382
+      },
+      {
+       "week": "2026-W42",
+       "trades": 1777,
+       "winPct": 50.0,
+       "avgAtPrint": 0.0344,
+       "avgStressed": 0.0133,
+       "lower95": -0.0264,
+       "lower3se": -0.059
+      },
+      {
+       "week": "2026-W43",
+       "trades": 1790,
+       "winPct": 50.1,
+       "avgAtPrint": 0.0353,
+       "avgStressed": 0.0141,
+       "lower95": -0.0254,
+       "lower3se": -0.058
+      },
+      {
+       "week": "2026-W44",
+       "trades": 491,
+       "winPct": 56.8,
+       "avgAtPrint": 0.1715,
+       "avgStressed": 0.1476,
+       "lower95": 0.073,
+       "lower3se": 0.0114
+      }
+     ]
     }
    ],
-   "hours": []
+   "hours": [
+    [
+     0,
+     692,
+     -0.03476,
+     -0.10406
+    ],
+    [
+     1,
+     695,
+     -0.06108,
+     -0.12394
+    ],
+    [
+     2,
+     695,
+     -0.02697,
+     -0.09556
+    ],
+    [
+     3,
+     708,
+     -0.05438,
+     -0.11673
+    ],
+    [
+     4,
+     693,
+     -0.07548,
+     -0.14267
+    ],
+    [
+     5,
+     699,
+     -0.0309,
+     -0.09588
+    ],
+    [
+     6,
+     721,
+     -0.0467,
+     -0.11172
+    ],
+    [
+     7,
+     747,
+     -0.05234,
+     -0.11783
+    ],
+    [
+     8,
+     723,
+     -0.02186,
+     -0.08573
+    ],
+    [
+     9,
+     750,
+     -0.05212,
+     -0.12019
+    ],
+    [
+     10,
+     738,
+     -0.03373,
+     -0.09566
+    ],
+    [
+     11,
+     710,
+     -0.01914,
+     -0.08475
+    ],
+    [
+     12,
+     713,
+     -0.03478,
+     -0.10264
+    ],
+    [
+     13,
+     720,
+     -0.03777,
+     -0.09892
+    ],
+    [
+     14,
+     722,
+     -0.03932,
+     -0.10337
+    ],
+    [
+     15,
+     726,
+     0.00533,
+     -0.0581
+    ],
+    [
+     16,
+     722,
+     -0.02817,
+     -0.09157
+    ],
+    [
+     17,
+     724,
+     0.00377,
+     -0.05747
+    ],
+    [
+     18,
+     693,
+     -0.05705,
+     -0.11962
+    ],
+    [
+     19,
+     715,
+     -0.00768,
+     -0.07345
+    ],
+    [
+     20,
+     722,
+     -0.03065,
+     -0.09757
+    ],
+    [
+     21,
+     710,
+     -0.02773,
+     -0.09948
+    ],
+    [
+     22,
+     709,
+     -0.02511,
+     -0.08946
+    ],
+    [
+     23,
+     673,
+     -0.03668,
+     -0.10493
+    ]
+   ]
   },
   "backfill": {
-   "roundsDone": 0,
-   "tradesSeen": 0,
+   "roundsDone": 8,
+   "tradesSeen": 3244,
    "errors": 0,
    "lastError": null,
-   "oldestRound": null,
-   "newestRound": null,
+   "oldestRound": 1793486700,
+   "newestRound": 1793487300,
    "queue": 0,
-   "phase": "starting",
+   "phase": "backfilling",
    "mode": "record-only: past rounds from Polymarket public data",
    "days": 21.0,
-   "studied": 0,
+   "studied": 20540,
    "version": "v3",
    "spot": "previous fully-closed minute (no look-ahead)"
   },
@@ -1565,7 +2562,7 @@
  "skillVsLuck": {
   "tested": 3989,
   "fdr": 0.1,
-  "skill": 922,
+  "skill": 921,
   "oneBigWin": 0,
   "ourSkilledTop": {
    "wallets": 150,
@@ -1661,18 +2658,28 @@
    "experimentsHash": "0a52d65a7a7e"
   },
   "alerts": [
-   "database: no verified backup recorded yet",
    "1 scalp(s) held to settlement"
   ],
   "model": [
-   1116,
-   0.2395,
-   0.2192,
-   -0.0926
+   1120,
+   0.2392,
+   0.2187,
+   -0.0937
   ]
  },
- "cpuProfile": null,
+ "cpuProfile": "{\"seconds\":300,\"samples\":5903,\"busyPct\":12.2,\"self\":[[\"selector_events.py:_read_ready__get_buffer\",25.6],[\"gzip.py:_write_raw\",23.9],[\"ssl.py:read\",20.6],[\"ssl.py:write\",2.4],[\"decoder.py:raw_decode\",2.4],[\"<frozen importlib._bootstrap_external>:_path_stat\",2.2],[\"pathlib.py:open\",1.9],[\"poly_shadow.py:<genexpr>\",1.7],[\"ssl.py:do_handshake\",1.7],[\"poly_diagnostics.py:append\",1.5],[\"ssl.py:load_default_certs\",1.4],[\"copy.py:deepcopy\",1.2],[\"random.py:_randbelow_with_getrandbits\",1.1],[\"ssl.py:create_default_context\",1.0]],\"inclusive\":[[\"server.py:run\",100.0],[\"main.py:run\",100.0],[\"main.py:main\",100.0],[\"core.py:invoke\",100.0],[\"core.py:main\",100.0],[\"core.py:__call__\",100.0],[\"uvicorn:<module>\",100.0],[\"selector_events.py:_read_ready\",45.3],[\"selector_events.py:_read_ready__get_buffer\",45.1],[\"gzip.py:_write_raw\",23.9],[\"gzip.py:write\",23.9],[\"__init__.py:dump\",23.3],[\"sslproto.py:_do_read__copied\",20.7],[\"sslproto.py:_do_read\",20.7]]}",
  "recentLog": [
-  "23:32:24 POLY_DEMO_CLOB_RECONNECT BTC15 ConnectionClosedError received 1013 (try again later) slow consumer: send buffer full; then sent 1013 (try again later) slow consumer: send bu"
+  "23:32:24 POLY_DEMO_CLOB_RECONNECT BTC15 ConnectionClosedError received 1013 (try again later) slow consumer: send buffer full; then sent 1013 (try again later) slow consumer: send bu",
+  "23:33:19 POLY_LOOP_STALL 1.31s lastGen2Gc=0.16s gen2Age=33s",
+  "23:35:20 POLY_LOOP_STALL 1.39s lastGen2Gc=0.02s gen2Age=64s",
+  "23:36:18 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-10-31 23:36:18\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"healthy\",\"checkpointAgeSec\":2.3094277381896973,\"errors\":0,\"lastError\":null,\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":8.3269,\"arch",
+  "23:36:35 POLY_BULLPEN {\"calls\":6,\"ok\":6,\"errors\":0,\"lastError\":null,\"walletsCovered\":210,\"eventsRecorded\":6}",
+  "23:37:22 POLY_LOOP_STALL 1.03s lastGen2Gc=0.05s gen2Age=111s",
+  "23:41:18 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-10-31 23:41:18\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"healthy\",\"checkpointAgeSec\":1.1985208988189697,\"errors\":0,\"lastError\":null,\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":8.3269,\"arch",
+  "23:42:28 POLY_LOOP_STALL 1.06s lastGen2Gc=0.05s gen2Age=139s",
+  "23:43:26 POLY_STORAGE_ERROR TimeoutError step=flush",
+  "23:43:55 POLY_LOOP_STALL 2.33s lastGen2Gc=0.12s gen2Age=2s",
+  "23:45:59 POLY_DEMO_CLOB_RECONNECT BTC RuntimeError stale order-book backlog (lag 5.2s price_change run 50 rejected 50); reconnect",
+  "23:46:18 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-10-31 23:46:18\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"healthy\",\"checkpointAgeSec\":1.6571974754333496,\"errors\":1,\"lastError\":null,\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":8.3269,\"arch"
  ]
 }
