@@ -79,9 +79,11 @@
   const paused=(s.portfolio?.pausedLanes)||[],run=LANES.filter(l=>!paused.includes(l));
   const live=run.filter(l=>['market','clob','rtds'].every(k=>s.assets?.[l]?.feed?.[k]==='live')).length;
   const tag=$('feedTag');tag.textContent=(live===run.length?'Live feed':`Feed ${live} of ${run.length}`)+(paused.length?`, ${paused.length} paused`:'');tag.className='tag'+(live===run.length?' ok':'');
-  const ev=LANES.flatMap(l=>(s.assets?.[l]?.paper?.events||[]).slice(0,12).map(e=>({...e,lane:l}))).filter(e=>e.action!=='CORE').sort((a,b)=>b.t-a.t).slice(0,24);
-  const parts=ev.map(e=>{const t=new Date(e.t*1000).toISOString().slice(11,19),pn=ok(e.pnl)?` <span class="${e.pnl>=0?'u':'d'}">${signed(e.pnl)}</span>`:'';
-   return `<b>${t}</b> <span style="color:${COL[e.lane]}">${NAME[e.lane]}</span> <em>${e.action}</em> ${e.side||''} ${ok(e.price)?cents(e.price):''}${pn}, ${String(e.detail||'').slice(0,70)}`;});
+  // Owner choice 2026-10-31: the live log shows S2 spot-lead trades only (open first, then settled, newest first).
+  const SW=window.S2_WALLET,tm=t=>ok(t)?new Date(t*1000).toISOString().slice(11,19):'--:--:--';
+  const parts=SW?[...(SW.open||[]).slice().reverse().map(o=>`<b>${tm(o.t)}</b> <span style="color:${COL[o.lane]}">${NAME[o.lane]}</span> <em>S2 BUY</em> ${o.token} ${cents(o.ask)}, model ${Math.round(o.p*100)}%, ${money(o.costUsd)} open`),
+    ...(SW.recent||[]).map(r=>`<b>${tm(r.t)}</b> <span style="color:${COL[r.lane]}">${NAME[r.lane]}</span> <em>S2 ${r.won?'WON':'LOST'}</em> ${r.token} ${cents(r.ask)}, model ${Math.round(r.p*100)}% <span class="${r.pnlUsd>=0?'u':'d'}">${signed(r.pnlUsd)}</span>`)]:[];
+  if(SW&&!parts.length)parts.push('S2 spot-lead wallet: no trades yet, watching 5-minute BTC and ETH rounds');
   const lanesTxt=LANES.map(l=>`<span style="color:${COL[l]}">${NAME[l]}</span> ${String(s.assets?.[l]?.decision||'').slice(0,60)}`);
   const html=(parts.length?parts:lanesTxt).join('   ◆   ');if($('tape').dataset.h!==html){$('tape').innerHTML=html;$('tape').dataset.h=html;}
  }
@@ -95,8 +97,21 @@
   const acctEq=p.accountEquity??p.equity,acctPnl=p.accountPnl??p.totalPnl;set('equity',money(acctEq));set('sessPnl',signed(acctPnl),cls(acctPnl));set('winRate',n?(100*w/n).toFixed(0)+'%':'—');set('avgTrade',n?signed(pnl/n,3):'—',cls(pnl));
   set('maxDd',money(p.maxDrawdownUsd));const open=LANES.filter(l=>s.assets?.[l]?.paper?.position).length;set('openPos',open+' / '+LANES.length);
   rules(s.rulesScorecard);audit();
-  // The pair-accumulator wallet is the account that trades now (owner fresh start; momentum paused): show it here.
-  const W=window.PAIR_WALLET;
+  // Owner choice 2026-10-31: the main wallet shows the S2 spot-lead wallet only.
+  const W2=window.S2_WALLET;
+  if(W2){
+   const ws=new Date(W2.startedAt*1000).toISOString().slice(5,16).replace('T',' ')+' UTC';
+   set('lifeLabel','S2 spot-lead wallet, P&L');set('lifePnl',signed(W2.pnlUsd),'big '+cls(W2.pnlUsd));
+   set('lifeSub',`Balance ${money(W2.balance)} of ${money(W2.startingBalance,0)} paper since ${ws}. ${W2.trades} settled trades, $${W2.stakeUsd} each`);
+   set('equity',money(W2.equity));set('sessPnl',signed(W2.pnlUsd),cls(W2.pnlUsd));set('winRate',W2.trades?W2.winRate.toFixed(0)+'%':'—');
+   set('avgTrade',W2.trades?signed(W2.avgPnlUsd,3):'—',cls(W2.avgPnlUsd));set('maxDd',money(W2.maxDrawdownUsd));
+   set('openPos',W2.openRounds?`${W2.openRounds}, ${money(W2.openCostUsd)}`:'0');
+   set('rulesDesc',`spot lead: 5m BTC/ETH, buy when the spot model beats the ask by 1¢ after fees, hold to settlement`);
+   const tb=document.querySelector('#rulesTbl tbody');
+   if(tb){const wr=W2.winRate,wc=wr>=70?'pos':wr<50?'neg':'';
+    tb.innerHTML=W2.trades?`<tr class="hl"><td>S2 wallet</td><td>${W2.trades}</td><td class="${wc}">${wr.toFixed(0)}%</td><td class="${cls(W2.avgPnlUsd)}">${signed(W2.avgPnlUsd,2)}</td><td class="${cls(W2.pnlUsd)}">${signed(W2.pnlUsd,2)}</td><td>${W2.profitFactor==null?'—':W2.profitFactor.toFixed(2)}</td></tr>`:'<tr><td colspan="6">waiting for the first S2 trade to settle</td></tr>';}
+  }
+  const W=W2?null:window.PAIR_WALLET;
   if(W){
    const ws=new Date(W.startedAt*1000).toISOString().slice(5,16).replace('T',' ')+' UTC';
    set('lifeLabel','Paper P&L since fresh start');set('lifePnl',signed(W.pnlUsd),'big '+cls(W.pnlUsd));
@@ -303,8 +318,8 @@
  // ---------- money flow sankey ----------
  function sankey(s){
   const PW=window.PAIR_WALLET;   // the pair-accumulator wallet trades now: its settled rounds join the flow
-  const SW=window.S2_WALLET;const f=[...(s.edge?.flows||[]),...((PW&&PW.flows)||[]),...((SW&&SW.flows)||[])].filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
-  if(!f.length){text(g,PW?'no settled rounds since the fresh start yet':'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
+  const SW=window.S2_WALLET;const f=(SW?[...(SW.flows||[])]:[...(s.edge?.flows||[]),...((PW&&PW.flows)||[])]).filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
+  if(!f.length){text(g,SW?'no settled S2 trades yet':PW?'no settled rounds since the fresh start yet':'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
   const SN={SPOT_LEAD:'SPOT LEAD (S2)',PAIR_ACC:'PAIR ACCUMULATOR',MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING (old)',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
   const total=f.reduce((a,x)=>a+x.trades,0),wins=f.reduce((a,x)=>a+x.wins,0),losses=total-wins,pad=6,top=14,usable=h-top-8-22*4;
   const col=(items,weights,X)=>{const gap=pad*(items.length-1),sc=(usable-gap)/total;let y=top;return Object.fromEntries(items.map((k,i)=>{const hh=weights[i]*sc,r={x:X,y,h:hh,used:0,usedR:0};y+=Math.max(hh,22)+pad;return [k,r];}));};
@@ -321,13 +336,16 @@
   const won=f.reduce((a,x)=>a+x.won,0),lost=f.reduce((a,x)=>a+x.lost,0);node(nR.WIN,'WINS '+wins,C.green,signed(won),true);if(losses)node(nR.LOSS,'LOSSES '+losses,C.red,signed(-lost),true);
   text(g,'LANE',LX,9,C.dim,8.5);text(g,'STRATEGY',MX,9,C.dim,8.5);text(g,'OUTCOME',RX,9,C.dim,8.5);
   const fa=[...(s.edge?.flowsAllTime||[]),...((PW&&PW.flows)||[])],ta=fa.reduce((a,x)=>a+x.trades,0),na=fa.reduce((a,x)=>a+x.pnl,0),since=s.edge?.flowsSince||(PW&&PW.startedAt);
+  if(SW){set('flowBadge',`S2: ${total} settled since ${new Date(SW.startedAt*1000).toISOString().slice(5,10)}, net ${signed(f.reduce((a,x)=>a+x.pnl,0))}`);return;}
   set('flowBadge',`${total} closed${since?' since reset '+new Date(since*1000).toISOString().slice(5,10):''}, net ${signed(won-lost)}${since&&ta>total?`, all-time ${ta}, ${signed(na)}`:''}`);
  }
 
  // ---------- footer ----------
  function footer(s){
   const p=s.portfolio||{},e=s.edge||{},r=e.readiness||{},chk=(r.checks||[]).filter(c=>c.pass).length,f=e.flows||[],n=f.reduce((a,x)=>a+x.trades,0),w=e.wallets||{},inf=s.infrastructure||{};
-  $('foot').innerHTML=[['Lifetime',`<b class="${cls(p.lifetimeRealizedPnl)}">${signed(p.lifetimeRealizedPnl)}</b>`],['Trades',`<b>${p.lifetimeTrades??n}</b>`],['Avg trade',`<b>${n?signed(f.reduce((a,x)=>a+x.pnl,0)/n,3):'—'}</b>`],
+  const SW=window.S2_WALLET;
+  $('foot').innerHTML=[...(SW?[['S2 wallet',`<b>${money(SW.balance)}</b>`],['S2 P&L',`<b class="${cls(SW.pnlUsd)}">${signed(SW.pnlUsd)}</b>`],['S2 trades',`<b>${SW.trades}</b>`]]:
+   [['Lifetime',`<b class="${cls(p.lifetimeRealizedPnl)}">${signed(p.lifetimeRealizedPnl)}</b>`],['Trades',`<b>${p.lifetimeTrades??n}</b>`],['Avg trade',`<b>${n?signed(f.reduce((a,x)=>a+x.pnl,0)/n,3):'—'}</b>`]]),
    ['Calibration',`<b>${e.calibration?.samples||0}</b> samples`],['Wallets',`<b>${w.skilledWallets||0}</b> skilled / ${w.walletsTracked||0} studied`],['Rounds pending',`<b>${e.pendingRounds??'—'}</b>`],
    ['Ready for real money',`<b class="${r.readyForRealMoney?'pos':'neg'}">${chk}/${(r.checks||[]).length||6}</b>`],['Storage',`<b>${inf.backend||'—'}</b>`],['Revision',`<b>${p.revision||'—'}</b>`],['Paper only','<b>no real orders</b>']]
    .map(([k,v])=>`<span>${k} ${v}</span>`).join('');

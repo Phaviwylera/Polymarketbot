@@ -97,12 +97,14 @@ class SpotLead:
             a['trades']+=1;a['pnl']+=r['pnlUsd']
             if r['pnlUsd']>0:a['wins']+=1;a['won']+=r['pnlUsd']
             else:a['losses']+=1;a['lost']+=-r['pnlUsd']
-        return {'startingBalance':WALLET_BALANCE,'stakeUsd':STAKE,'floorUsd':WALLET_FLOOR,'equity':round(WALLET_BALANCE+pnl,2),'balance':round(WALLET_BALANCE+pnl-oc,2),
+        gw=sum(r['pnlUsd'] for r in traded if r['pnlUsd']>0);gl=-sum(r['pnlUsd'] for r in traded if r['pnlUsd']<0)
+        return {'startedAt':REGISTERED_AT,'avgPnlUsd':round(pnl/len(traded),3) if traded else None,'profitFactor':round(gw/gl,2) if gl>0 else None,
+                'startingBalance':WALLET_BALANCE,'stakeUsd':STAKE,'floorUsd':WALLET_FLOOR,'equity':round(WALLET_BALANCE+pnl,2),'balance':round(WALLET_BALANCE+pnl-oc,2),
                 'pnlUsd':round(pnl,2),'trades':len(traded),'wins':wins,'winRate':round(100*wins/len(traded),1) if traded else None,'openRounds':len(self.open),
                 'openCostUsd':round(oc,2),'maxDrawdownUsd':round(dd,2),'guard':None if WALLET_BALANCE+pnl>WALLET_FLOOR+STAKE else f'hard floor ${WALLET_FLOOR:.0f}: no new stakes',
                 'flows':[{**a,'pnl':round(a['pnl'],3),'won':round(a['won'],3),'lost':round(a['lost'],3)} for a in fl.values()],
                 'open':list(self.open.values())[-8:],
-                'recent':[{k:r.get(k) for k in ('t','lane','token','ask','p','won','pnlUsd','retStressed')} for r in rows[-20:][::-1]]}
+                'recent':[{k:r.get(k) for k in ('t','lane','token','ask','p','won','pnlUsd','retStressed','shares')} for r in rows[-40:][::-1]]}
     def report(self):
         fwd=[r for r in self.done if r['t']>=REGISTERED_AT];s=self._stats([r['retStressed'] for r in fwd]);u=self._stats([r['ret'] for r in fwd])
         v='collecting' if s['n']<MIN_ROUNDS else ('CONFIRMED' if (s.get('lower95') or -1)>0 else 'not confirmed')
