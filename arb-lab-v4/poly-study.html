@@ -392,7 +392,12 @@ async function lanes(){
   const fig=(k,v)=>`<div class="fig"><span>${k}</span><b>${v}</b></div>`;
   const EA=L.eventarb||{},n1=EA.N1||{},s1=EA.S1||{},EM=L.eventmaker||{},m3=EM.M3||{},P=L.pairacc||{},r1=P.R1||{},rf=r1.forward||{},F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
   const off=o=>o.enabled===false?'<div class="dim">Off on the server.</div>':'';
+  const SL=L.spotlead||{},s2=SL.S2||{},s2s=s2.stressed||{},s2w=SL.wallet||{},s2b=s2.byLane||{};
   $('lanes').innerHTML=`
+  <div class="lane"><h4>Spot lead (S2)</h4><p class="why">The first edge found in our recorded tape: on 5-minute BTC/ETH rounds, live spot runs ahead of the token price. Buys the side the spot model rates 1¢+ above its ask after fees. Frozen forward test.</p>${off(SL)}
+   <div class="verdict ${vcls(s2.verdict)}">${vt(s2.verdict)}</div>
+   ${fig('Trades',`${n(s2s.n)} (needs 300), win ${ok(s2s.winPct)?s2s.winPct+'%':'—'}`)}${fig('Per $ with 0.5¢ delay cost',`${pc(s2s.mean)}, bad case ${pc(s2s.lower95)}`)}
+   ${fig('BTC / ETH per $',`${pc((s2b.BTC||{}).mean)} / ${pc((s2b.ETH||{}).mean)}`)}${fig('Paper wallet',ok(s2w.equity)?'$'+s2w.equity.toFixed(2)+' (from $200)':'—')}${fig('Prints checked, signals',`${n(SL.prints)}, ${n(SL.signals)}`)}</div>
   <div class="lane"><h4>Maker quotes (M1)</h4><p class="why">Resting bids at the best bid on both tokens, behind the existing queue. Earns the spread and pays no taker fee, but gets picked off.</p>${off(M)}
    <div class="verdict ${vcls(m1.verdict)}">${vt(m1.verdict)}</div>
    ${fig('Rounds with a fill',`${n(f.roundsFilled)} of ${n(f.rounds)} (needs 300)`)}${fig('Fill rate',ok(f.fillRate)?(100*f.fillRate).toFixed(0)+'%':'—')}

@@ -122,10 +122,14 @@ main{perspective:1400px}
   <article class="p" id="pGrid"><div class="ph"><span><b>Resolution grid</b> Live expiries</span><span class="badge" id="resBadge">—</span></div><div class="pb" style="padding:8px"><div class="grid" id="resgrid"></div></div></article>
  </div>
 </section>
+<article class="p" id="pSpot"><div class="ph"><span><b>Spot-lead wallet (S2)</b> Paper money. Buys when live BTC/ETH spot says the token is worth more than its ask</span><span class="badge" id="spotBadge">—</span></div>
+ <div class="pb"><div class="pairk" id="spotK"></div><div class="mut" id="spotOpen" style="margin:8px 0 4px">—</div>
+  <div style="max-height:260px;overflow:auto"><table class="ptbl" id="spotT"><tbody><tr><td class="mut">Waiting for the first trade to settle.</td></tr></tbody></table></div>
+  <div class="mut" style="margin-top:8px;font-size:12px;max-width:90ch">5-minute BTC/ETH rounds. The model reads the market mid and how far spot has moved since the round opened; the first time its chance beats the ask by 1¢ after the taker fee, it buys $5 of that side at the ask and holds to settlement. Frozen test: 300 trades with a 0.5¢ delay cost, bad case above zero. Stops new stakes at $120.</div></div></article>
 <article class="p" id="pPair"><div class="ph"><span><b>Pair accumulator wallet</b> Paper money. GoodFallen's method as seen in their public trades</span><span class="badge" id="pairBadge">—</span></div>
  <div class="pb"><div class="pairk" id="pairK"></div><div class="mut" id="pairOpen" style="margin:8px 0 4px">—</div>
   <div style="max-height:260px;overflow:auto"><table class="ptbl" id="pairT"><tbody><tr><td class="mut">Waiting for the first round to settle.</td></tr></tbody></table></div>
-  <div class="mut" style="margin-top:8px;font-size:12px;max-width:90ch">$1 clips at the real ask of whichever side keeps UP + DOWN under 97¢, through each 5-minute BTC/ETH round, held to settlement. Pays the full taker fee (no rebate at our size). Stops after an $8 loss; pauses an hour after giving back half of a $4+ gain.</div></div></article>
+  <div class="mut" style="margin-top:8px;font-size:12px;max-width:90ch">$1 clips at the real ask of whichever side keeps UP + DOWN under 97¢, through each 5-minute BTC/ETH round, held to settlement. Pays the full taker fee (no rebate at our size). Trend gate: a shadow copy trades every round; this wallet trades only while the shadow's last 12 and last 4 rounds are both net positive. Stops at $120.</div></div></article>
 <article class="p" id="pAudit"><div class="ph"><span><b>Research audit</b> Walk-forward tests, fees, experiments and shadow lanes</span><span class="badge" id="auditBadge">—</span></div>
  <div class="pb rules audit" style="margin-top:0;border-top:0;padding-top:4px"><table id="auditTbl"><tbody><tr><td>loading…</td></tr></tbody></table></div></article>
 <article class="p" id="pShell"><div class="ph"><span><b>Pair accumulator core</b> <b id="shellLane">BTC</b>: live asks, the rule's checks, and what is held</span><span class="badge" id="shellBadge">—</span></div>
@@ -139,7 +143,7 @@ main{perspective:1400px}
 </section>
 </main>
 <footer class="foot" id="foot">Loading…</footer>
-<script src="/poly-terminal.js?v=21.0" defer></script>
+<script src="/poly-terminal.js?v=21.1" defer></script>
 <script>
 (()=>{const $=id=>document.getElementById(id),ok=v=>v!==null&&v!==undefined&&isFinite(v);
 const usd=v=>ok(v)?(v<0?'−$':'$')+Math.abs(v).toFixed(2):'—',cls=v=>ok(v)?(v>0?'pos':v<0?'neg':''):'';
@@ -151,6 +155,15 @@ async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'n
  const R=w.recent||[];if(!R.length)return;
  $('pairT').innerHTML='<thead><tr><th>Round</th><th>Won</th><th>UP</th><th>DOWN</th><th>Pair cost</th><th>Buys</th><th>Cost</th><th>Fees</th><th>P&amp;L</th></tr></thead><tbody>'+R.map(r=>`<tr><td>${r.lane} ${new Date((r.end-300)*1000).toISOString().slice(11,16)}</td><td>${r.winner||'—'}</td><td>${r.up}</td><td>${r.down}</td><td>${ok(r.pairCost)?r.pairCost.toFixed(3):'—'}</td><td>${r.fills}</td><td>${usd(r.costUsd)}</td><td>${usd(r.feesUsd)}</td><td class="${cls(r.pnlUsd)}">${usd(r.pnlUsd)}</td></tr>`).join('')+'</tbody>';
 }catch(e){}}
-pair();setInterval(pair,5000);})();
+async function spot(){try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();const S=L.spotlead||{},w=S.wallet,t=(S.S2||{}).stressed||{};if(!w)return;window.S2_WALLET=w;
+ const b=$('spotBadge');b.textContent=w.guard?w.guard:`Trading on paper · test ${(S.S2||{}).verdict||'—'} ${t.n||0}/300`;b.className='badge '+(w.guard?'warn':'live');
+ const pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(1)+'¢':'—';
+ $('spotK').innerHTML=[['Balance',usd(w.balance),''],['Equity',usd(w.equity),''],['P&L since start',usd(w.pnlUsd),cls(w.pnlUsd)],['Trades',w.trades,''],['Win rate',ok(w.winRate)?w.winRate+'%':'—',''],['Per $ (bad case)',`${pc(t.mean)} (${pc(t.lower95)})`,cls(t.mean)]]
+  .map(([k,v,c])=>`<div><span>${k}</span><b class="${c}">${v}</b></div>`).join('');
+ $('spotOpen').textContent=(w.open||[]).length?'Open now: '+w.open.map(o=>`${o.lane} ${o.token} at ${Math.round(o.ask*100)}¢ (model ${Math.round(o.p*100)}%) for ${usd(o.costUsd)}`).join(', '):`No open trades. Started with ${usd(w.startingBalance)}, $${w.stakeUsd} a trade.`;
+ const R=w.recent||[];if(!R.length)return;
+ $('spotT').innerHTML='<thead><tr><th>Time (UTC)</th><th>Lane</th><th>Bought</th><th>Ask</th><th>Model</th><th>Result</th><th>P&amp;L</th></tr></thead><tbody>'+R.map(r=>`<tr><td>${new Date(r.t*1000).toISOString().slice(11,16)}</td><td>${r.lane}</td><td>${r.token}</td><td>${Math.round(r.ask*100)}¢</td><td>${ok(r.p)?Math.round(r.p*100)+'%':'—'}</td><td>${r.won?'won':'lost'}</td><td class="${cls(r.pnlUsd)}">${usd(r.pnlUsd)}</td></tr>`).join('')+'</tbody>';
+}catch(e){}}
+pair();setInterval(pair,5000);spot();setInterval(spot,5000);})();
 </script>
 </body></html>

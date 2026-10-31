@@ -303,9 +303,9 @@
  // ---------- money flow sankey ----------
  function sankey(s){
   const PW=window.PAIR_WALLET;   // the pair-accumulator wallet trades now: its settled rounds join the flow
-  const f=[...(s.edge?.flows||[]),...((PW&&PW.flows)||[])].filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
+  const SW=window.S2_WALLET;const f=[...(s.edge?.flows||[]),...((PW&&PW.flows)||[]),...((SW&&SW.flows)||[])].filter(x=>x.trades>0),[g,w,h]=ctx2d($('sankey'));
   if(!f.length){text(g,PW?'no settled rounds since the fresh start yet':'no closed trades in the record yet',w/2,h/2,C.dim,10,'center');set('flowBadge','—');return;}
-  const SN={PAIR_ACC:'PAIR ACCUMULATOR',MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING (old)',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
+  const SN={SPOT_LEAD:'SPOT LEAD (S2)',PAIR_ACC:'PAIR ACCUMULATOR',MOMENTUM_SCALP:'MOMENTUM',EDGE_HOLD:'MISPRICING (old)',MODEL_SCALP:'MODEL',LAG_SCALP:'LAG',PAIR:'PAIR'},lanes=[...new Set(f.map(x=>x.lane))],strats=[...new Set(f.map(x=>x.strategy))];
   const total=f.reduce((a,x)=>a+x.trades,0),wins=f.reduce((a,x)=>a+x.wins,0),losses=total-wins,pad=6,top=14,usable=h-top-8-22*4;
   const col=(items,weights,X)=>{const gap=pad*(items.length-1),sc=(usable-gap)/total;let y=top;return Object.fromEntries(items.map((k,i)=>{const hh=weights[i]*sc,r={x:X,y,h:hh,used:0,usedR:0};y+=Math.max(hh,22)+pad;return [k,r];}));};
   const LX=86,MX=w*.48,RX=w-92,NW=10;
