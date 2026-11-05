@@ -1,17 +1,17 @@
 {
- "at": 1793840992.2746766,
- "atUtc": "2026-11-05 01:09:52",
- "uptimeSec": 351514,
+ "at": 1793841897.3223743,
+ "atUtc": "2026-11-05 01:24:57",
+ "uptimeSec": 352419,
  "host": "aws-ec2-t4g.small",
  "revision": "2690a98",
  "hostStats": {
   "loadAvg": [
-   0.05,
-   0.03,
-   0.02
+   0.12,
+   0.07,
+   0.01
   ],
   "memTotalMb": 1835,
-  "memAvailableMb": 398,
+  "memAvailableMb": 392,
   "processRssMb": 1109,
   "cpuCount": 2
  },
@@ -64,7 +64,7 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse does not confirm direction",
+   "decision": "momentum entries paused by owner \u00b7 signal: waiting for trusted market opening and model",
    "position": null
   },
   "ETH15": {
@@ -74,23 +74,23 @@
     "rtds": "live"
    },
    "paused": false,
-   "decision": "momentum entries paused by owner \u00b7 signal: oracle impulse below 1.0 bps",
+   "decision": "momentum entries paused by owner \u00b7 signal: waiting for trusted market opening and model",
    "position": null
   }
  },
  "storage": {
   "configured": true,
   "backend": "postgresql",
-  "state": "standby",
-  "writer": false,
-  "active": false,
-  "checkpointAt": 1793838657.1479278,
-  "checkpointAgeSec": 2335.2206678390503,
-  "queuedEvents": 66,
-  "lastFlushSec": 0.1,
-  "eventsSavedThisBoot": 159884,
+  "state": "recovering",
+  "writer": true,
+  "active": true,
+  "checkpointAt": 1793841874.0126975,
+  "checkpointAgeSec": 23.32738733291626,
+  "queuedEvents": 4,
+  "lastFlushSec": 0.054,
+  "eventsSavedThisBoot": 160005,
   "errors": 1218,
-  "lastError": "ConnectionFailureError",
+  "lastError": null,
   "droppedEvents": 0,
   "databaseExpiresAt": null,
   "coverage": "Paper checkpoints, research labels, model artifact, attribution, sampled decisions and EdgeLab learning (calibration, strategy record, wallet study); raw feed spool stays local.",
@@ -143,13 +143,13 @@
    -0.1113
   ],
   "skip": 2053471,
-  "pending": 0,
+  "pending": 321,
   "error": null,
   "learner": {
-   "rounds": 6695,
-   "brierPrice": 0.13156,
-   "brierLearned": 0.13057,
-   "brierModel": 0.15439,
+   "rounds": 6685,
+   "brierPrice": 0.13159,
+   "brierLearned": 0.13061,
+   "brierModel": 0.1543,
    "learnedBeatsPrice": true
   },
   "learnedBuy": [
@@ -164,9 +164,9 @@
  "jev": {
   "enabled": true,
   "model": "typesafe/jev-1.14",
-  "calls": 17461,
-  "callsToday": 16,
-  "errors": 8783,
+  "calls": 17465,
+  "callsToday": 20,
+  "errors": 8787,
   "lastError": "HTTPStatusError: Client error '402 Payment Required' for url 'https://openrouter.ai/api/alpha/decisions'\nFor more information check: http",
   "costUsd": 0.19892573399999686,
   "servedBy": null,
@@ -211,7 +211,7 @@
  "newLanes": {
   "spotlead": {
    "enabled": true,
-   "prints": 2065644,
+   "prints": 2065965,
    "signals": 1153,
    "errors": 0,
    "lastError": null,
@@ -278,12 +278,12 @@
   },
   "maker": {
    "enabled": true,
-   "prints": 1576755,
+   "prints": 1577076,
    "rounds": 5522,
-   "quotes": 35709,
+   "quotes": 35733,
    "errors": 0,
    "lastError": null,
-   "openRounds": 252,
+   "openRounds": 256,
    "feeRate": 0.0,
    "M1": {
     "rule": "resting bids at the best bid on both tokens, back of the queue, fills only on trade-through or after the queue ahead is eaten; hold to resolution",
@@ -428,8 +428,8 @@
   },
   "xmarket": {
    "enabled": true,
-   "scans": 1144,
-   "markets": 44,
+   "scans": 1147,
+   "markets": 60,
    "chains": {
     "BTC": 12,
     "ETH": 12
@@ -437,9 +437,9 @@
    "gapsSeen": 0,
    "errors": 0,
    "lastError": null,
-   "lastScanAt": 1793840803.7138577,
+   "lastScanAt": 1793841726.7128413,
    "openSnapshots": 22,
-   "openTrades": 4,
+   "openTrades": 5,
    "openLadderPairs": 0,
    "calibration": {
     "24h": {
@@ -462,11 +462,11 @@
     "rule": "buy the side priced >= 5 points below the Deribit-implied chance (ask + fee + 1c); hold to resolution",
     "pass": ">= 30 events with trades and per-event mean return - 1.645 SE > 0",
     "registeredAt": 1793071725,
-    "trades": 577,
-    "events": 349,
-    "avgReturn": -0.245,
-    "lower95": -0.3909,
-    "pnlUsd": -489.315,
+    "trades": 579,
+    "events": 351,
+    "avgReturn": -0.2453,
+    "lower95": -0.3905,
+    "pnlUsd": -492.371,
     "verdict": "not confirmed"
    },
    "ladder": {
@@ -483,7 +483,7 @@
    "skipped": 0,
    "errors": 0,
    "lastError": null,
-   "scans": 195,
+   "scans": 196,
    "dayCursor": 1793404800,
    "historyMarkets": 1658,
    "forwardOpen": 21,
@@ -834,16 +834,16 @@
   },
   "fastmaker": {
    "enabled": true,
-   "bookEvents": 492429630,
-   "prints": 1433098,
-   "requotes": 128062358,
-   "fills": 8104,
-   "flattens": 3551,
+   "bookEvents": 492572476,
+   "prints": 1433418,
+   "requotes": 128108995,
+   "fills": 8107,
+   "flattens": 3553,
    "rounds": 5407,
    "errors": 0,
    "lastError": null,
    "openRounds": 2,
-   "awaitingResult": 9,
+   "awaitingResult": 13,
    "M2": {
     "rule": "quote both tokens for equal shares at the best bid (pair <= 99c), complete the pair after a fill, stop-loss 10c, flatten at 15% left; 250 ms latency, back of the queue",
     "pass": ">= 300 rounds with a fill and mean P&L per $ - 1.645 SE > 0",
@@ -864,13 +864,13 @@
   "kalshi": {
    "enabled": true,
    "base": "https://external-api.kalshi.com/trade-api/v2",
-   "scans": 62682,
-   "matched": 85021,
+   "scans": 62859,
+   "matched": 85056,
    "gapsSeen": 8440,
    "errors": 0,
    "lastError": null,
-   "books": 85021,
-   "liveRounds": 118,
+   "books": 85055,
+   "liveRounds": 120,
    "awaitingResult": 0,
    "roundsSettled": 1336,
    "venuesDisagreePct": 1.95,
@@ -947,13 +947,13 @@
   },
   "pairacc": {
    "enabled": true,
-   "bookEvents": 327325956,
-   "fills": 69453,
+   "bookEvents": 327379460,
+   "fills": 69489,
    "rounds": 4076,
    "errors": 0,
    "lastError": null,
    "openRounds": 2,
-   "awaitingResult": 4,
+   "awaitingResult": 6,
    "R1": {
     "rule": "replica of the observed rival pattern: take 5-share clips at the ask of whichever side keeps the pair cost <= 0.97; first leg <= 50c; through 2-95% of each 5m window; hold to settlement",
     "pass": ">= 300 rounds with fills and mean P&L per $ (no taker rebate) - 1.645 SE > 0",
@@ -1117,18 +1117,18 @@
   },
   "eventarb": {
    "enabled": true,
-   "scans": 569,
+   "scans": 570,
    "events": 100,
    "eventsEligible": 4,
-   "skippedAugmented": 17477,
-   "skippedInactive": 609,
+   "skippedAugmented": 17506,
+   "skippedInactive": 611,
    "basketGaps": 0,
    "conversionGaps": 0,
-   "s1Candidates": 201,
+   "s1Candidates": 190,
    "fieldSeen": {
-    "negRisk": 48928,
-    "negRiskAugmented": 56900,
-    "umaResolutionStatus": 456769
+    "negRisk": 49014,
+    "negRiskAugmented": 57000,
+    "umaResolutionStatus": 457650
    },
    "errors": 0,
    "lastError": null,
@@ -1160,15 +1160,15 @@
   },
   "eventmaker": {
    "enabled": true,
-   "polls": 7470,
+   "polls": 7490,
    "markets": [
     {
      "slug": "us-announces-end-of-iranian-blockade-by-december-31-2026-20260727171803489-375-949-645-919-269-157-255-857",
      "cat": "politics",
      "fills": 37,
      "net": -10.4,
-     "mid": 0.433,
-     "pnlUsd": 3.042
+     "mid": 0.4325,
+     "pnlUsd": 3.048
     },
     {
      "slug": "will-nicols-maduro-be-the-leader-of-venezuela-end-of-2026",
@@ -1204,7 +1204,7 @@
     }
    ],
    "fills": 114,
-   "errors": 76649,
+   "errors": 77049,
    "lastError": "poll: HTTPStatusError: Client error '410 Gone' for url 'https://data-api.polymarket.com/trades?market=0xbfc776a7f419fdc9bec",
    "booksGone": 71,
    "M3": {
@@ -1216,7 +1216,7 @@
     "lower95": -0.0131,
     "verdict": "collecting"
    },
-   "pnlMtmUsd": 21.043,
+   "pnlMtmUsd": 21.049,
    "rebateUsd": 1.1704,
    "volumeUsd": 297.25
   }
@@ -1927,11 +1927,11 @@
   "backfill": {
    "roundsDone": 1422,
    "tradesSeen": 1048612,
-   "errors": 29599,
-   "lastError": "BTC 1793699100: HTTPStatusError",
+   "errors": 29820,
+   "lastError": "ETH 1793723700: HTTPStatusError",
    "oldestRound": 1793486700,
    "newestRound": 1793654100,
-   "queue": 1228,
+   "queue": 1007,
    "phase": "backfilling",
    "mode": "record-only: past rounds from Polymarket public data",
    "days": 21.0,
@@ -2040,26 +2040,17 @@
    "experimentsHash": "0a52d65a7a7e"
   },
   "alerts": [
-   "BTC: order book 1601s old",
-   "ETH: order book 1599s old",
-   "BTC15: order book 1597s old",
-   "ETH15: order book 1595s old",
-   "database: last write error ConnectionFailureError",
-   "database: last checkpoint 2335s ago"
+   "1 scalp(s) held to settlement"
   ],
   "model": [
-   1230,
-   0.2376,
-   0.2268,
+   1228,
+   0.2378,
+   0.227,
    -0.0476
   ]
  },
- "cpuProfile": "{\"seconds\":300,\"samples\":5970,\"busyPct\":4.2,\"self\":[[\"gzip.py:_write_raw\",79.4],[\"<frozen importlib._bootstrap_external>:_path_stat\",6.0],[\"selector_events.py:_read_ready__get_buffer\",2.4],[\"ssl.py:read\",2.0],[\"gzip.py:closed\",2.0],[\"ssl.py:write\",1.2],[\"__init__.py:dump\",0.8],[\"encoder.py:floatstr\",0.8],[\"_utils.py:is_socket_readable\",0.8],[\"selector_events.py:_read_ready__data_received\",0.8],[\"copy.py:_deepcopy_dict\",0.4],[\"poly_scout.py:metrics\",0.4],[\"ssl.py:do_handshake\",0.4],[\"ssl.py:__new__\",0.4]],\"inclusive\":[[\"server.py:run\",100.0],[\"main.py:run\",100.0],[\"main.py:main\",100.0],[\"core.py:invoke\",100.0],[\"core.py:main\",100.0],[\"core.py:__call__\",100.0],[\"uvicorn:<module>\",100.0],[\"__init__.py:dump\",80.6],[\"gzip.py:_write_raw\",79.4],[\"gzip.py:write\",79.4],[\"poly_study.py:save\",30.6],[\"poly_tape.py:loop\",21.0],[\"poly_maker.py:save\",20.2],[\"poly_maker.py:loop\",20.2]]}",
+ "cpuProfile": "{\"seconds\":300,\"samples\":5972,\"busyPct\":3.1,\"self\":[[\"gzip.py:_write_raw\",76.5],[\"<frozen importlib._bootstrap_external>:_path_stat\",4.8],[\"ssl.py:write\",3.7],[\"encoder.py:floatstr\",2.1],[\"ssl.py:read\",1.6],[\"_utils.py:is_socket_readable\",1.6],[\"selector_events.py:write\",1.1],[\"ssl.py:do_handshake\",1.1],[\"_decoders.py:decode\",1.1],[\"gzip.py:closed\",1.1],[\"poly_xmarket.py:smile_iv\",0.5],[\"gzip.py:write\",0.5],[\"poly_devlog.py:_r\",0.5],[\"statistics.py:median\",0.5]],\"inclusive\":[[\"server.py:run\",100.0],[\"main.py:run\",100.0],[\"main.py:main\",100.0],[\"core.py:invoke\",100.0],[\"core.py:main\",100.0],[\"core.py:__call__\",100.0],[\"uvicorn:<module>\",100.0],[\"__init__.py:dump\",81.3],[\"gzip.py:write\",77.0],[\"gzip.py:_write_raw\",76.5],[\"poly_study.py:save\",35.3],[\"poly_tape.py:loop\",26.2],[\"poly_maker.py:save\",18.2],[\"poly_maker.py:loop\",18.2]]}",
  "recentLog": [
-  "00:04:54 POLY_STORAGE_ERROR TimeoutError step=promote",
-  "00:06:31 POLY_STORAGE_ERROR TimeoutError step=promote",
-  "00:07:39 POLY_STORAGE_ERROR TimeoutError step=promote",
-  "00:07:49 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 00:07:49\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"recovering\",\"checkpointAgeSec\":3709.3487527370453,\"errors\":1180,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedP",
   "00:12:49 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 00:12:49\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":4009.4441480636597,\"errors\":1180,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\"",
   "00:17:49 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 00:17:49\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":4309.5392117500305,\"errors\":1180,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\"",
   "00:22:49 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 00:22:49\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":4609.636426925659,\"errors\":1180,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":",
@@ -2115,6 +2106,10 @@
   "01:05:38 POLY_STORAGE_ERROR TimeoutError step=promote",
   "01:05:55 POLY_STORAGE_ERROR ConnectionFailureError step=connect",
   "01:06:12 POLY_STORAGE_ERROR ConnectionFailureError step=connect",
-  "01:07:50 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 01:07:50\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2213.1815750598907,\"errors\":1218,\"lastError\":\"ConnectionFailureError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRe"
+  "01:07:50 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 01:07:50\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2213.1815750598907,\"errors\":1218,\"lastError\":\"ConnectionFailureError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRe",
+  "01:12:50 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 01:12:50\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2513.2771632671356,\"errors\":1218,\"lastError\":\"ConnectionFailureError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRe",
+  "01:17:50 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 01:17:50\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2813.3767535686493,\"errors\":1218,\"lastError\":\"ConnectionFailureError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRe",
+  "01:22:50 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-05 01:22:50\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":3113.471038579941,\"errors\":1218,\"lastError\":\"ConnectionFailureError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRea",
+  "01:23:11 POLY_LOOP_STALL 2.78s lastGen2Gc=0.22s gen2Age=2s"
  ]
 }
