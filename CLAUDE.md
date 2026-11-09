@@ -12,3 +12,10 @@ Project skills live in `.claude/skills/`, copied from [affaan-m/ECC](https://git
 - **postgres-patterns**: for the Supabase/PostgreSQL storage.
 - **deployment-patterns** and **canary-watch**: for the EC2 server and its deploys.
 - **python-testing**: for tests on new logic.
+
+## Daily evolution agent
+
+A scheduled agent reviews the bot every day and follows `ops/EVOLUTION.md`: it fixes faults (outages, wrong numbers,
+failing deploys) with a test and pushes them, but never edits a running strategy's rule. New strategy ideas enter only
+as new frozen paper lanes through the experiment gate. Its memory is `ops/evolution-log.md` and `ops/experiments.md`;
+`arb-lab-v4/tools/daily_review.py` produces the daily health report.
