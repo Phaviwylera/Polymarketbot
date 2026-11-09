@@ -64,11 +64,16 @@ def load(path):
     print(f'loaded {len(df):,} prints, {df.slug.nunique():,} rounds, days {sorted(df.day.unique())} in {time.time()-t0:.0f}s',flush=True)
     return df
 
-def fit(tr,max_per_round=60,seed=0):
+def fit(tr,max_per_round=60,seed=0,feats=None):
+    feats=feats or FEATS
     # cap prints per round so busy rounds don't dominate
-    g=tr.groupby(['slug','tok'],sort=False).cumcount();tr=tr[g<max_per_round] if max_per_round else tr
+    # random sample across the whole round (taking the FIRST n prints left late-round prices out of training:
+    # a train/test shift that made the model worse than the mid on every day)
+    if max_per_round:
+        r=np.random.default_rng(seed).random(len(tr));rank=pd.Series(r,index=tr.index).groupby([tr.slug,tr.tok]).rank(method='first')
+        tr=tr[rank<=max_per_round]
     m=HistGradientBoostingClassifier(max_iter=300,learning_rate=0.05,max_leaf_nodes=31,min_samples_leaf=400,l2_regularization=1.0,random_state=seed)
-    m.fit(tr[FEATS].values,tr.won.values);return m
+    m.fit(tr[feats].values,tr.won.values);return m
 
 def logloss(p,y):p=np.clip(p,1e-4,1-1e-4);return float(-np.mean(y*np.log(p)+(1-y)*np.log(1-p)))
 
@@ -96,9 +101,10 @@ def main(path):
     THRS=(0.0,0.01,0.02,0.03,0.05);res={(m,t):[] for m in ('taker','maker') for t in THRS};ll=[]
     for d in wf_days:
         tr=df[df.day<d];te=df[df.day==d];mdl=fit(tr);p=mdl.predict_proba(te[FEATS].values)[:,1]
-        ll.append((d,len(te),logloss(p,te.won.values),logloss(te.mid.values,te.won.values)))
+        ctl=fit(tr,feats=['lm']);pc=ctl.predict_proba(te[['lm']].values)[:,1]          # control: price only
+        ll.append((d,len(te),logloss(p,te.won.values),logloss(te.mid.values,te.won.values),logloss(pc,te.won.values)))
         for k in res:res[k].append(trades(te,p,k[1],k[0]))
-        print(f'  {d}: prints {len(te):,} logloss model {ll[-1][2]:.4f} vs mid {ll[-1][3]:.4f}',flush=True)
+        print(f'  {d}: prints {len(te):,} logloss model {ll[-1][2]:.4f} vs mid {ll[-1][3]:.4f} (price-only control {ll[-1][4]:.4f})',flush=True)
     mm=np.average([x[2] for x in ll],weights=[x[1] for x in ll]);mp=np.average([x[3] for x in ll],weights=[x[1] for x in ll])
     print(f'WALK-FORWARD logloss model {mm:.5f} vs mid {mp:.5f}  ({100*(mp-mm)/mp:+.2f}%)')
     best=None
