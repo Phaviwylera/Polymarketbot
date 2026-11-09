@@ -21,5 +21,8 @@ Newest first. One entry per daily run: findings, fixes (with commits), verificat
 
 **Verified**: server on `4687017` at 11:57 UTC; M3 errors 0 after the deploy.
 
+**Research**: v3 model on the full tape found no edge on the 5m/15m crypto lanes (details in ops/experiments.md);
+not registered. The scheduled daily agent starts 2026-11-10 06:47 IST.
+
 **Open questions for the owner**
 - K1 is the one confirmed lane, but trading it needs a Kalshi account, which is not available from India.

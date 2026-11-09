@@ -64,6 +64,11 @@ def load(path):
     print(f'loaded {len(df):,} prints, {df.slug.nunique():,} rounds, days {sorted(df.day.unique())} in {time.time()-t0:.0f}s',flush=True)
     return df
 
+import os
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+MODEL=os.getenv('V3_MODEL','gbm')   # 'gbm' or 'logit' (logistic: keeps the price's logit as a smooth anchor, so no binning at 1c/99c)
 def fit(tr,max_per_round=60,seed=0,feats=None):
     feats=feats or FEATS
     # cap prints per round so busy rounds don't dominate
@@ -72,6 +77,8 @@ def fit(tr,max_per_round=60,seed=0,feats=None):
     if max_per_round:
         r=np.random.default_rng(seed).random(len(tr));rank=pd.Series(r,index=tr.index).groupby([tr.slug,tr.tok]).rank(method='first')
         tr=tr[rank<=max_per_round]
+    if MODEL=='logit':
+        m=make_pipeline(StandardScaler(),LogisticRegression(C=1.0,max_iter=500));m.fit(tr[feats].values,tr.won.values);return m
     m=HistGradientBoostingClassifier(max_iter=300,learning_rate=0.05,max_leaf_nodes=31,min_samples_leaf=400,l2_regularization=1.0,random_state=seed)
     m.fit(tr[feats].values,tr.won.values);return m
 

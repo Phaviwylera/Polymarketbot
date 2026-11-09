@@ -20,8 +20,12 @@ One row per pre-registered test. The verdict is filled in only when the test rea
 ## Research results not yet registered
 
 - 2026-11-01 S2 improvement search: 960 variants, none survived the untouched test (`research/s2_search.py`).
-- 2026-11-09 v3 model (gradient boosting with spot momentum, book imbalance, flow): first run was invalid (training
-  kept only early-round prints); rerun in progress (`research/v3_model.py`).
+- 2026-11-09 v3 model on the full tape (5.56 M prints, 9,207 rounds, 26 Oct - 9 Nov; walk-forward 10 days, last 3
+  days untouched): features spot move and momentum, side price momentum, book imbalance, 30 s taker flow, spread,
+  time left, lane. **No edge.** Gradient boosting: walk-forward best -1.08c per $, holdout -2.87c. Price-anchored
+  logistic: walk-forward -0.68c, holdout -0.18c (bad case -1.97c, 1,648 trades). Even a price-only recalibration
+  learned from past days scores worse than the raw mid every day, and larger disagreements with the market lose more:
+  the 5m/15m crypto price already contains these signals. Not registered as a lane (failed the gate).
 
 ## Standing risk review (2026-11-01)
 
