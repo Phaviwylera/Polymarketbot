@@ -127,6 +127,14 @@ async def load_poly_demo_state():
     _load_demo_sessions()
 
 @app.on_event('startup')
+async def start_tape_export():
+    # One-time research export (tape_export.py): runs only for a new id in export_request.txt; niced child process.
+    try:
+        import tape_export;pr=tape_export.maybe_start()
+        if pr:print(f'TAPE_EXPORT_STARTED pid={pr.pid}',flush=True)
+    except Exception as exc:print(f'TAPE_EXPORT_SKIPPED {type(exc).__name__}',flush=True)
+
+@app.on_event('startup')
 async def start_poly_server_demo():
     if POLY_ENGINE_ROLE=='frontend':
         print('POLY_SERVER_DEMO_DISABLED role=frontend',flush=True)
