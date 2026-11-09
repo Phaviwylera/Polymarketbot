@@ -11,6 +11,7 @@ import asyncio,math,os,statistics,time
 from collections import deque,defaultdict
 
 DATA_API='https://data-api.polymarket.com'
+import poly_dataapi   # Data API v2 (v1 retired 2026-10-24)
 VERSION='edge-1.0'
 
 # Remaining-seconds buckets (one calibration sample per bucket per round keeps
@@ -436,7 +437,7 @@ class EdgeLab:
                     item=self._pending_study.popleft()
                     if item[0] not in self.intel.studied_set:batch.append(item)
                 for cid,winner,start,asset in batch:
-                    rows=await self._get(DATA_API+'/trades',{'market':cid,'limit':1000,'takerOnly':'false'})
+                    rows=await poly_dataapi.trades(self._get,market=cid,limit=1000,taker_only=False)
                     study=getattr(self,'study',None)
                     self.intel.on_round=(lambda per,w,st,_a=asset:study.on_wallet_round(_a,st,w,per)) if study is not None else None
                     self.intel.learn_round(self.intel.parse(rows),winner,start)
@@ -455,7 +456,7 @@ class EdgeLab:
                     for asset,e in self.engines.items():
                         cid=(e.market or {}).get('conditionId')
                         if not cid:continue
-                        rows=await self._get(DATA_API+'/trades',{'market':cid,'limit':300,'takerOnly':'false'})
+                        rows=await poly_dataapi.trades(self._get,market=cid,limit=300,taker_only=False)
                         self.intel.live_flow(asset,self.intel.parse(rows),now,skilled)
             except asyncio.CancelledError:raise
             except Exception as exc:self.intel.errors+=1;self.intel.last_error=type(exc).__name__

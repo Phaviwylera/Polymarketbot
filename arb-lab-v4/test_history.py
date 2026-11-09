@@ -13,11 +13,12 @@ class Http:
         if url.endswith('/markets'):
             if params.get('closed')!='true':return Resp([])
             return Resp([{'conditionId':'0xc','outcomes':'["Up","Down"]','outcomePrices':'["1","0"]','closed':True}])
-        if url.endswith('/trades'):
-            if params['offset']>0:return Resp([])
-            return Resp([{'proxyWallet':'0x'+'a'*40,'side':'BUY','outcome':'Up','price':0.6,'size':10,'timestamp':START+200},
-                         {'proxyWallet':'0x'+'b'*40,'side':'BUY','outcome':'Down','price':0.4,'size':5,'timestamp':START+250},
-                         {'proxyWallet':'0x'+'b'*40,'side':'SELL','outcome':'Up','price':0.7,'size':3,'timestamp':START+260}])
+        if url.endswith('/v2/trades'):        # Data API v2: snake_case rows in 'data', cursor pages, no offset
+            assert 'offset' not in params and params.get('condition')=='0xc'
+            return Resp({'data':[{'proxy_wallet':'0x'+'a'*40,'side':'BUY','outcome':'Up','price':0.6,'size':10,'timestamp':START+200},
+                         {'proxy_wallet':'0x'+'b'*40,'side':'BUY','outcome':'Down','price':0.4,'size':5,'timestamp':START+250},
+                         {'proxy_wallet':'0x'+'b'*40,'side':'SELL','outcome':'Up','price':0.7,'size':3,'timestamp':START+260}],
+                         'pagination':{'next_cursor':None}})
         if 'candles' in url:
             return Resp([[START+60*i,0,0,80000+i,80000+i*2,0] for i in range(300)])
         raise AssertionError(url)

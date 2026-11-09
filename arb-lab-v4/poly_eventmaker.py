@@ -17,13 +17,17 @@ Pre-registered M3 (REGISTERED_AT): pass = >= 50 market-days with fills and mean 
 Off with POLY_EVENTMAKER=0.
 """
 from __future__ import annotations
-import asyncio,datetime as dt,gzip,json,math,os,time
+import asyncio,calendar,datetime as dt,gzip,json,math,os,time
 from collections import defaultdict,deque
 
 GAMMA='https://gamma-api.polymarket.com';CLOB='https://clob.polymarket.com';DATA='https://data-api.polymarket.com'
+import poly_dataapi
 POLL_SEC=30;PICK_SEC=7200;N_MARKETS=20;MIN_VOL24=20000.;QUOTE=10.;SKEW=20.;QMAX=40.;MIN_DAYS=2.;MIN_DAYS_PASS=50
 RATE={'sports':0.05,'politics':0.04};REBATE_SHARE={'sports':0.15,'politics':0.25}
-REGISTERED_AT=1793092815   # 2026-10-27 09:20 UTC: forward results count only after this
+# Re-registered 2026-11-10 00:00 UTC after two fixes: (1) the Data API v1 trades endpoint returned 410 from ~4 Nov, so
+# no fills were seen; (2) the test counted only markets still held, dropping closed markets and their settlement jumps.
+# Rule and pass mark unchanged. The first registration (2026-10-27 09:20 UTC) read CONFIRMED on that biased count.
+REGISTERED_AT=1794268800   # 2026-11-10 00:00 UTC
 CURRENT=None
 def pick_slug(d,slug):
     """Gamma can answer a slug query with other markets; accept only the market whose slug matches exactly."""
@@ -105,7 +109,8 @@ class EventMaker:
         for s,m in self.mk.items():
             if s not in keep and m.fills:self.closed.append(self._final(m,'rotated out (flat)'))
         self.mk=keep;self.state['markets']=len(keep);self.picked_at=now
-    def _final(self,m,why):return {'slug':m.slug,'cat':m.cat,'fills':m.fills,'volumeUsd':round(m.vol,2),'pnlUsd':round(m.mtm(),4),'rebateUsd':round(m.rebate,4),'why':why,'t':self.now()}
+    def _final(self,m,why):return {'slug':m.slug,'cat':m.cat,'fills':m.fills,'volumeUsd':round(m.vol,2),'pnlUsd':round(m.mtm(),4),'rebateUsd':round(m.rebate,4),'why':why,'t':self.now(),
+                                   'days':{d:dict(x) for d,x in m.days.items()}}   # kept so closed markets stay in the M3 test (no survivorship)
     async def poll(self,m):
         now=self.now()
         try:book=await self.get(CLOB+'/book',{'token_id':m.yes})
@@ -115,8 +120,7 @@ class EventMaker:
             raise
         b,a=best(book,'bids'),best(book,'asks')
         if b and a:m.mid=(b[0]+a[0])/2
-        trs=await self.get(DATA+'/trades',{'market':m.cid,'limit':100,'takerOnly':'true'})
-        rows=trs if isinstance(trs,list) else (trs or {}).get('data') or []
+        rows=await poly_dataapi.trades(self.get,market=m.cid,limit=100,taker_only=True)   # Data API v2 (v1 retired 2026-10-24)
         rate=RATE.get(m.cat,0.05);share=REBATE_SHARE.get(m.cat,0.2)
         for tr in sorted(rows,key=lambda x:float(x.get('timestamp') or 0)):
             key=(tr.get('transactionHash'),tr.get('asset'),tr.get('price'),tr.get('size'),tr.get('timestamp'))
@@ -155,13 +159,18 @@ class EventMaker:
                 pr=[float(x) for x in (_jl((mm or {}).get('outcomePrices')) or [])]
             except Exception as exc:self._err('settle',exc);continue
             if not mm or not mm.get('closed') or len(pr)!=2:continue
-            m.cash+=m.yes_sh*pr[0]+m.no_sh*pr[1];m.yes_sh=0.;m.no_sh=0.;m.mid=None
+            before=m.mtm();m.cash+=m.yes_sh*pr[0]+m.no_sh*pr[1];m.yes_sh=0.;m.no_sh=0.;m.mid=None
+            day=m.days[time.strftime('%Y-%m-%d',time.gmtime(now))]               # the payout jump counts on the settlement day
+            if day['pnlStart'] is None:day['pnlStart']=before
+            day['pnlEnd']=m.mtm();day['settled']=True
             self.closed.append(self._final(m,'resolved'));self.mk.pop(s,None)
     def report(self):
         md=[]
-        for m in self.mk.values():
-            for d,x in m.days.items():
-                if x['fills'] and x['pnlStart'] is not None and time.mktime(time.strptime(d,'%Y-%m-%d'))>=REGISTERED_AT-86400:md.append(x['pnlEnd']-x['pnlStart'])
+        books=[m.days for m in self.mk.values()]+[c.get('days') or {} for c in self.closed]   # open AND closed markets
+        for days in books:
+            for d,x in days.items():
+                if (x.get('fills') or x.get('settled')) and x.get('pnlStart') is not None and calendar.timegm(time.strptime(d,'%Y-%m-%d'))>=REGISTERED_AT-86400:
+                    md.append(x['pnlEnd']-x['pnlStart'])
         n=len(md);mean=sum(md)/n if n else None;sd=math.sqrt(sum((x-mean)**2 for x in md)/(n-1)) if n>1 else None
         lo=round(mean-1.645*sd/math.sqrt(n),4) if sd else None
         tot=sum(m.mtm() for m in self.mk.values())+sum(c['pnlUsd'] for c in self.closed)

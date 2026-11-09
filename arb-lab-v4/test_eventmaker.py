@@ -29,3 +29,15 @@ class EventMakerTests(unittest.TestCase):
         self.x.get=get;asyncio.run(self.x.settle_closed())
         self.assertNotIn('game',self.x.mk);self.assertAlmostEqual(self.x.closed[-1]['pnlUsd'],6.,4)
         self.assertIn('M3',self.x.report())
+    def test_closed_markets_and_settlement_jump_stay_in_the_test(self):
+        # 10 YES bought at 40c, marked at 60c (+2.00 on the day), then the market resolves NO: the day must show the loss
+        self.m.yes_sh=10.;self.m.cash=-4.;self.m.mid=.6;day=self.m.days[em.time.strftime('%Y-%m-%d',em.time.gmtime(NOW))]
+        day.update(fills=1,pnlStart=0.,pnlEnd=2.);self.m.end=NOW-10
+        async def get(url,params=None):return [{'slug':(params or {}).get('slug'),'closed':True,'outcomePrices':'["0","1"]'}]
+        self.x.get=get;asyncio.run(self.x.settle_closed())
+        self.assertNotIn('game',self.x.mk);r=self.x.report()['M3']
+        self.assertEqual(r['marketDays'],1);self.assertAlmostEqual(r['avgPerMarketDay'],-4.,4)   # 0 -> -4 cash after a worthless payout
+    def test_ignores_a_reply_for_another_market(self):
+        self.m.yes_sh=10.;self.m.end=NOW-10
+        async def get(url,params=None):return [{'slug':'other','closed':True,'outcomePrices':'["1","0"]'}]
+        self.x.get=get;asyncio.run(self.x.settle_closed());self.assertIn('game',self.x.mk)

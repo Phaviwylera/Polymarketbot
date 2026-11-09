@@ -46,15 +46,8 @@ class History:
         if max(pr)<.99:return m,None
         return m,str(outs[pr.index(max(pr))]).upper()
     async def trades(self,cid):
-        out=[];off=0
-        while off<10000:
-            d=await self.get(DATA+'/trades',{'market':cid,'limit':1000,'offset':off,'takerOnly':'true'})
-            rows=d.get('data') if isinstance(d,dict) else d
-            if not rows:break
-            out+=rows;off+=len(rows)
-            if len(rows)<1000:break
-            await asyncio.sleep(.25)
-        return out
+        import poly_dataapi   # Data API v2 (v1 retired 2026-10-24): cursor pages
+        return await poly_dataapi.trades(self.get,market=cid,limit=1000,taker_only=True,max_rows=10000)
     async def spot_at(self,product,t):
         """Coinbase 1-minute close for the minute containing t (cached in 5-hour pages)."""
         page=int(t//18000)*18000;key=(product,page)

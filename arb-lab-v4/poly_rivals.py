@@ -19,6 +19,7 @@ import asyncio,json,math,os,re,time
 from collections import defaultdict
 
 GAMMA='https://gamma-api.polymarket.com';DATA='https://data-api.polymarket.com'
+import poly_dataapi
 LOOKBACK_DAYS=3;MAX_FILLS=6000;MAX_SETTLE=150;EVERY_SEC=6*3600
 TAKER_FEE=0.07;MAKER_REBATE_SHARE=0.20
 UPDOWN=re.compile(r'^(btc|eth|sol|xrp)-updown-(5m|15m)-(\d+)$')
@@ -175,7 +176,7 @@ class Rivals:
         try:
             for period in ('MONTH','ALL'):
                 for cat in ('OVERALL','CRYPTO','SPORTS','POLITICS'):
-                    d=await self.get(DATA+'/v1/leaderboard',{'category':cat,'timePeriod':period,'orderBy':'PNL','limit':200})
+                    d=await poly_dataapi.leaderboard(self.get,category=cat,timePeriod=period,orderBy='PNL',limit=200)
                     for row in d or []:
                         if str(row.get('userName') or '').lower()==name.lower() and ADDR.fullmatch(str(row.get('proxyWallet') or '')):
                             self.board[name]={'period':period,'category':cat,'rank':row.get('rank'),'pnl':row.get('pnl'),'vol':row.get('vol'),
@@ -196,20 +197,12 @@ class Rivals:
         except Exception as exc:self._err('profile',exc)
         return name,None
     async def fills(self,addr,taker_only):
-        out=[];off=0;cut=self.now()-LOOKBACK_DAYS*86400
-        while off<MAX_FILLS:
-            d=await self.get(DATA+'/trades',{'user':addr,'limit':500,'offset':off,'takerOnly':'true' if taker_only else 'false'})
-            rows=d if isinstance(d,list) else (d or {}).get('data') or []
-            if not rows:break
-            out+=rows;off+=len(rows)
-            ts=float(rows[-1].get('timestamp') or 0);ts=ts/1000 if ts>1e12 else ts
-            if len(rows)<500 or ts<cut:break
-            await asyncio.sleep(.3)
+        cut=self.now()-LOOKBACK_DAYS*86400   # Data API v2 (v1 retired 2026-10-24): cursor pages, user window
+        out=await poly_dataapi.trades(self.get,user=addr,limit=500,taker_only=taker_only,max_rows=MAX_FILLS,start=cut,pause=.3)
         return [f for f in out if (float(f.get('timestamp') or 0)/(1000 if float(f.get('timestamp') or 0)>1e12 else 1))>=cut]
     async def merges(self,addr):
         try:
-            d=await self.get(DATA+'/activity',{'user':addr,'type':'MERGE','limit':500})
-            return len(d if isinstance(d,list) else [])
+            return len(await poly_dataapi.activity(self.get,user=addr,type='MERGE',limit=500))
         except Exception as exc:self._err('activity',exc);return None
     async def winner(self,slug):
         if slug in self.winners:return self.winners[slug]
