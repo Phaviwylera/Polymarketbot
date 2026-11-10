@@ -2,6 +2,37 @@
 
 Newest first. One entry per daily run: findings, fixes (with commits), verification, open questions for the owner.
 
+## 2026-11-10 (daily agent)
+
+**Findings** (review at 01:06 UTC, revision `71753f9`, window 24 h)
+- `daily_review.py`: no findings; every lane 0 errors; storage healthy; server on main.
+- Impossible number: M3 showed 24 market-days 66 minutes after its 00:00 UTC re-registration. Cause: `report()` kept a
+  `REGISTERED_AT - 86400` slack (left from the old local-time `mktime` check), so all of 2026-11-09 counted, part of it
+  from before the survivorship / Data API v2 fix.
+- Jev (H2, already failed): 1,889 of 1,889 OpenRouter calls in 24 h answered 402 Payment Required (credits used up).
+  External billing, not a code fault; not changed.
+- Bullpen wallet study: about 40% of calls fail with `trader-profile: UNCLASSIFIED_ERROR` (same as yesterday);
+  read-only study, cause inside the external tool; not changed.
+- Event loop stalls of about 1.2 s every 2 minutes (GC-linked) and ~430 MB free RAM on the t4g.small; steady, watch.
+
+**Fixed**
+- `680798d` M3 scores only UTC days from `REGISTERED_AT` on. Rule, pass mark and sample size unchanged. New test
+  fails before, passes after; full suite 376 passed.
+
+**Verified**: server on `680798d` at 01:24 UTC; all lanes 0 errors, storage healthy; M3 now 4 market-days
+(+5.4c mean, bad case -1.0c), collecting.
+
+**Lanes** (24 h)
+- K1: 1,158 rounds (+64), bad case +0.04c, still confirmed on paper. Kalshi not usable from India.
+- S2 (failed): 2,442 trades (+415), -0.44c per $, bad case -1.6c.
+- M3: restarted cleanly today, 4 of 50 market-days.
+- X1 (failed): 884 events, bad case -35%. M1, M2, R1: failed, recording only. E1, N1: collecting, no samples yet.
+- No new experiment (gate not used).
+
+**Open questions for the owner**
+- Jev/H2 has failed its test and now only produces 402 errors. Top up OpenRouter, or switch it off?
+- K1 remains the only confirmed lane, still blocked by Kalshi access from India.
+
 ## 2026-11-09 (set-up, by hand)
 
 **Findings**
