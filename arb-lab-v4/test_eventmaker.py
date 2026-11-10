@@ -41,3 +41,11 @@ class EventMakerTests(unittest.TestCase):
         self.m.yes_sh=10.;self.m.end=NOW-10
         async def get(url,params=None):return [{'slug':'other','closed':True,'outcomePrices':'["1","0"]'}]
         self.x.get=get;asyncio.run(self.x.settle_closed());self.assertIn('game',self.x.mk)
+class RegistrationWindowTests(unittest.TestCase):
+    def test_days_before_registered_at_are_not_scored(self):
+        # M3 was re-registered from REGISTERED_AT (a UTC midnight): the day before it holds pre-registration P&L
+        x=em.EventMaker(root=tempfile.mkdtemp(),now=lambda:NOW);m=em.Mkt('g','0xc','Y','N','sports',NOW+5*86400);x.mk['g']=m
+        day=lambda t:em.time.strftime('%Y-%m-%d',em.time.gmtime(t))
+        m.days[day(em.REGISTERED_AT-3600)].update(fills=3,pnlStart=0.,pnlEnd=5.)      # 23:00 UTC the evening before
+        m.days[day(NOW)].update(fills=1,pnlStart=5.,pnlEnd=4.)
+        r=x.report()['M3'];self.assertEqual(r['marketDays'],1);self.assertAlmostEqual(r['avgPerMarketDay'],-1.,4)

@@ -169,7 +169,7 @@ class EventMaker:
         books=[m.days for m in self.mk.values()]+[c.get('days') or {} for c in self.closed]   # open AND closed markets
         for days in books:
             for d,x in days.items():
-                if (x.get('fills') or x.get('settled')) and x.get('pnlStart') is not None and calendar.timegm(time.strptime(d,'%Y-%m-%d'))>=REGISTERED_AT-86400:
+                if (x.get('fills') or x.get('settled')) and x.get('pnlStart') is not None and calendar.timegm(time.strptime(d,'%Y-%m-%d'))>=REGISTERED_AT:   # UTC days from registration on
                     md.append(x['pnlEnd']-x['pnlStart'])
         n=len(md);mean=sum(md)/n if n else None;sd=math.sqrt(sum((x-mean)**2 for x in md)/(n-1)) if n>1 else None
         lo=round(mean-1.645*sd/math.sqrt(n),4) if sd else None
