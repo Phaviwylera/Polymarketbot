@@ -2,6 +2,33 @@
 
 Newest first. One entry per daily run: findings, fixes (with commits), verification, open questions for the owner.
 
+## 2026-11-11 (daily agent)
+
+**Findings** (review at 01:11 UTC, revision `c1a6d91`, window 24 h, uptime 23.6 h)
+- `daily_review.py`: no findings. Server on main, status fresh, every lane's activity counter moving.
+- X1 (failed lane): 18 errors, all Deribit `503 Service Unavailable` on `get_book`; external and transient, not changed.
+- Storage: 51 transient write errors in 24 h (156 -> 207 this boot), 0 dropped events, last error none, backup OK;
+  same rate as before, not a fault.
+- Memory: process RSS 1,184 MB, flat since 2026-11-10 16:00 UTC; 317 MB free on the t4g.small (was ~430 MB). Loop
+  stalls of about 1.2 s every 2 min (GC-linked) unchanged. Watch, not a fault yet.
+- Jev/H2 (failed): still OpenRouter 402 Payment Required. Bullpen study: 332 of 660 calls `UNCLASSIFIED_ERROR`
+  (unchanged, external).
+- M3 count checked: 21 market-days ~25 h after `REGISTERED_AT` on ~20 quoted markets is consistent with the fixed
+  scoring window.
+
+**Fixed**: nothing (no faults).
+
+**Lanes** (24 h)
+- K1: 1,235 rounds (+77), +1.14c per pair, bad case +0.28c, still confirmed on paper. Kalshi not usable from India.
+- M3: 21 of 50 market-days, -0.29c per market-day, bad case -0.99c; collecting.
+- S2 (failed): 2,850 trades (+408), -0.10c per $, bad case -1.17c.
+- X1 (failed): 951 events, bad case -36%. M1, M2, R1, H2: failed, recording only. E1, N1: collecting, no samples yet.
+- No verdict reached a sample size today. No new experiment (gate not used).
+
+**Open questions for the owner** (unchanged)
+- Jev/H2 has failed its test and only produces 402 errors. Top up OpenRouter, or switch it off?
+- K1 remains the only confirmed lane, still blocked by Kalshi access from India.
+
 ## 2026-11-10 (daily agent)
 
 **Findings** (review at 01:06 UTC, revision `71753f9`, window 24 h)
