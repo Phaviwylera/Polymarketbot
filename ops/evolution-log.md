@@ -2,6 +2,37 @@
 
 Newest first. One entry per daily run: findings, fixes (with commits), verification, open questions for the owner.
 
+## 2026-11-12 (daily agent)
+
+**Findings** (review at 01:20 UTC, revision `689721d`, window 24 h, uptime 23.9 h)
+- `daily_review.py` flagged "rivals: runs did not move (4)". False alarm: the server restarts about 01:25 UTC every day
+  (the daily agent's push), and rivals runs every 6 h, so both boots ended at runs = 4; its `lastRunAt` moved from
+  11-10 19:42 to 11-11 19:42 UTC and it has 0 errors. The review tool compared counters across a reboot. This would
+  have repeated daily and also hid error spikes after a restart. Fixed below.
+- All lanes 0 errors. Storage healthy: 183 transient write errors this boot (207 last boot), 0 dropped, backup OK.
+- Memory: RSS 1,125 MB (was 1,184), 376 MB free. Loop stalls ~1.2-1.5 s every ~2 min, unchanged. Watch.
+- Jev/H2 (failed): still OpenRouter 402. Bullpen: 380 of 756 calls `UNCLASSIFIED_ERROR` (external, unchanged).
+- M3 count checked: 40 market-days on 12 Nov 01:20 UTC (two full UTC days of ~20 markets), consistent.
+
+**Fixed**
+- `739f133` `daily_review.py`: when the server restarted inside the window, errors are compared with 0 and a lane is
+  flagged stalled only if its activity counter is still 0 two hours after boot. Tests fail before, pass after; full
+  suite 378 passed. No bot code or strategy changed.
+
+**Verified**: see the line below once the server shows the new revision.
+
+**Lanes** (24 h)
+- K1: 1,323 rounds (+88), bad case +0.36c, still confirmed on paper. Kalshi not usable from India.
+- M3: 40 of 50 market-days, -0.03c per market-day, bad case -0.41c; collecting. Likely reaches 50 within about a day.
+- S2 (failed): 3,220 trades (+370), -0.05c per $, bad case -1.06c.
+- X1 (failed): 1,019 events, bad case -34%. M2 bad case -17%. M1, R1, H2: failed, recording only. E1, N1: collecting,
+  no samples yet.
+- No verdict reached its sample size today. No new experiment (gate not used).
+
+**Open questions for the owner** (unchanged)
+- Jev/H2 has failed its test and only produces 402 errors. Top up OpenRouter, or switch it off?
+- K1 remains the only confirmed lane, still blocked by Kalshi access from India.
+
 ## 2026-11-11 (daily agent)
 
 **Findings** (review at 01:11 UTC, revision `c1a6d91`, window 24 h, uptime 23.6 h)

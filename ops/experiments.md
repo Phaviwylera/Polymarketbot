@@ -6,7 +6,7 @@ One row per pre-registered test. The verdict is filled in only when the test rea
 | Lane | Hypothesis | Registered (UTC) | Pass rule | Variants tried | Status 2026-11-09 | Verdict |
 |---|---|---|---|---|---|---|
 | S2 spot lead | Live spot runs ahead of the 5m BTC/ETH price | 2026-10-30 21:00 | 300 trades, lower 95% > 0 with 0.5c delay | 8 (backtest later found to have a look-ahead bug) | 2,183 trades, -0.63c per $, bad case -1.87c | **Failed** |
-| M3 slow-market maker | Quoting liquid sports/politics markets earns spread + rebate | 2026-11-10 00:00 (re-registered) | 50 market-days, lower 95% > 0 | 1 | Restarted after the Data API v2 and survivorship fixes; 2026-11-10: scoring window fixed (`680798d`), 4 market-days | Collecting |
+| M3 slow-market maker | Quoting liquid sports/politics markets earns spread + rebate | 2026-11-10 00:00 (re-registered) | 50 market-days, lower 95% > 0 | 1 | Restarted after the Data API v2 and survivorship fixes; scoring window fixed (`680798d`); 2026-11-12: 40 market-days, -0.03c, bad case -0.41c | Collecting |
 | K1 Polymarket vs Kalshi | The two venues' 15m BTC/ETH prices sometimes sum to < $1 | 2026-10-26 | lower 95% > 0 | 1 | 1,118 rounds, bad case +0.08c (just turned positive) | Confirmed on paper; venues disagree on ~1.7% of outcomes; Kalshi not usable from India |
 | R1 pair replica | GoodFallen's buy-both-sides pattern | 2026-10-26 | lower 95% > 0 | 2 | about -25c per $ | **Failed** |
 | M1 slow maker (crypto) | Joining the best bid on both sides | 2026-10-25 | lower 95% > 0 | 5 | about -10c per $ | **Failed** |
