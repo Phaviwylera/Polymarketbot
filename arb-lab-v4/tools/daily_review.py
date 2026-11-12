@@ -13,6 +13,7 @@ import json,subprocess,sys,time
 
 ERR_JUMP=200          # errors added in the window that count as an outage signal
 STALE_MIN=45          # status older than this = server may be down
+BOOT_GRACE_SEC=2*3600 # after a restart, a counter still at 0 this long after boot counts as stalled
 # activity counters that must keep moving while a lane is enabled
 ACTIVITY={'eventmaker':'polls','spotlead':'prints','pairacc':'bookEvents','fastmaker':'bookEvents','maker':'prints','kalshi':'scans',
           'eventarb':'scans','rivals':'runs','xmarket':'polls','events':'scans'}
@@ -44,14 +45,21 @@ def review(new,old,main_head=None,now=None):
     if main_head and rev and not main_head.startswith(rev) and not rev.startswith(main_head[:7]):
         f.append({'kind':'deploy','severity':'medium','what':f'server runs {rev}, main is {main_head[:7]}: auto-update may be failing (tests or pull)'})
     nl,ol=new.get('newLanes') or {},old.get('newLanes') or {}
+    # Counters reset to 0 on every restart (each daily-agent push restarts the server). If the server restarted inside
+    # the window, the old snapshot's counters belong to the previous boot: compare against 0 instead.
+    up,at0=num(new.get('uptimeSec')),num(old.get('at'))
+    restarted=up is not None and at and at0 is not None and up<float(at)-at0-60
     for lane,cur in sorted(nl.items()):
         if not isinstance(cur,dict):continue
         prev=ol.get(lane) or {}
-        e1,e0=num(cur.get('errors')),num(prev.get('errors'))
+        e1,e0=num(cur.get('errors')),(0. if restarted else num(prev.get('errors')))
         if e1 is not None and e0 is not None and e1-e0>=ERR_JUMP:
             f.append({'kind':'outage','severity':'high','lane':lane,'what':f'{lane}: {int(e1-e0)} new errors in the window; last: {str(cur.get("lastError"))[:160]}'})
         k=ACTIVITY.get(lane)
-        if k and cur.get('enabled',True) and num(cur.get(k)) is not None and num(prev.get(k)) is not None and num(cur.get(k))==num(prev.get(k)):
+        c1=num(cur.get(k)) if k else None
+        if restarted:c0=0. if up>=BOOT_GRACE_SEC else None
+        else:c0=num(prev.get(k)) if k else None
+        if k and cur.get('enabled',True) and c1 is not None and c0 is not None and c1==c0:
             f.append({'kind':'stalled','severity':'high','lane':lane,'what':f'{lane}: {k} did not move in the window ({cur.get(k)})'})
         rows.append({'lane':lane,'errors':cur.get('errors'),'lastError':str(cur.get('lastError'))[:120] if cur.get('lastError') else None,'headline':headline(lane,cur),'before':headline(lane,prev)})
     return f,rows

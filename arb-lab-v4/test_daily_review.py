@@ -17,3 +17,19 @@ class DailyReviewTests(unittest.TestCase):
     def test_headline_reads_test_blocks(self):
         h=dr.headline('spotlead',{'S2':{'verdict':'not confirmed','stressed':{'n':10,'mean':-.01,'lower95':-.03}}})
         self.assertEqual((h['test'],h['n'],h['verdict']),('S2',10,'not confirmed'))
+    def test_restart_in_window_compares_counters_with_zero(self):
+        # 2026-11-12: server restarted ~24 h after the old snapshot; rivals ran 4 times in each boot (4 == 4) and was
+        # flagged as stalled although it was running. Counters reset at boot, so the baseline must be 0.
+        day=86400
+        old=snap(0,rivals={'enabled':True,'runs':4,'errors':300},events={'enabled':True,'scans':50,'errors':0})
+        new=snap(day,rivals={'enabled':True,'runs':4,'errors':0},events={'enabled':True,'scans':0,'errors':250})
+        new['uptimeSec']=day-3600
+        f,rows=dr.review(new,old,main_head='abc1234ffff',now=day+60)
+        kinds={(x['kind'],x.get('lane')) for x in f}
+        self.assertNotIn(('stalled','rivals'),kinds)
+        self.assertIn(('stalled','events'),kinds)          # still 0 scans 23 h after boot
+        self.assertIn(('outage','events'),kinds)           # 250 errors since boot
+        self.assertNotIn(('outage','rivals'),kinds)
+    def test_fresh_boot_is_not_flagged_stalled(self):
+        old=snap(0,rivals={'enabled':True,'runs':4});new=snap(86400,rivals={'enabled':True,'runs':0});new['uptimeSec']=600
+        self.assertEqual(dr.review(new,old,main_head='abc1234ffff',now=86460)[0],[])
