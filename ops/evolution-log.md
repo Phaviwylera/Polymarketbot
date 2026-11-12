@@ -18,8 +18,11 @@ Newest first. One entry per daily run: findings, fixes (with commits), verificat
 - `739f133` `daily_review.py`: when the server restarted inside the window, errors are compared with 0 and a lane is
   flagged stalled only if its activity counter is still 0 two hours after boot. Tests fail before, pass after; full
   suite 378 passed. No bot code or strategy changed.
+- `9063d21` `daily_review.py`: X1 (xmarket) reports `scans`, not `polls`, so its stall check never ran. Found while
+  verifying. Test fails before, passes after; full suite 379 passed.
 
-**Verified**: see the line below once the server shows the new revision.
+**Verified**: server on `61875de` at 01:46 UTC (uptime 17 min): all 10 lanes 0 errors and counters moving, storage
+healthy (0 dropped), RSS 1,081 MB; review now reports no findings. `9063d21` deploys with the next pull (review tool only).
 
 **Lanes** (24 h)
 - K1: 1,323 rounds (+88), bad case +0.36c, still confirmed on paper. Kalshi not usable from India.
