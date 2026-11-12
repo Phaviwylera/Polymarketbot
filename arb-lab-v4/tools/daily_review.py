@@ -16,7 +16,7 @@ STALE_MIN=45          # status older than this = server may be down
 BOOT_GRACE_SEC=2*3600 # after a restart, a counter still at 0 this long after boot counts as stalled
 # activity counters that must keep moving while a lane is enabled
 ACTIVITY={'eventmaker':'polls','spotlead':'prints','pairacc':'bookEvents','fastmaker':'bookEvents','maker':'prints','kalshi':'scans',
-          'eventarb':'scans','rivals':'runs','xmarket':'polls','events':'scans'}
+          'eventarb':'scans','rivals':'runs','xmarket':'scans','events':'scans'}
 
 def git(*a):return subprocess.run(['git',*a],capture_output=True,text=True).stdout
 def snapshots(hours):

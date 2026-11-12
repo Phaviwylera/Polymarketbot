@@ -33,3 +33,8 @@ class DailyReviewTests(unittest.TestCase):
     def test_fresh_boot_is_not_flagged_stalled(self):
         old=snap(0,rivals={'enabled':True,'runs':4});new=snap(86400,rivals={'enabled':True,'runs':0});new['uptimeSec']=600
         self.assertEqual(dr.review(new,old,main_head='abc1234ffff',now=86460)[0],[])
+    def test_activity_keys_match_the_lanes_status(self):
+        # 2026-11-12: xmarket reports 'scans', not 'polls', so its stall check never ran.
+        old=snap(0,xmarket={'enabled':True,'scans':280,'errors':0});new=snap(100,xmarket={'enabled':True,'scans':280,'errors':0})
+        f,_=dr.review(new,old,main_head='abc1234ffff',now=200)
+        self.assertIn(('stalled','xmarket'),{(x['kind'],x.get('lane')) for x in f})
