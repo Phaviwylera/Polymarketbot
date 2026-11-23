@@ -36,7 +36,7 @@ class Round:
 
 class FastMaker:
     def __init__(self,root=None):
-        self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_FASTMAKER','1')!='0'
+        self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_FASTMAKER','1')!='0' and not __import__('poly_lanes').retired('fastmaker')
         self.cur={};self.wait={};self.done=deque(maxlen=20000)
         self.state={'bookEvents':0,'prints':0,'requotes':0,'fills':0,'flattens':0,'rounds':0,'errors':0,'lastError':None}
     def path(self):return os.path.join(self.root,'fastmaker_state.json.gz')

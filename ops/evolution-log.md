@@ -2,6 +2,16 @@
 
 Newest first. One entry per daily run: findings, fixes (with commits), verification, open questions for the owner.
 
+## 2026-11-23 (by hand, owner request)
+
+- Retired the failed lanes (M1, M2, X1, R1 + pair wallet, M3, H2 Jev, threshold) via `poly_lanes.py`; they drop off
+  the dashboards and the status report. Final results above in experiments.md.
+- Added the loss book (`poly_lossbook.py`): S2 and K1 trades split into segments, flagged only at 99% confidence with
+  at least 50 trades. Shown on the terminal ("Where we win and lose") and in status `newLanes.lossbook`.
+- Status at 14:58 UTC: K1 confirmed (2,223 trades, +1.34c per pair, bad case +0.79c, +$153); S2 +$168 on paper but not
+  confirmed (with the 0.5c delay cost -0.11c per $, bad case -0.81c).
+- The daily agent's scheduled task no longer exists (last run 2026-11-12); owner asked whether to recreate it.
+
 ## 2026-11-12 (daily agent)
 
 **Findings** (review at 01:20 UTC, revision `689721d`, window 24 h, uptime 23.9 h)

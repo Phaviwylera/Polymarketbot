@@ -938,7 +938,8 @@ _threshold=None
 async def start_threshold_shadow():
     """Paper-only 'above $X' probability-model shadow lane (POLY_THRESHOLD=0 disables)."""
     global _threshold
-    if os.getenv('POLY_THRESHOLD','1')=='0' or POLY_ENGINE_ROLE=='frontend':return
+    import poly_lanes
+    if os.getenv('POLY_THRESHOLD','1')=='0' or POLY_ENGINE_ROLE=='frontend' or poly_lanes.retired('threshold'):return
     import poly_threshold
     _threshold=poly_threshold.ThresholdLane();asyncio.create_task(_threshold.loop(poly_server_engine));print('POLY_THRESHOLD_ON',flush=True)
 
@@ -1011,11 +1012,16 @@ async def start_trade_tape():
 @app.get("/api/poly/lanes")
 async def poly_new_lanes():
     """Maker (M1), cross-market (X1) and event-market (E1) lanes, record-only."""
-    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals,poly_pairacc,poly_eventarb,poly_eventmaker,poly_spotlead
+    import poly_maker,poly_xmarket,poly_events,poly_fastmaker,poly_kalshi,poly_rivals,poly_pairacc,poly_eventarb,poly_eventmaker,poly_spotlead,poly_lanes
     out={}
     for name,mod in (('spotlead',poly_spotlead),('maker',poly_maker),('xmarket',poly_xmarket),('events',poly_events),('fastmaker',poly_fastmaker),('kalshi',poly_kalshi),('rivals',poly_rivals),('pairacc',poly_pairacc),('eventarb',poly_eventarb),('eventmaker',poly_eventmaker)):
+        if poly_lanes.retired(name):continue                       # retired lanes drop off the dashboards
         try:out[name]=mod.CURRENT.report() if mod.CURRENT else {'enabled':False}
         except Exception as exc:out[name]={'error':type(exc).__name__}
+    out['retired']=poly_lanes.summary()
+    try:
+        import poly_lossbook;out['lossbook']=poly_lossbook.report()
+    except Exception as exc:out['lossbook']={'error':type(exc).__name__}
     return out
 
 @app.get("/api/poly/jev")

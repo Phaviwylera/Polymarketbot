@@ -53,7 +53,7 @@ class Book:
 
 class PairAcc:
     def __init__(self,root=None):
-        self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_PAIRACC','1')!='0'
+        self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_PAIRACC','1')!='0' and not __import__('poly_lanes').retired('pairacc')
         self.cur={};self.wait={};self.done=deque(maxlen=20000)
         self.state={'bookEvents':0,'fills':0,'rounds':0,'errors':0,'lastError':None}
         self.gate={'on':False};self.gate_log=deque(maxlen=200);self.refresh_gate()

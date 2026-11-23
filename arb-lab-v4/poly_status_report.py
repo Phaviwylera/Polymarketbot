@@ -78,9 +78,14 @@ def _study_state():
 def _lanes_state():
     out={}
     for name in ('poly_spotlead','poly_maker','poly_xmarket','poly_events','poly_fastmaker','poly_kalshi','poly_rivals','poly_pairacc','poly_eventarb','poly_eventmaker'):
+        import poly_lanes
+        if poly_lanes.retired(name[5:]):continue
         try:
             import importlib;m=importlib.import_module(name);out[name[5:]]=m.CURRENT.compact() if m.CURRENT else None
         except Exception as exc:out[name[5:]]={'error':type(exc).__name__}
+    try:
+        import poly_lanes,poly_lossbook;out['retired']=poly_lanes.summary();out['lossbook']=poly_lossbook.report(compact=True)
+    except Exception as exc:out['lossbook']={'error':type(exc).__name__}
     return out
 
 def _jev_state():

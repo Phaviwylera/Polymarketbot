@@ -86,7 +86,7 @@ class XMarket:
     def __init__(self,http=None,root=None,now=time.time):
         import poly_threshold
         self.tl=poly_threshold.ThresholdLane(http=http);self.http=http;self.now=now
-        self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_XMARKET','1')!='0'
+        self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_XMARKET','1')!='0' and not __import__('poly_lanes').retired('xmarket')
         self.snaps={};self.trades={};self.arbs={};self.scored=deque(maxlen=20000);self.closed=deque(maxlen=5000)
         self.gaps=deque(maxlen=500)
         self.state={'scans':0,'markets':0,'chains':{},'gapsSeen':0,'errors':0,'lastError':None,'lastScanAt':None}

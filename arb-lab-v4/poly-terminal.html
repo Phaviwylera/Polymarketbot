@@ -126,6 +126,8 @@ main{perspective:1400px}
  <div class="pb"><div class="pairk" id="spotK"></div><div class="mut" id="spotOpen" style="margin:8px 0 4px">—</div>
   <div style="max-height:260px;overflow:auto"><table class="ptbl" id="spotT"><tbody><tr><td class="mut">Waiting for the first trade to settle.</td></tr></tbody></table></div>
   <div class="mut" style="margin-top:8px;font-size:12px;max-width:90ch">5-minute BTC/ETH rounds. The model reads the market mid and how far spot has moved since the round opened; the first time its chance beats the ask by 1¢ after the taker fee, it buys $5 of that side at the ask and holds to settlement. Frozen test: 300 trades with a 0.5¢ delay cost, bad case above zero. Stops new stakes at $120.</div></div></article>
+<article class="p" id="pLoss"><div class="ph"><span><b>Where we win and lose</b> Every settled S2 and K1 trade, split into segments. Flagged only at 99% confidence</span><span class="badge" id="lossBadge">—</span></div>
+ <div class="pb"><div id="lossBody" class="mut">Waiting for data.</div></div></article>
 <article class="p" id="pPair"><div class="ph"><span><b>Pair accumulator wallet</b> Paper money. GoodFallen's method as seen in their public trades</span><span class="badge" id="pairBadge">—</span></div>
  <div class="pb"><div class="pairk" id="pairK"></div><div class="mut" id="pairOpen" style="margin:8px 0 4px">—</div>
   <div style="max-height:260px;overflow:auto"><table class="ptbl" id="pairT"><tbody><tr><td class="mut">Waiting for the first round to settle.</td></tr></tbody></table></div>
@@ -147,7 +149,7 @@ main{perspective:1400px}
 <script>
 (()=>{const $=id=>document.getElementById(id),ok=v=>v!==null&&v!==undefined&&isFinite(v);
 const usd=v=>ok(v)?(v<0?'−$':'$')+Math.abs(v).toFixed(2):'—',cls=v=>ok(v)?(v>0?'pos':v<0?'neg':''):'';
-async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();const w=((L.pairacc||{}).wallet)||null;if(!w)return;window.PAIR_WALLET=w;
+async function pair(){try{const L=await (await fetch('/api/poly/lanes',{cache:'no-store'})).json();loss(L);if(((L.retired||{}).lanes||{}).pairacc){const e=$('pPair');if(e)e.style.display='none';window.PAIR_WALLET=null;return;}const w=((L.pairacc||{}).wallet)||null;if(!w)return;window.PAIR_WALLET=w;
  const b=$('pairBadge');b.textContent=w.guard?w.guard:'Trading on paper';b.className='badge '+(w.guard?'warn':'live');
  $('pairK').innerHTML=[['Balance',usd(w.balance),''],['Equity',usd(w.equity),''],['P&L since start',usd(w.pnlUsd),cls(w.pnlUsd)],['Rounds traded',w.trades,''],['Win rate',ok(w.winRate)?w.winRate+'%':'—',''],['Fees paid',usd(w.feesUsd),'']]
   .map(([k,v,c])=>`<div><span>${k}</span><b class="${c}">${v}</b></div>`).join('');
@@ -164,6 +166,16 @@ async function spot(){try{const L=await (await fetch('/api/poly/lanes',{cache:'n
  const R=w.recent||[];if(!R.length)return;
  $('spotT').innerHTML='<thead><tr><th>Time (UTC)</th><th>Lane</th><th>Bought</th><th>Ask</th><th>Model</th><th>Result</th><th>P&amp;L</th></tr></thead><tbody>'+R.map(r=>`<tr><td>${new Date(r.t*1000).toISOString().slice(11,16)}</td><td>${r.lane}</td><td>${r.token}</td><td>${Math.round(r.ask*100)}¢</td><td>${ok(r.p)?Math.round(r.p*100)+'%':'—'}</td><td>${r.won?'won':'lost'}</td><td class="${cls(r.pnlUsd)}">${usd(r.pnlUsd)}</td></tr>`).join('')+'</tbody>';
 }catch(e){}}
+function loss(L){const B=L.lossbook;if(!B||B.error)return;const pc=v=>ok(v)?(v>0?'+':'')+(100*v).toFixed(2)+'¢':'—';
+ const box=(name,b,fl,extra)=>{if(!b)return `<div><b>${name}</b><div class="mut">no settled trades yet</div></div>`;const o=b.overall||{};
+  const DN={lane:'Lane',side:'Side',askBand:'Price paid',timeLeft:'Time left',spotMove:'Spot move',modelEdge:'Model edge',hourUtc:'Hour (UTC)',period:'Period',pairType:'Pair type',gap:'Gap size',venuesAgreed:'Venues'},SG={U:'UP',D:'DOWN'};
+  const rows=(fl||[]).sort((x,y)=>x.mean-y.mean).map(f=>`<tr><td>${DN[f.dimension]||f.dimension}</td><td>${SG[f.segment]||f.segment}</td><td>${f.n}</td><td class="${f.flag==='losing'?'neg':'pos'}">${pc(f.mean)}</td><td class="${f.flag==='losing'?'neg':'pos'}">${f.flag}</td><td class="${cls(f.pnlUsd)}">${usd(f.pnlUsd)}</td></tr>`).join('');
+  return `<div style="margin-bottom:10px"><b>${name}</b> <span class="mut">${b.unit}</span><div style="margin:4px 0">${o.n} trades, average ${pc(o.mean)} (99% range ${pc(o.lo99)} to ${pc(o.hi99)}), P&amp;L <b class="${cls(o.pnlUsd)}">${usd(o.pnlUsd)}</b>. Losing trades: ${b.losses.count} costing ${usd(b.losses.usd)}${extra(b)}</div>
+   ${rows?`<table class="ptbl"><thead><tr><th>Split by</th><th>Segment</th><th>Trades</th><th>Per $</th><th>Verdict</th><th>P&amp;L</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="mut">No segment is clearly losing or winning yet at 99% confidence: the differences so far are within luck.</div>'}</div>`;};
+ const t2=b=>{const g=(b.losses||{}).tags||{};return '. Of those: '+Object.entries(g).map(([k,v])=>`${v} ${k}`).join(', ')+'.';};
+ const tk=b=>`, of which ${b.losses.fromVenueDisagreement} came from the two venues settling differently (${usd(b.losses.usdFromVenueDisagreement)}).`;
+ $('lossBody').innerHTML=box('S2 spot lead',B.S2,(B.flags||{}).S2,t2)+box('K1 Polymarket vs Kalshi',B.K1,(B.flags||{}).K1,tk);
+ const nf=((B.flags||{}).S2||[]).length+((B.flags||{}).K1||[]).length;const bd=$('lossBadge');bd.textContent=nf?`${nf} segment${nf>1?'s':''} flagged`:'nothing flagged';bd.className='badge '+(nf?'warn':'live');}
 pair();setInterval(pair,5000);spot();setInterval(spot,5000);})();
 </script>
 </body></html>

@@ -38,7 +38,7 @@ def rebate(p):return REBATE*p*(1-p)
 class Maker:
     def __init__(self,root=None):
         self.root=root or os.getenv('POLY_DATA_DIR','/tmp')
-        self.enabled=os.getenv('POLY_MAKER','1')!='0'
+        self.enabled=os.getenv('POLY_MAKER','1')!='0' and not __import__('poly_lanes').retired('maker')
         self.q={}            # slug -> {variant -> {token -> quote}}
         self.done=deque(maxlen=20000);self.state={'prints':0,'rounds':0,'quotes':0,'errors':0,'lastError':None}
     def path(self):return os.path.join(self.root,'maker_state.json.gz')

@@ -28,7 +28,7 @@ class Jev:
     def __init__(self,root=None,key=None,http=None,now=time.time,max_calls=None):
         self.key=key if key is not None else os.getenv('OPENROUTER_API_KEY','')
         self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.http=http;self.now=now
-        self.enabled=bool(self.key) and os.getenv('POLY_JEV','1')!='0'
+        self.enabled=bool(self.key) and os.getenv('POLY_JEV','1')!='0' and not __import__('poly_lanes').retired('jev')
         self.max_calls=int(max_calls or os.getenv('POLY_JEV_MAX_CALLS_PER_DAY','3000'))
         self.asked={};self.pending={};self.scored=deque(maxlen=20000);self.inflight=0;self.paths={}
         self.state={'calls':0,'errors':0,'lastError':None,'costUsd':0.,'day':None,'callsToday':0,'model':MODEL,'stateFormat':'object'}

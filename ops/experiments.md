@@ -17,6 +17,12 @@ One row per pre-registered test. The verdict is filled in only when the test rea
 | E1 event favourites | 80-95c favourites 3 days out | 2026-10-26 | lower 95% > 0 | 1 | no edge in history; forward collecting | Collecting |
 | N1 / S1 event arbitrage | NegRisk baskets; resolution window | 2026-10-26 | lower 95% > 0 | 1 | N1: no gaps seen. S1: quarantined (settlement bug), restarted | Collecting |
 
+## Retired 2026-11-23 (owner: "remove failed strategies")
+
+M1, M2, X1, R1 (and its $200 pair wallet), M3, H2 (Jev) and the old threshold lane no longer start, whatever the server
+environment says (`arb-lab-v4/poly_lanes.py`). Code, tests and history are kept. Still running: S2 and K1 (with the new
+loss book, `poly_lossbook.py`), and E1, N1/S1, which are still collecting.
+
 ## Research results not yet registered
 
 - 2026-11-01 S2 improvement search: 960 variants, none survived the untouched test (`research/s2_search.py`).

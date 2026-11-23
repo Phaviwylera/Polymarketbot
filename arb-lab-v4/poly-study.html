@@ -393,6 +393,7 @@ async function lanes(){
   const EA=L.eventarb||{},n1=EA.N1||{},s1=EA.S1||{},EM=L.eventmaker||{},m3=EM.M3||{},P=L.pairacc||{},r1=P.R1||{},rf=r1.forward||{},F=L.fastmaker||{},m2=F.M2||{},K=L.kalshi||{},k1=K.K1||{},M=L.maker||{},m1=M.M1||{},f=m1.forward||{},X=L.xmarket||{},x1=X.X1||{},lad=X.ladder||{},cal=(X.calibration||{})['6h']||{},E=L.events||{},e1=E.E1||{},eh=e1.history||{},ef=e1.forward||{},e3=((E.calibration||{})['3d']||{});
   const off=o=>o.enabled===false?'<div class="dim">Off on the server.</div>':'';
   const SL=L.spotlead||{},s2=SL.S2||{},s2s=s2.stressed||{},s2w=SL.wallet||{},s2b=s2.byLane||{};
+  window.__retiredCodes=Object.values(((L.retired||{}).lanes)||{}).map(x=>x.code);
   $('lanes').innerHTML=`
   <div class="lane"><h4>Spot lead (S2)</h4><p class="why">The first edge found in our recorded tape: on 5-minute BTC/ETH rounds, live spot runs ahead of the token price. Buys the side the spot model rates 1¢+ above its ask after fees. Frozen forward test.</p>${off(SL)}
    <div class="verdict ${vcls(s2.verdict)}">${vt(s2.verdict)}</div>
@@ -436,6 +437,7 @@ async function lanes(){
    <div class="verdict ${vcls(m3.verdict)}">${vt(m3.verdict)}</div>
    ${fig('Markets quoted, fills',`${n(EM.markets)}, ${n(EM.fills)}`)}${fig('Market-days with fills',`${n(m3.marketDays)} (needs 50)`)}
    ${fig('P&L per market-day',`${pc(m3.avgPerMarketDay)}, bad case ${pc(m3.lower95)}`)}${fig('Paper P&L (marked), rebate',`${ok(EM.pnlMtmUsd)?'$'+EM.pnlMtmUsd.toFixed(2):'—'}, $${ok(EM.rebateUsd)?EM.rebateUsd.toFixed(3):'—'}`)}</div>`;
+  document.querySelectorAll('#lanes .lane').forEach(c=>{const h=(c.querySelector('h4')||{}).textContent||'';if((window.__retiredCodes||[]).some(k=>h.includes('('+k+')')))c.remove();});   // retired lanes drop off
   rivals(L.rivals);$('lanesAt').textContent='Updated '+new Date().toISOString().slice(11,16)+' UTC';
  }catch(e){}
 }

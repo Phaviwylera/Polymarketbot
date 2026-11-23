@@ -76,7 +76,7 @@ class Mkt:
 
 class EventMaker:
     def __init__(self,http=None,root=None,now=time.time):
-        self.http=http;self.now=now;self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_EVENTMAKER','1')!='0'
+        self.http=http;self.now=now;self.root=root or os.getenv('POLY_DATA_DIR','/tmp');self.enabled=os.getenv('POLY_EVENTMAKER','1')!='0' and not __import__('poly_lanes').retired('eventmaker')
         self.mk={};self.closed=deque(maxlen=5000);self.picked_at=0.
         self.state={'polls':0,'markets':0,'fills':0,'errors':0,'lastError':None}
     def path(self):return os.path.join(self.root,'eventmaker_state.json.gz')
