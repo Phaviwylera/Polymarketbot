@@ -34,3 +34,21 @@ class KalshiTests(unittest.TestCase):
             return {'market':{'result':'yes'}}
         k.get=get;asyncio.run(k.scan());k.settle('btc-updown-15m-1','down');k.now=lambda:END+200;asyncio.run(k.resolve())
         x=k.done[-1];self.assertFalse(x['agree']);self.assertEqual(x['trade']['payPerPair'],0.)    # Poly DOWN, Kalshi YES: pair A pays 0
+    def test_k2_waits_for_a_gap_of_at_least_4c(self):
+        END2=pk.K2_REGISTERED_AT+600;eng=Eng(.47,.62);eng.market={'slug':'btc-updown-15m-2','endTs':END2}
+        k=pk.Kalshi(engines={'BTC15':eng},root=tempfile.mkdtemp(),now=lambda:END2-500)
+        async def get(path,params=None):
+            if path=='/markets':return {'markets':[{'ticker':'T2','close_time':iso(END2)}]}
+            if path.endswith('/orderbook'):return {'orderbook_fp':{'yes_dollars':[['0.55','10']],'no_dollars':[['0.40','10']]}}
+            return {'market':{'result':'no'}}
+        k.get=get;asyncio.run(k.scan())
+        r=k.rounds['btc-updown-15m-2'];self.assertIsNotNone(r['trade']);self.assertLess(1-r['trade']['cost'],pk.K2_MIN_GAP)
+        self.assertIsNone(r.get('trade2'))                                   # 2.3c net gap: K1 takes it, K2 waits
+        eng.bbo['up']['ask']=.40;k.now=lambda:END2-400;asyncio.run(k.scan())
+        self.assertGreaterEqual(1-r['trade2']['cost'],pk.K2_MIN_GAP);self.assertEqual(r['trade']['polyAsk'],.47)   # K1's trade unchanged
+        k.settle('btc-updown-15m-2','down');k.now=lambda:END2+200;asyncio.run(k.resolve())
+        x=k.done[-1];self.assertEqual(x['trade2']['payPerPair'],1.);rep=k.report()['K2']
+        self.assertEqual(rep['trades'],1);self.assertGreater(rep['avgPnlPerPair'],.04);self.assertEqual(rep['verdict'],'collecting')
+    def test_k2_ignores_rounds_before_registration(self):
+        old={'trade2':{'t':pk.K2_REGISTERED_AT-1,'pnlPerPair':.1,'pnlUsd':.5}}
+        self.assertEqual(pk.Kalshi.k2([old])['trades'],0)

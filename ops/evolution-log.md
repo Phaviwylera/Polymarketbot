@@ -11,6 +11,9 @@ Newest first. One entry per daily run: findings, fixes (with commits), verificat
 - Status at 14:58 UTC: K1 confirmed (2,223 trades, +1.34c per pair, bad case +0.79c, +$153); S2 +$168 on paper but not
   confirmed (with the 0.5c delay cost -0.11c per $, bad case -0.81c).
 - The daily agent's scheduled task no longer exists (last run 2026-11-12); owner asked whether to recreate it.
+- Loss book, first reading (15:20 UTC): all 39 losing K1 trades (-$180) came from the two venues settling differently
+  (52 of 2,224 trades, -46c per pair); K1 gaps 8c+ made +12c per pair, 4-8c +3.3c, under 4c not distinguishable from
+  zero. No S2 segment is flagged at 99%. Registered K2 (K1 with net gaps >= 4c) from 16:00 UTC; K1 unchanged.
 
 ## 2026-11-12 (daily agent)
 

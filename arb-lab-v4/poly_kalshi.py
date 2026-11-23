@@ -23,6 +23,14 @@ BASES=('https://external-api.kalshi.com/trade-api/v2','https://api.elections.kal
 SERIES={'BTC15':'KXBTC15M','ETH15':'KXETH15M'}
 SCAN_SEC=5;LIST_SEC=60;STRESS=0.01;MAX_PAIRS=5;MIN_ROUNDS=100
 REGISTERED_AT=1793085345   # 2026-10-27 07:15 UTC: forward results count only after this
+# K2 (pre-registered 2026-11-23, owner: "improve profit"): same as K1 but take the first gap per round whose net gap
+# (1 - cost, after both fees and the 1c-per-leg buffer) is at least K2_MIN_GAP. Why: the loss book showed every K1
+# loss came from the two venues settling differently (52 of 2,224 trades, -46c per pair), about 1.4c of hidden cost on
+# every pair, and gaps under 4c were not distinguishable from zero while 4-8c made +3.3c and 8c+ +12c. Mechanism, not a
+# fit: a gap must beat the disagreement cost. K1 itself is unchanged. Pass: >= 100 trades, mean - 1.645 SE > 0.
+K2_MIN_GAP=0.04;K2_REGISTERED_AT=1795449600   # 2026-11-23 16:00 UTC
+def pay_of(t,poly_up,kalshi_up):
+    return (1. if poly_up else 0.)+(0. if kalshi_up else 1.) if t['pair'].startswith('A') else (0. if poly_up else 1.)+(1. if kalshi_up else 0.)
 CURRENT=None
 def poly_fee(p):return 0.07*p*(1-p)
 def kalshi_fee(p,n=MAX_PAIRS):return math.ceil(0.07*n*p*(1-p)*100-1e-9)/100/n
@@ -100,6 +108,8 @@ class Kalshi:
                 r['bestCost']=cost if r['bestCost'] is None else min(r['bestCost'],cost)
                 self.gaps.append({'t':now,'lane':lane,'pair':name,'cost':cost,'pairs':pairs,'polyAsk':pa,'kalshiAsk':ka,'left':round(left,3)})
                 if r['trade'] is None:r['trade']={'pair':name,'cost':cost,'pairs':pairs,'t':now,'left':round(left,3),'polyAsk':pa,'kalshiAsk':ka}
+                if r.get('trade2') is None and 1-cost>=K2_MIN_GAP-1e-9:
+                    r['trade2']={'pair':name,'cost':cost,'pairs':pairs,'t':now,'left':round(left,3),'polyAsk':pa,'kalshiAsk':ka}
             if len(self.rounds)>200:
                 for s in list(self.rounds)[:50]:
                     if s not in self.wait:self.rounds.pop(s,None)
@@ -120,10 +130,10 @@ class Kalshi:
                 continue
             self.wait.pop(slug,None);self.rounds.pop(slug,None)
             r['kalshiUp']=res=='yes';r['agree']=r['kalshiUp']==r['polyUp']
-            t=r['trade']
-            if t:
-                pay=(1. if r['polyUp'] else 0.)+(0. if r['kalshiUp'] else 1.) if t['pair'].startswith('A') else (0. if r['polyUp'] else 1.)+(1. if r['kalshiUp'] else 0.)
-                t['payPerPair']=pay;t['pnlPerPair']=round(pay-t['cost'],4);t['pnlUsd']=round(t['pairs']*(pay-t['cost']),4)
+            for t in (r.get('trade'),r.get('trade2')):
+                if t:
+                    pay=pay_of(t,r['polyUp'],r['kalshiUp'])
+                    t['payPerPair']=pay;t['pnlPerPair']=round(pay-t['cost'],4);t['pnlUsd']=round(t['pairs']*(pay-t['cost']),4)
             self.done.append(r)
     def report(self):
         rows=list(self.done);fwd=[r for r in rows if r.get('trade') and r['trade']['t']>=REGISTERED_AT]
@@ -137,7 +147,17 @@ class Kalshi:
                       'pass':f'>= {MIN_ROUNDS} rounds with a gap trade and mean P&L per pair - 1.645 SE > 0','registeredAt':REGISTERED_AT,
                       'trades':n,'avgPnlPerPair':None if m is None else round(m,4),'lower95':lo,'pnlUsd':round(sum(r['trade']['pnlUsd'] for r in fwd),3),
                       'verdict':'collecting' if n<MIN_ROUNDS else ('CONFIRMED' if lo is not None and lo>0 else 'not confirmed')},
+                'K2':self.k2(rows),
                 'recentGaps':list(self.gaps)[-6:][::-1]}
+    @staticmethod
+    def k2(rows):
+        fwd=[r['trade2'] for r in rows if r.get('trade2') and r['trade2'].get('pnlPerPair') is not None and r['trade2']['t']>=K2_REGISTERED_AT]
+        per=[t['pnlPerPair'] for t in fwd];n=len(per);m=sum(per)/n if n else None
+        sd=math.sqrt(sum((x-m)**2 for x in per)/(n-1)) if n>1 else None;lo=round(m-1.645*sd/math.sqrt(n),4) if sd else None
+        return {'rule':f'as K1, but the first gap per round with net gap >= {round(K2_MIN_GAP*100)}c after both fees and 1c per leg',
+                'pass':f'>= {MIN_ROUNDS} trades and mean P&L per pair - 1.645 SE > 0','registeredAt':K2_REGISTERED_AT,
+                'trades':n,'avgPnlPerPair':None if m is None else round(m,4),'lower95':lo,'pnlUsd':round(sum(t['pnlUsd'] for t in fwd),3),
+                'verdict':'collecting' if n<MIN_ROUNDS else ('CONFIRMED' if lo is not None and lo>0 else 'not confirmed')}
     def compact(self):
         r=self.report();r.pop('recentGaps',None);return r
     def save(self):

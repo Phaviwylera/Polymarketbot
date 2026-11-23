@@ -14,6 +14,7 @@ One row per pre-registered test. The verdict is filled in only when the test rea
 | X1 options gap | Deribit-implied odds vs Polymarket | 2026-10-25 | lower 95% > 0 | 1 | about -33% per event | **Failed** |
 | H1 early overreaction | Fade early moves in 5m rounds | 2026-10-24 | lower 95% > 0 | grid | about -8c per $ | **Failed** |
 | H2 Jev LLM | LLM forecaster vs price | 2026-10-26 | lower 95% > 0 | 1 | about -32c per $ | **Failed** |
+| K2 Kalshi gaps of 4c+ | K1 restricted to net gaps >= 4c: every K1 loss came from venue disagreement (~1.4c hidden cost per pair); gaps < 4c were indistinguishable from zero | 2026-11-23 16:00 | 100 trades, lower 95% > 0 | 1 (threshold chosen from the loss book on K1's own data, so it must prove itself forward) | New | Collecting |
 | E1 event favourites | 80-95c favourites 3 days out | 2026-10-26 | lower 95% > 0 | 1 | no edge in history; forward collecting | Collecting |
 | N1 / S1 event arbitrage | NegRisk baskets; resolution window | 2026-10-26 | lower 95% > 0 | 1 | N1: no gaps seen. S1: quarantined (settlement bug), restarted | Collecting |
 

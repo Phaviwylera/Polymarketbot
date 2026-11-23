@@ -419,7 +419,8 @@ async function lanes(){
   <div class="lane"><h4>Polymarket vs Kalshi (K1)</h4><p class="why">Same 15-minute rounds on two exchanges. UP on one plus DOWN on the other under $1 after fees is a gap, if both settle the same way.</p>${off(K)}
    <div class="verdict ${vcls(k1.verdict)}">${vt(k1.verdict)}</div>
    ${fig('Rounds matched, settled',`${n(K.matched)} scans, ${n(K.roundsSettled)} rounds`)}${fig('Gaps seen',n(K.gapsSeen))}${fig('Gap trades',`${n(k1.trades)} (needs 100)`)}
-   ${fig('P&L per pair',`${pc(k1.avgPnlPerPair)}, bad case ${pc(k1.lower95)}`)}${fig('Exchanges disagree',ok(K.venuesDisagreePct)?K.venuesDisagreePct+'% of rounds':'—')}</div>
+   ${fig('P&L per pair',`${pc(k1.avgPnlPerPair)}, bad case ${pc(k1.lower95)}`)}${fig('Exchanges disagree',ok(K.venuesDisagreePct)?K.venuesDisagreePct+'% of rounds':'—')}
+   ${fig('K2: only gaps of 4¢+',`${vt((K.K2||{}).verdict)}: ${n((K.K2||{}).trades)} trades (needs 100), ${pc((K.K2||{}).avgPnlPerPair)} per pair, bad case ${pc((K.K2||{}).lower95)}`)}</div>
   <div class="lane"><h4>Rival replica (R1)</h4><p class="why">The pattern seen in @GoodFallen's trades: keep taking small clips of whichever side keeps the pair under 97¢, through the whole 5-minute round.</p>${off(P)}
    <div class="verdict ${vcls(r1.verdict)}">${vt(r1.verdict)}</div>
    ${fig('Rounds with fills',`${n(rf.rounds)} (needs 300)`)}${fig('Both sides / avg pair cost',`${ok(rf.bothSidesPct)?rf.bothSidesPct+'%':'—'}, ${ok(rf.avgPairCost)?rf.avgPairCost.toFixed(3):'—'}`)}
