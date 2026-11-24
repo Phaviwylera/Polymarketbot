@@ -1,17 +1,17 @@
 {
- "at": 1795509840.8347628,
- "atUtc": "2026-11-24 08:44:00",
- "uptimeSec": 62443,
+ "at": 1795510744.386788,
+ "atUtc": "2026-11-24 08:59:04",
+ "uptimeSec": 63346,
  "host": "aws-ec2-t4g.small",
  "revision": "2487722",
  "hostStats": {
   "loadAvg": [
-   0.0,
-   0.0,
-   0.0
+   0.12,
+   0.04,
+   0.01
   ],
   "memTotalMb": 1835,
-  "memAvailableMb": 601,
+  "memAvailableMb": 503,
   "processRssMb": 893,
   "cpuCount": 2
  },
@@ -81,12 +81,12 @@
  "storage": {
   "configured": true,
   "backend": "postgresql",
-  "state": "standby",
-  "writer": false,
-  "active": false,
+  "state": "recovering",
+  "writer": true,
+  "active": true,
   "checkpointAt": 1795507710.5854523,
-  "checkpointAgeSec": 2130.266990661621,
-  "queuedEvents": 20,
+  "checkpointAgeSec": 3033.885191679001,
+  "queuedEvents": 24,
   "lastFlushSec": 0.579,
   "eventsSavedThisBoot": 25208,
   "errors": 146,
@@ -133,10 +133,10 @@
   "pending": 0,
   "error": null,
   "learner": {
-   "rounds": 16239,
-   "brierPrice": 0.13241,
-   "brierLearned": 0.13109,
-   "brierModel": 0.15296,
+   "rounds": 16233,
+   "brierPrice": 0.13243,
+   "brierLearned": 0.1311,
+   "brierModel": 0.15298,
    "learnedBeatsPrice": true
   },
   "learnedBuy": [
@@ -271,7 +271,7 @@
    "skipped": 0,
    "errors": 0,
    "lastError": null,
-   "scans": 35,
+   "scans": 36,
    "dayCursor": 1795392000,
    "historyMarkets": 1857,
    "forwardOpen": 63,
@@ -623,7 +623,7 @@
   "kalshi": {
    "enabled": true,
    "base": "https://external-api.kalshi.com/trade-api/v2",
-   "scans": 11171,
+   "scans": 11350,
    "matched": 14488,
    "gapsSeen": 30699,
    "errors": 1,
@@ -1173,18 +1173,18 @@
   },
   "eventarb": {
    "enabled": true,
-   "scans": 101,
+   "scans": 103,
    "events": 100,
    "eventsEligible": 6,
-   "skippedAugmented": 2560,
-   "skippedInactive": 101,
+   "skippedAugmented": 2610,
+   "skippedInactive": 103,
    "basketGaps": 0,
    "conversionGaps": 0,
    "s1Candidates": 63,
    "fieldSeen": {
-    "negRisk": 8499,
-    "negRiskAugmented": 10100,
-    "umaResolutionStatus": 63979
+    "negRisk": 8667,
+    "negRiskAugmented": 10300,
+    "umaResolutionStatus": 64789
    },
    "errors": 0,
    "lastError": null,
@@ -1394,13 +1394,13 @@
      {
       "dimension": "period",
       "segment": "last 7 days",
-      "n": 555,
-      "mean": 0.02395,
-      "lo99": 0.01312,
-      "hi99": 0.03477,
+      "n": 553,
+      "mean": 0.024,
+      "lo99": 0.01314,
+      "hi99": 0.03487,
       "winPct": 99.5,
       "flag": "winning",
-      "pnlUsd": 65.88
+      "pnlUsd": 65.8
      }
     ]
    }
@@ -2279,26 +2279,22 @@
    "experimentsHash": "0a52d65a7a7e"
   },
   "alerts": [
-   "BTC: order book 2084s old",
-   "ETH: order book 2082s old",
-   "BTC15: order book 2080s old",
-   "ETH15: order book 2078s old",
+   "BTC: order book 2987s old",
+   "ETH: order book 2985s old",
+   "BTC15: order book 2983s old",
+   "ETH15: order book 2982s old",
    "database: last write error TimeoutError",
-   "database: last checkpoint 2130s ago"
+   "database: last checkpoint 3034s ago"
   ],
   "model": [
-   1085,
-   0.2277,
+   1079,
+   0.2278,
    0.2211,
-   -0.0299
+   -0.0303
   ]
  },
- "cpuProfile": "{\"seconds\":300,\"samples\":5969,\"busyPct\":2.8,\"self\":[[\"gzip.py:_write_raw\",63.1],[\"random.py:_randbelow_with_getrandbits\",7.1],[\"poly_audit.py:<genexpr>\",4.2],[\"poly_lossbook.py:segments\",3.0],[\"poly_events.py:report\",2.4],[\"ssl.py:read\",2.4],[\"poly_audit.py:block_bootstrap_mean\",1.8],[\"encoders.py:jsonable_encoder\",1.8],[\"gzip.py:closed\",1.8],[\"encoder.py:iterencode\",1.2],[\"selector_events.py:_read_ready__get_buffer\",1.2],[\"gzip.py:write\",1.2],[\"poly_lossbook.py:<lambda>\",1.2],[\"poly_scout.py:metrics\",0.6]],\"inclusive\":[[\"server.py:run\",100.0],[\"main.py:run\",100.0],[\"main.py:main\",100.0],[\"core.py:invoke\",100.0],[\"core.py:main\",100.0],[\"core.py:__call__\",100.0],[\"uvicorn:<module>\",100.0],[\"__init__.py:dump\",65.5],[\"gzip.py:write\",64.3],[\"gzip.py:_write_raw\",63.1],[\"poly_tape.py:loop\",44.0],[\"poly_study.py:save\",35.7],[\"routing.py:app\",27.4],[\"_exception_handler.py:wrapped_app\",27.4]]}",
+ "cpuProfile": "{\"seconds\":300,\"samples\":5967,\"busyPct\":3.0,\"self\":[[\"gzip.py:_write_raw\",60.6],[\"random.py:_randbelow_with_getrandbits\",6.1],[\"poly_audit.py:<genexpr>\",4.4],[\"ssl.py:read\",2.2],[\"poly_lossbook.py:<lambda>\",2.2],[\"poly_lossbook.py:segments\",2.2],[\"encoder.py:_iterencode_list\",1.7],[\"poly_audit.py:block_bootstrap_mean\",1.7],[\"encoders.py:jsonable_encoder\",1.1],[\"server.py:_gc_timer\",1.1],[\"encoder.py:iterencode\",1.1],[\"poly_spotlead.py:wallet\",1.1],[\"selector_events.py:_read_ready__data_received\",1.1],[\"poly_spotlead.py:<genexpr>\",1.1]],\"inclusive\":[[\"server.py:run\",100.0],[\"main.py:run\",100.0],[\"main.py:main\",100.0],[\"core.py:invoke\",100.0],[\"core.py:main\",100.0],[\"core.py:__call__\",100.0],[\"uvicorn:<module>\",100.0],[\"__init__.py:dump\",62.8],[\"gzip.py:_write_raw\",60.6],[\"gzip.py:write\",60.6],[\"poly_tape.py:loop\",41.1],[\"poly_study.py:save\",33.3],[\"routing.py:app\",27.2],[\"_exception_handler.py:wrapped_app\",27.2]]}",
  "recentLog": [
-  "07:40:57 POLY_STORAGE_ERROR TimeoutError step=flush",
-  "07:42:33 POLY_STORAGE_ERROR TimeoutError step=promote",
-  "07:43:30 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-24 07:43:30\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"recovering\",\"checkpointAgeSec\":175.38661861419678,\"errors\":106,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPn",
-  "07:43:40 POLY_STORAGE_ERROR TimeoutError step=promote",
   "07:43:57 POLY_STORAGE_ERROR ConnectionFailureError step=connect",
   "07:44:15 POLY_STORAGE_ERROR ConnectionFailureError step=connect",
   "07:45:01 POLY_LOOP_STALL 1.09s lastGen2Gc=0.20s gen2Age=397s",
@@ -2354,6 +2350,10 @@
   "08:38:58 POLY_STORAGE_ERROR TimeoutError step=promote",
   "08:40:19 POLY_STORAGE_ERROR TimeoutError step=promote",
   "08:41:24 POLY_STORAGE_ERROR TimeoutError step=promote",
-  "08:43:31 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-24 08:43:31\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2101.034199953079,\"errors\":146,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":8"
+  "08:43:31 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-24 08:43:31\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2101.034199953079,\"errors\":146,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":8",
+  "08:48:31 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-24 08:48:31\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2401.103410959244,\"errors\":146,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":8",
+  "08:53:31 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-24 08:53:31\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":2701.1763200759888,\"errors\":146,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":",
+  "08:58:31 POLY_DEV_REPORT {\"generatedAtUtc\":\"2026-11-24 08:58:31\",\"revision\":\"17.7-lean\",\"storage\":{\"backend\":\"postgresql\",\"state\":\"standby\",\"checkpointAgeSec\":3001.2479004859924,\"errors\":146,\"lastError\":\"TimeoutError\",\"databaseExpiresAt\":null},\"portfolio\":{\"equity\":200.0,\"totalPnl\":0.0,\"realizedPnl\":0.0,\"trades\":0,\"lifetimeRealizedPnl\":0.0,\"lifetimeTrades\":0,\"epochStart\":1793087927.0,\"archivedRealizedPnl\":",
+  "08:59:03 POLY_LOOP_STALL 2.70s lastGen2Gc=0.16s gen2Age=2s"
  ]
 }
